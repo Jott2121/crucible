@@ -416,6 +416,152 @@ in this amendment's title.
 
 v5 approved by Jeff Otterson 2026-07-10 (interactive gate).
 
+**Amendment (protocol_version 6 — include-list `pytest_args` converted to exclude-form;
+canary must-kill probe added to `experiments/validate_scopes.py`; graph-guard's v5 open
+concern settled INSTRUMENT-INVALID; no paid cell run under this amendment):**
+
+v5 left one confirmed reclassification (`rag-guard`) and one open concern (`graph-guard`)
+sharing the same suspected root cause: `mutmut`'s `PytestRunner._pytest_args_regular_run`
+(`mutmut/__main__.py`) treats `[tool.mutmut] pytest_add_cli_args_test_selection` — the
+config key `protocol.json`'s `pytest_args` writes via `crucible.engine.write_scope` — as
+the **sole** positional test-selection argument to its stats-collection pytest invocation
+whenever no per-mutant coverage-selected tests apply (`tests=[]`, exactly the case at the
+initial stats phase every cell starts from). A scope naming exactly one file
+(`["tests/test_guard.py"]`, `["tests/test_ppr.py"]`) is therefore an **include-list**, not
+an additional filter: mutmut never asks pytest to collect anything else, so a freshly
+written `tests/crucible_*_test.py` file — present on disk, correctly `also_copy`'d in — is
+never collected and can never contribute a kill, in any round, no matter what it asserts.
+This is verified directly against the installed `mutmut` package source in this repo's own
+`.venv` (`_pytest_args_regular_run`, `run_stats`), not inferred from receipt behavior alone.
+
+- **Fix: exclude-form scopes.** `protocol.json`'s `graph-guard` and `rag-guard` entries now
+  carry `pytest_args` as `--ignore=` flags instead of bare file paths — mutmut passes these
+  straight through as extra pytest CLI args, so pytest's normal recursive discovery under
+  the sandbox's `tests/` still runs, minus the named files:
+  - `rag-guard`: `["--ignore=tests/test_hook.py"]` (unchanged reason from the v4 amendment:
+    `tests/test_hook.py` does `from bin import hook_userpromptsubmit`, a top-level `bin`
+    package never in `also_copy`, `ModuleNotFoundError` inside the sandbox).
+  - `graph-guard`: `["--ignore=tests/test_sparql_vs_ppr.py", "--ignore=tests/test_eval.py",
+    "--ignore=tests/test_real_vault_lift.py"]` — **wider than §3.2's original table**, which
+    named only `test_sparql_vs_ppr.py`. Reproducing the exclude-form conversion in a scratch
+    clone (never the real clone) found `tests/test_eval.py` and `tests/test_real_vault_lift.py`
+    carry the identical `from eval.… import …` top-level-package problem
+    (`ModuleNotFoundError: No module named 'eval'`) — invisible under the old include-list
+    because mutmut never collected *any* file besides `tests/test_ppr.py`, so these two
+    files' own collection errors were silently never exercised either. All three are
+    confirmed via `grep -n "^from \|^import " tests/test_*.py | grep -v graph_guard` against
+    the real `~/graph-guard` clone: exactly these three files import a top-level package
+    outside `also_copy=["graph_guard"]`; every other file's imports (`rdflib`, `owlrl`,
+    `hypothesis`, stdlib) are venv-installed third-party packages, not local top-level
+    packages, and collect fine.
+  - The other three subjects (`attrition-risk-ml`, `packaging`, `idna`) carry no `pytest_args`
+    entry at all — confirmed by inspection of `protocol.json`'s `subjects` map — so this
+    amendment does not touch them.
+  - Verified in throwaway scratch copies of the `rag-guard` and `graph-guard` clones (never
+    the real clone): `python -m pytest -q` and `python -m pytest -q --ignore=…` both pass
+    cleanly at the repo-root level (52/49 passed, 150/142 passed respectively) — a sanity
+    check, not the definitive proof, since the `ModuleNotFoundError` only manifests **inside**
+    mutmut's `mutants/` sandbox where `bin`/`eval` are absent (they're never `also_copy`'d);
+    the canary probe below is what actually exercises the sandbox.
+- **Fix: canary must-kill probe, `experiments/validate_scopes.py`.** The pre-existing
+  count-match check proves the mutant *denominator* is right but never proves mutmut's stats
+  phase actually collects a freshly-written test file — exactly the gap above. Each subject
+  in `protocol.json` now carries a `canary` field: a small, hand-written pytest file body
+  asserting one fact read directly from the pinned module's source (never guessed), chosen
+  so mutating that fact breaks it:
+  - `attrition-risk-ml`: calls `train._candidates()` (real function coverage, not a bare
+    constant read — see below) and asserts it returns exactly the three named model keys.
+  - `graph-guard`: `personalized_pagerank` on a hand-computed 2-node symmetric graph,
+    asserted via `pytest.approx` against the converged score pair.
+  - `rag-guard`: `should_refuse([{"score": 0.5}])` is `False` under the module's own default
+    `min_score=0.05`.
+  - `packaging`: a hand-built minimal ELF32-LSB header (`struct.pack`, `e_machine=62`) parsed
+    by `ELFFile`, asserted against the known `EMachine.X8664` enum value.
+  - `idna`: `_looks_like_alabel` on a known ACE-prefixed label (`True`) and a known plain
+    label (`False`).
+
+  The probe (`run_canary_probe`) resets the clone, writes the canary, **confirms it passes
+  pristine on its own first** ("a failing canary is your bug, not the subject's" — never
+  relied on unverified), then runs `mutmut run` for real and compares the measured killed
+  count against the count-match check's own baseline (measured moments earlier, before the
+  canary existed). Verdict is **KILLS** iff the killed count strictly increases — not a raw
+  `killed >= 1` threshold, because an already-covered subject's pre-existing suite can supply
+  a large nonzero killed count with or without the canary ever running (`rag-guard`'s
+  pre-existing `test_guard.py` alone kills 45+; a naive `>=1` check would show KILLS under
+  the broken OLD scope too, since that pre-existing suite is still the sole thing collected).
+  The clone is always reset in a `finally`, success or failure.
+- **`attrition-risk-ml`'s canary needed a second, independent workaround, unrelated to the
+  include/exclude scope issue.** A first canary attempt (`from src.train import RANDOM_STATE`)
+  produced neither a crash nor a kill: `mutmut run` printed "Stopping early, because we could
+  not find any test case for any mutant" and every mutant stayed `not checked`. Root cause,
+  confirmed by reading `mutmut/__main__.py` directly: `record_trampoline_hit` hard-asserts
+  `not name.startswith("src.")` — mutmut's own per-call coverage instrumentation (the
+  "trampoline") refuses any hit whose dotted module name starts with `src.`, and only fires
+  for **function calls**, never for a bare module-level constant read, so a canary that never
+  calls a real function in `train.py` registers zero coverage and mutmut can't map any mutant
+  to it at all. This is the same crash class the v5 amendment already reproduced for the
+  `attrition-risk-ml` H1 cells (`AssertionError: Failed trampoline hit. Module name starts
+  with 'src.', which is invalid`) — calling `_candidates()` via `from src.train import
+  _candidates` reproduces it identically in a scratch clone. Fix, canary-side only (no engine
+  or protocol change — this is a property of how the canary imports the module, not the scope):
+  `mutmut`'s own `setup_source_paths()` (`mutmut/__main__.py`) adds `mutants/src` to `sys.path`
+  specifically so tests can import the bare module name (`train`, not `src.train`) and avoid
+  this exact collision; the canary does the same by hand
+  (`sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))` before `from train
+  import _candidates`), which resolves identically pristine (no `mutants/` dir; the manual
+  `sys.path` entry does the same job) and inside the sandbox. Verified: 0k → 9k (delta +9).
+  **This is flagged, not fixed, as a standing limitation for any future real generated test
+  against `attrition-risk-ml`:** a tester/critic model naturally writes `from src.train import
+  …` (the same convention the subject's own `tests/test_data.py` uses for `src.data`, and the
+  only way to import the module that VS Code / a human would write given the repo's actual
+  package layout), and doing so crashes mutmut's trampoline the instant it calls any real
+  function in `train.py` — a genuine `mutmut`-library limitation with `src`-named packages,
+  not something this amendment's scope-fix or the v5 `SandboxStatsFailure` detector addresses.
+  Out of scope for this amendment; noted here so it is not lost.
+- **Validation: all 5 subjects, real local `mutmut run`s, $0, no model ever called
+  (`FakeProvider`, unconstructed for calls).** `experiments/validate_scopes.py` (extended,
+  not rewritten) run against the real pinned clones:
+
+  | Subject | Count-match | Canary (baseline → post-canary killed) |
+  |---|---|---|
+  | attrition-risk-ml | MATCH (255m 0k 255s) | KILLS (0k → 9k) |
+  | graph-guard | MATCH (80m 58k 22s) | KILLS (58k → 63k) |
+  | rag-guard | MATCH, widened-scope note (71m 46k 25s vs. smoke 45k/26s) | KILLS (46k → 47k) |
+  | packaging | MATCH, stripped-suite 0k by design (69m 0k 69s) | KILLS (0k → 24k) |
+  | idna | MATCH, stripped-suite 0k by design (187m 0k 187s) | KILLS (0k → 7k) |
+
+  `rag-guard`'s measured split (46k/25s) differs from its recorded smoke (45k/26s) by exactly
+  +1 killed / -1 survived — the expected, correct signature of the exclude-form widening (one
+  additional pre-existing test file beyond `test_guard.py` now legitimately gets collected and
+  kills one more mutant than the old include-list ever let run); `validate_scopes.py`'s
+  `validate_subject` now treats a strictly-more-kills, never-fewer split as a documented pass
+  for this reason, distinct from the stripped-suite 0-kill case. A split showing *fewer* kills
+  than smoke still fails loud (unchanged).
+- **graph-guard's v5 open concern is SETTLED: its counted `oneshot`/`loop-same` H1 cells are
+  INSTRUMENT-INVALID, not merely suspected.** Direct old-vs-new comparison, both runs against
+  the same real pinned clone, same canary, same mutant population (80 mutants):
+  - **OLD** scope (`pytest_args: ["tests/test_ppr.py"]`, byte-identical to the config the two
+    counted cells actually ran under): canary written, confirmed pristine-passing, `mutmut run`
+    measures 58 killed both before and after the canary exists — **NO-KILLS, delta +0**. The
+    canary file is present on disk in the sandbox and never touched.
+  - **NEW** scope (this amendment's exclude-form): same canary, same clone, same mutant
+    population: 58 killed before, 63 killed after — **KILLS, delta +5**.
+
+  This directly reproduces, for graph-guard, the exact mechanism `rag-guard` was reclassified
+  for under v5: a structurally guaranteed zero contribution from any newly generated test file,
+  regardless of what it asserts, entirely explained by the config, with the config change alone
+  flipping the outcome. **`graph-guard`'s two counted H1 cells
+  (`experiments/runs/graph-guard/oneshot-20260710T170024Z/`, $0.206295, and
+  `experiments/runs/graph-guard/loop-same-20260710T170726Z/`, $0.610452 — $0.816747 total) are
+  therefore reclassified INSTRUMENT-INVALID, not counted data**, joining `rag-guard`'s v5
+  reclassification. Both cells and their receipts are preserved as evidence
+  (`experiments/DEVIATIONS.md`); fresh reruns under v6 are a controller action, out of scope
+  for this amendment (no paid cell runs under this amendment — every measurement above uses
+  `FakeProvider`, never constructed to call, per `validate_scopes.py`'s own $0 invariant).
+
+v6 approved by Jeff Otterson 2026-07-10 (interactive gate) — continuation of the same
+instrument-repair approval standing established for v5.
+
 ## 4. Metrics
 
 - **Primary statistic — per-mutant paired kill outcomes, exact McNemar, two-sided.** Implemented

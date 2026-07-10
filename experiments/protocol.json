@@ -1,34 +1,76 @@
 {
-  "protocol_version": 4,
-  "tester": {"provider": "anthropic", "model": "claude-sonnet-5"},
-  "rounds": {"max_rounds": 4, "dry_rounds": 2},
+  "protocol_version": 6,
+  "tester": {
+    "provider": "anthropic",
+    "model": "claude-sonnet-5"
+  },
+  "rounds": {
+    "max_rounds": 4,
+    "dry_rounds": 2
+  },
   "arms": {
-    "oneshot": {"mode": "oneshot"},
-    "loop-same": {"mode": "harden", "critic": {"provider": "anthropic", "model": "claude-sonnet-5"}},
-    "loop-cross": {"mode": "harden", "critic": {"provider": "openai", "model": "gpt-5.6"}}
+    "oneshot": {
+      "mode": "oneshot"
+    },
+    "loop-same": {
+      "mode": "harden",
+      "critic": {
+        "provider": "anthropic",
+        "model": "claude-sonnet-5"
+      }
+    },
+    "loop-cross": {
+      "mode": "harden",
+      "critic": {
+        "provider": "openai",
+        "model": "gpt-5.6"
+      }
+    }
   },
   "subjects": {
     "attrition-risk-ml": {
       "module": "src/train.py",
-      "also_copy": ["src", "data"]
+      "also_copy": [
+        "src",
+        "data"
+      ],
+      "canary": "\"\"\"Free canary (crucible v6 amendment): asserts a stable fact about train.py's\nown logic (not a bare constant) so mutmut's trampoline records real coverage.\n\nImported via a manually-inserted src/ sys.path entry rather than\n`from src.train import ...`: mutmut's own trampoline hard-asserts against any\nmodule dotted-name starting with `src.` (mutmut/__main__.py\nrecord_trampoline_hit), which the package-qualified import triggers the\ninstant any train.py function is actually called inside mutmut's mutants/\nsandbox (this is the same crash class DEVIATIONS.md records for the\nattrition-risk-ml v5 reclassification). mutmut's own setup_source_paths()\nadds mutants/src to sys.path specifically so tests can import the bare\nmodule name instead; this test does the same by hand so it also resolves\nidentically outside the sandbox (pristine, where mutants/ doesn't exist).\"\"\"\nimport sys\nfrom pathlib import Path\n\nsys.path.insert(0, str(Path(__file__).resolve().parents[1] / \"src\"))\n\nfrom train import _candidates  # noqa: E402\n\n\ndef test_canary_candidates_has_three_named_models():\n    assert set(_candidates().keys()) == {\"LogisticRegression\", \"RandomForest\", \"XGBoost\"}\n"
     },
     "graph-guard": {
       "module": "graph_guard/ppr.py",
-      "also_copy": ["graph_guard"],
-      "pytest_args": ["tests/test_ppr.py"]
+      "also_copy": [
+        "graph_guard"
+      ],
+      "pytest_args": [
+        "--ignore=tests/test_sparql_vs_ppr.py",
+        "--ignore=tests/test_eval.py",
+        "--ignore=tests/test_real_vault_lift.py"
+      ],
+      "canary": "import pytest\n\nfrom graph_guard.ppr import personalized_pagerank\n\n\ndef test_canary_ppr_two_node_symmetric_graph_converged_scores():\n    adj = {\"a\": {\"b\": 1.0}, \"b\": {\"a\": 1.0}}\n    r = personalized_pagerank(adj, [\"a\"])\n    assert r[\"a\"] == pytest.approx(0.5405285500812008, abs=1e-6)\n    assert r[\"b\"] == pytest.approx(0.4594714499187992, abs=1e-6)\n"
     },
     "rag-guard": {
       "module": "rag_guard/guard.py",
-      "also_copy": ["rag_guard"],
-      "pytest_args": ["tests/test_guard.py"]
+      "also_copy": [
+        "rag_guard"
+      ],
+      "pytest_args": [
+        "--ignore=tests/test_hook.py"
+      ],
+      "canary": "from rag_guard.guard import should_refuse\n\n\ndef test_canary_should_refuse_high_score_is_not_refused():\n    assert should_refuse([{\"score\": 0.5}]) is False\n"
     },
     "packaging": {
       "module": "src/packaging/_elffile.py",
-      "also_copy": ["src/packaging"]
+      "also_copy": [
+        "src/packaging"
+      ],
+      "canary": "\"\"\"Free canary (crucible v6 amendment): a hand-built minimal ELF32-LSB header\nwith a known e_machine field, parsed by ELFFile -- exercises the struct-unpack\nheader path _elffile.py exists to implement.\"\"\"\nimport io\nimport struct\n\nfrom packaging._elffile import ELFFile, EMachine\n\n_IDENT = bytes([0x7F, ord(\"E\"), ord(\"L\"), ord(\"F\"), 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0])\n_HEADER = struct.pack(\n    \"<HHIIIIIHHH\",\n    2,      # e_type\n    62,     # e_machine = EM_X86_64\n    1,      # e_version\n    0x1000, # e_entry\n    0,      # e_phoff\n    0,      # e_shoff\n    0,      # e_flags\n    52,     # e_ehsize\n    32,     # e_phentsize\n    0,      # e_phnum\n)\n\n\ndef test_canary_elf32_lsb_header_reports_x86_64_machine():\n    f = ELFFile(io.BytesIO(_IDENT + _HEADER))\n    assert f.capacity == 1\n    assert f.encoding == 1\n    assert f.machine == EMachine.X8664\n"
     },
     "idna": {
       "module": "idna/cli.py",
-      "also_copy": ["idna"]
+      "also_copy": [
+        "idna"
+      ],
+      "canary": "\"\"\"Free canary (crucible v6 amendment): a known-ACE-prefixed label must be\ndetected by _looks_like_alabel, a plain ASCII label must not.\"\"\"\nfrom idna.cli import _looks_like_alabel\n\n\ndef test_canary_looks_like_alabel_detects_xn_prefix():\n    assert _looks_like_alabel(\"xn--nxasmq6b\") is True\n    assert _looks_like_alabel(\"example.com\") is False\n"
     }
   }
 }
