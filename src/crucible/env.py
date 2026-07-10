@@ -134,6 +134,13 @@ class SubjectEnv:
     def remove_test_file(self, path) -> None:
         (self.subject_dir / path).unlink(missing_ok=True)
 
+    def assert_clean(self, allowed_new=None) -> None:
+        """Post-round integrity attestation: after tests execute, the tree must show
+        nothing but crucible's own generated test files (engine artifacts filtered).
+        Any other line — including a MODIFIED tracked file — is tampering."""
+        allowed = self._known_generated() if allowed_new is None else allowed_new
+        assert_add_only(self._filtered_status(), allowed)
+
     # --- money / provenance ---
     def cost_usd(self, model, usage) -> float:
         return cost_usd(model, usage)

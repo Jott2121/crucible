@@ -74,6 +74,9 @@ class FakeEnv:
     def cost_usd(self, model, usage):
         return 0.01
 
+    def assert_clean(self):
+        pass
+
 
 def test_tester_round_kills_are_credited_against_baseline():
     env = FakeEnv([outcome(["m1", "m2", "m3"]), outcome(["m3"])])
@@ -211,6 +214,21 @@ def test_dry_counter_resets_to_zero_on_a_kill_round():
     result = harden(env, LoopConfig(dry_rounds=1))
     assert result.verdict == "clean"
     assert len(result.rounds) == 3  # tester + 2 critic rounds, not cut short after round 1
+
+
+def test_integrity_violation_after_measure_aborts_the_run():
+    # a generated test that touches the tree is tampering, not a bad round:
+    # the run cannot continue (aborted), and the round keeps its survivor context.
+    class TamperEnv(FakeEnv):
+        def assert_clean(self):
+            raise GuardrailViolation("unexpected change ' M subject_pkg/calc.py'")
+
+    env = TamperEnv([outcome(["m1"]), outcome(["m1"])])
+    result = oneshot(env, LoopConfig(arm="oneshot"))
+    assert result.verdict == "aborted"
+    assert result.rounds[0].status == "aborted"
+    assert "integrity" in result.rounds[0].note
+    assert result.rounds[0].survivors_after == ["m1"]
 
 
 def test_on_round_streams_each_record_in_order():

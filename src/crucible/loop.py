@@ -13,6 +13,7 @@ The `env` duck-type (implemented for real in Task 11's CLI, faked in tests):
   env.write_test_file(round_no, arm, content) -> str  (repo-relative path; add-only check)
   env.validate(test_path) -> None  (raises GuardrailViolation)
   env.remove_test_file(path) -> None  (a rejected round leaves no trace)
+  env.assert_clean() -> None  (post-round integrity attestation; raises GuardrailViolation)
   env.cost_usd(model, usage) -> float
 """
 from __future__ import annotations
@@ -96,7 +97,17 @@ def _round(env, cfg, round_no, role, survivors_before) -> RoundRecord:
         rec.survivors_after = list(survivors_before)
         return rec
 
-    after = env.measure()
+    try:
+        after = env.measure()
+        # integrity attestation: executing the generated tests must not have
+        # touched the tree; a tampered tree means the measurement is untrustworthy
+        # and the run cannot continue.
+        env.assert_clean()
+    except GuardrailViolation as exc:
+        rec.status, rec.note = "aborted", f"integrity: {exc}"
+        rec.survivors_after = list(survivors_before)
+        return rec
+
     rec.survivors_after = list(after.survivors)
     rec.kills = [m for m in survivors_before if m not in set(after.survivors)]
     rec.all_mutants = after.all_mutants

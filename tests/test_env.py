@@ -110,6 +110,23 @@ def test_preflight_writes_scope_and_commits_it_in_the_clone(tmp_path):
     assert sha != seed and len(sha) == 40
 
 
+def test_assert_clean_tolerates_engine_artifacts_and_generated_tests_only(tmp_path):
+    import pytest
+
+    from crucible.guardrails import GuardrailViolation
+
+    env = _env(tmp_path, [])
+    # engine artifacts + a crucible-generated test file: fine
+    (env.subject_dir / "mutants").mkdir()
+    (env.subject_dir / "coverage.json").write_text("{}")
+    (env.subject_dir / "tests" / "crucible_r0_loop_test.py").write_text("def test_x():\n    assert True\n")
+    env.assert_clean()
+    # a MODIFIED tracked file is tampering — any non-?? line is a violation
+    (env.subject_dir / "subject_pkg" / "calc.py").write_text("# tampered\n")
+    with pytest.raises(GuardrailViolation):
+        env.assert_clean()
+
+
 def test_retry_then_raise(tmp_path):
     class DyingProvider(FakeProvider):
         def __init__(self):
