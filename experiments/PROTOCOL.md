@@ -172,6 +172,17 @@ and, for graph-guard, `pytest_args` excluding `test_sparql_vs_ppr.py`), and `cru
 This amendment happened before any paid model call was made against any subject, so no data is
 affected.
 
+**Amendment (prompt templates bumped to v2, PRE-DATA):** prompt templates bumped to v2 after
+pilot shakeout — pilot attempt 2's two graph-guard cells (both verdict rejected at round 0, zero
+kills, receipts preserved) revealed a numeric-assertion gap in the tester prompt; ALL counted
+cells run under the v2 prompts (uniform bar). `src/crucible/prompts/tester.md` and
+`src/crucible/prompts/critic.md` each gained two rules: never assert exact floating-point
+equality (use `pytest.approx`), and mentally execute the generated test file top to bottom before
+finishing so it is guaranteed to collect cleanly under pytest. The v2 prompt sha256 hashes are
+recorded here: `tester 9235e2f3fb8cfc3c`, `critic bdacfa09451a7220` (16-char prefixes, computed via
+`crucible.roles.build_tester_prompt`/`build_critic_prompt`). Prompt-v2 amendment approved by Jeff
+Otterson 2026-07-10 (interactive gate).
+
 ## 4. Metrics
 
 - **Primary statistic — per-mutant paired kill outcomes, exact McNemar, two-sided.** Implemented
