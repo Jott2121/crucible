@@ -1,0 +1,100 @@
+import sys
+import pytest
+from idna import decode, encode
+from idna.cli import _build_parser, _convert_one, main
+
+def _find_action_by_const(parser, const_value):
+    for action in parser._actions:
+        if getattr(action, 'const', None) == const_value:
+            return action
+    raise AssertionError(f'no action with const={const_value!r} found')
+
+def _find_action_by_dest(parser, dest_value, option_only=False):
+    for action in parser._actions:
+        if action.dest == dest_value and (not option_only or action.option_strings):
+            return action
+    raise AssertionError(f'no action with dest={dest_value!r} found')
+
+def test_parser_prog_is_exact():
+    parser = _build_parser()
+    assert parser.prog == 'python -m idna'
+
+def test_parser_description_is_exact():
+    parser = _build_parser()
+    expected_description = 'Convert a domain name between its Unicode (U-label) and ASCII-compatible (A-label) forms. With no mode flag, the direction is chosen from the first input — if it contains an xn-- label the stream is decoded, otherwise it is encoded — and the same mode is applied to every remaining input. UTS #46 mapping is applied by default; pass --strict to disable it. When no domains are given on the command line and stdin is piped, one domain per line is read from stdin.'
+    assert parser.description == expected_description
+
+def test_encode_action_option_strings_and_help():
+    parser = _build_parser()
+    encode_action = _find_action_by_const(parser, 'encode')
+    assert encode_action.option_strings == ['-e', '--encode']
+    assert encode_action.help == 'Encode the input to its ASCII A-label form.'
+
+def test_decode_action_option_strings_and_help():
+    parser = _build_parser()
+    decode_action = _find_action_by_const(parser, 'decode')
+    assert decode_action.option_strings == ['-d', '--decode']
+    assert decode_action.help == 'Decode the input from its ASCII A-label form.'
+
+def test_strict_action_help():
+    parser = _build_parser()
+    strict_action = _find_action_by_dest(parser, 'strict')
+    assert strict_action.help == 'Disable the default UTS #46 mapping and apply IDNA 2008 rules verbatim.'
+
+def test_domain_action_help():
+    parser = _build_parser()
+    domain_action = _find_action_by_dest(parser, 'domain')
+    assert domain_action.help == 'One or more domain names to convert. Omit to read from stdin.'
+
+def test_encode_short_and_long_options_equivalent():
+    parser = _build_parser()
+    args_short = parser.parse_args(['-e', 'example.com'])
+    args_long = parser.parse_args(['--encode', 'example.com'])
+    assert args_short.mode == 'encode'
+    assert args_long.mode == 'encode'
+
+def test_decode_short_and_long_options_equivalent():
+    parser = _build_parser()
+    args_short = parser.parse_args(['-d', 'example.com'])
+    args_long = parser.parse_args(['--decode', 'example.com'])
+    assert args_short.mode == 'decode'
+    assert args_long.mode == 'decode'
+
+def test_convert_one_encode_forwards_uts46_true(capsys):
+    domain = 'faß.de'
+    expected = encode(domain, uts46=True).decode('ascii')
+    result = _convert_one(domain, 'encode', True)
+    captured = capsys.readouterr()
+    assert result is True
+    assert captured.out.strip() == expected
+
+def test_convert_one_decode_forwards_domain_and_uts46(capsys):
+    domain = 'xn--fa-hia.de'
+    expected = decode(domain, uts46=True)
+    result = _convert_one(domain, 'decode', True)
+    captured = capsys.readouterr()
+    assert result is True
+    assert captured.out.strip() == expected
+
+def test_main_default_mode_is_encode_with_uts46_true(capsys):
+    domain = 'faß.de'
+    expected = encode(domain, uts46=True).decode('ascii')
+    rc = main([domain])
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert captured.out.strip() == expected
+
+def test_main_default_mode_is_decode_for_alabel_input(capsys):
+    domain = 'xn--fa-hia.de'
+    expected = decode(domain, uts46=True)
+    rc = main([domain])
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert captured.out.strip() == expected
+
+def test_main_error_message_when_no_domain_and_stdin_is_terminal(monkeypatch, capsys):
+    monkeypatch.setattr(sys.stdin, 'isatty', lambda: True)
+    with pytest.raises(SystemExit):
+        main([])
+    captured = capsys.readouterr()
+    assert 'a domain argument is required when stdin is a terminal' in captured.err
