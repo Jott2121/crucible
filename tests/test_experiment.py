@@ -176,7 +176,14 @@ def test_run_arm_wires_the_run_dir_into_env_set_artifact_dir(tmp_path, monkeypat
 
     monkeypatch.setattr(env_module, "SubjectEnv", FakeSubjectEnv)
 
-    run_arm(PROTOCOL_FOR_RUN_ARM, "oneshot", tmp_path / "graph-guard",
+    subject_dir = tmp_path / "graph-guard"
+    subject_dir.mkdir()
+    # Create a dummy accepted test file to verify archiving.
+    tests_dir = subject_dir / "tests"
+    tests_dir.mkdir()
+    (tests_dir / "crucible_r0_oneshot_test.py").write_text("# accepted test file\n")
+
+    run_arm(PROTOCOL_FOR_RUN_ARM, "oneshot", subject_dir,
             tmp_path / "runs", "graph_guard/ppr.py")
 
     assert "artifact_dir" in calls
@@ -186,6 +193,10 @@ def test_run_arm_wires_the_run_dir_into_env_set_artifact_dir(tmp_path, monkeypat
     # set_artifact_dir must be called BEFORE any round runs, so a round-0 rejection
     # has somewhere to land -- the receipt dir must already exist on disk by then.
     assert run_dir.exists()
+    # Accepted test files must be archived into run_dir/accepted after the run finishes.
+    accepted_file = run_dir / "accepted" / "crucible_r0_oneshot_test.py"
+    assert accepted_file.exists()
+    assert accepted_file.read_text() == "# accepted test file\n"
 
 
 def test_run_arm_resets_the_clone_before_preflight(tmp_path, monkeypatch):

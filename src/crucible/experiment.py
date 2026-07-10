@@ -7,6 +7,7 @@ the mechanical form of "the protocol was frozen before the data existed."
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -118,6 +119,13 @@ def run_arm(protocol: dict, arm_name: str, subject_dir, runs_root, module_path: 
         "baseline_all_mutants": result.baseline_all_mutants,
         "baseline_counts": result.baseline_counts,
     })
+    # Archive accepted generated tests into the run dir so they survive the next reset.
+    accepted_dir = run_dir / "accepted"
+    accepted_count = 0
+    for p in sorted((Path(subject_dir) / "tests").glob("crucible_*_test.py")):
+        accepted_dir.mkdir(exist_ok=True)
+        shutil.copy2(p, accepted_dir / p.name)
+        accepted_count += 1
     print(f"{arm_name} on {Path(subject_dir).name}: verdict={result.verdict} "
-          f"cost=${result.total_cost_usd:.4f} receipt={run_dir}")
+          f"cost=${result.total_cost_usd:.4f} receipt={run_dir} (archived {accepted_count} tests)")
     return 3 if result.verdict in ("aborted", "rejected") else 0
