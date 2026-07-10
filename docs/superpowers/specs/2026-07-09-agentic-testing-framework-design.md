@@ -18,8 +18,45 @@ Every verdict is mechanical: a mutant is killed by pytest or it survives. No mod
 its own (or another model's) output — that is the design principle that answers the
 "self-testing is disregarded" objection, and it is measured, not assumed (see §8, H2).
 
-On top of the engine sits a **pre-registered experiment** (arXiv-standard rigor) testing two
-unpublished hypotheses, and a **Claude Code skill wrapper** making the loop a daily command.
+On top of the engine sits a **pre-registered experiment** (arXiv-standard rigor), and a
+**Claude Code skill wrapper** making the loop a daily command.
+
+## 1a. How this differs from oracle-gate
+
+Oracle Gate is the **inspector**: it measures and refuses — run the mutation scan, name the
+survivors, demand each be killed or explained by a named human, bind evidence to a commit. It
+never writes a test. Crucible is the machine on the other side of the gate: it **automates the
+fixing** that oracle-gate demands (the exact workflow done by hand on graph-guard Phase 1).
+Mutation testing is not the product here; it is the feedback signal inside the loop, the way a
+thermostat contains a thermometer. Stack: the standard says what evidence trust requires →
+oracle-gate checks the evidence exists and refuses when it doesn't → crucible generates the
+missing evidence automatically, under guardrails, with receipts.
+
+## 1b. Prior art and the honest novelty claim (verified 2026-07-09)
+
+Survivor-feedback and adversarial test loops are **published**; the claims below are scoped
+accordingly. Verified primary sources:
+
+- **MuTAP** (Dakhel et al., 2023) — first to feed surviving mutants into LLM prompts to improve
+  generated tests. Single-agent, benchmark-scale.
+- **AdverTest** (Chang et al., arXiv:2602.08146, 2026) — dual-agent adversarial loop (test agent
+  vs *mutant-generation* agent), +8.56% fault detection over best LLM baselines on real Java
+  projects. Closest neighbor.
+- **Meta ACH** (Harman et al., FSE 2025) — industrial mutation-guided LLM test generation:
+  10,795 classes, LLM equivalent-mutant detector (0.79P/0.47R, 0.95/0.96 with preprocessing),
+  73% engineer acceptance. Closed/internal.
+
+**What remains open, and is this project's contribution:**
+1. **H2** — whether a cross-lineage Critic beats a same-lineage Critic when the oracle is
+   mechanical. Not measured by any of the above (to be confirmed in the formal related-work
+   pass before PROTOCOL.md freezes; if found published, H2 re-scopes or the experiment stops).
+2. **Cost economics** — survivors killed per dollar, metered per stage. Not reported anywhere.
+3. **Open governance-first implementation** — engine-agnostic, anti-gaming guardrails,
+   SHA-bound receipts, pre-registered. ACH is closed; AdverTest is a research artifact.
+4. **H1 is a replication in a new setting** (agentic, repo-level, Python, costs disclosed) —
+   framed as replication, never as priority.
+
+A formal related-work sweep is a **blocking task before PROTOCOL.md is committed**.
 
 ## 2. Decisions locked during brainstorming
 
@@ -125,11 +162,14 @@ These encode the standard's known agent failure modes as hard checks, not prompt
 
 ## 8. The experiment (summary — PROTOCOL.md is the binding document)
 
-- **H1:** the adversarial loop kills more survivors than one-shot test generation, same model,
-  same budget disclosure. Within-lineage (Claude), paired per subject-module.
-- **H2:** a cross-lineage Critic (GPT-5.6) outperforms a same-lineage Critic (Claude), both
-  in-loop. Either outcome is publishable: cross-lineage value measured, or mechanical oracles
-  shown to reduce the need for it.
+- **H1 (replication, new setting):** the adversarial loop kills more survivors than one-shot
+  test generation, same model, same budget disclosure. Within-lineage (Claude), paired per
+  subject-module. Replicates the MuTAP/AdverTest direction in an agentic repo-level Python
+  setting with disclosed costs; framed as replication (§1b).
+- **H2 (the novel claim):** a cross-lineage Critic (GPT-5.6) outperforms a same-lineage Critic
+  (Claude), both in-loop. Either outcome is publishable: cross-lineage value measured, or
+  mechanical oracles shown to reduce the need for it. Novelty contingent on the related-work
+  sweep (§1b) confirming it unmeasured.
 - Arms per subject-module: (a) one-shot, (b) loop same-lineage, (c) loop cross-lineage.
 - Metrics: survivors killed (full-denominator mutation score deltas reported both ways per
   lesson 0018), rounds-to-dry, cost per survivor killed, invalid/flaky rates per arm.
@@ -150,9 +190,13 @@ Ships in this build (approved), after the CLI is stable.
 ## 10. Out of scope (YAGNI, recorded)
 
 - Cosmic Ray adapter (seam exists; build when a measured need appears).
-- LLM-generated mutants (SMART-style) — Phase-later research, not needed for H1/H2.
-- Property/metamorphic generation layer, dashboards, risk-tier governance features — later
-  phases of Jeff's roadmap, deliberately cut from this build.
+- LLM-generated mutants (AdverTest/ACH-style adversary-as-mutator) — Phase-later research, not
+  needed for H1/H2; if added, AdverTest and ACH are the prior art to cite.
+- Property/metamorphic generation layer (incl. PROBE-style adversarial property-based testing),
+  dashboards, risk-tier governance features — later phases of Jeff's roadmap, deliberately cut.
+- Safety/robustness/fuzzing frameworks from the survey list (Vera, TREAT, PtTrust, Flare,
+  BMC-Agent, commercial QA platforms) — unverified names as of 2026-07-09; related-work
+  candidates at most, never build scope for v1.
 - PII/bias compliance engine — different product (rag-guard territory); HR angle lives in the
   attrition-risk-ml worked example.
 - Full syscall sandboxing of generated tests.
