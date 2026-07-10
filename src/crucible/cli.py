@@ -102,9 +102,22 @@ def main(argv=None) -> int:
         p.add_argument("--fake-replies", default=None)
     rp = sub.add_parser("report")
     rp.add_argument("runs", nargs="+")
+    ep = sub.add_parser("experiment")
+    ep.add_argument("protocol")
+    ep.add_argument("--arm", required=True)
+    ep.add_argument("--subject", required=True)
+    ep.add_argument("--module", required=True)
+    ep.add_argument("--runs-dir", default="experiments/runs")
     args = parser.parse_args(argv)
     if args.cmd == "report":
         return _cmd_report(args)
+    if args.cmd == "experiment":
+        from crucible.experiment import assert_protocol_committed, load_protocol, run_arm
+        # repo root = cwd; the protocol must live in the crucible repo checkout
+        # (this command must be run from the crucible repo root, where experiments/ lives)
+        assert_protocol_committed(Path.cwd(), Path(args.protocol))
+        protocol = load_protocol(args.protocol)
+        return run_arm(protocol, args.arm, args.subject, args.runs_dir, args.module)
     return _cmd_run(args, args.cmd)
 
 

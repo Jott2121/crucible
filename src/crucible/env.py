@@ -72,7 +72,10 @@ class SubjectEnv:
                 self._git("-c", "user.email=crucible@local", "-c", "user.name=crucible",
                           "commit", "-qm", f"crucible: scope mutmut to {module_path}")
         pristine = run_tests(self.subject_dir, run=self.run)
-        if not pristine.passed:
+        # pytest exit 5 = "no tests collected": a stripped subject is a valid
+        # pristine state (crucible's job is to create the tests). Anything else
+        # non-zero is a red suite: hard stop before any model is called.
+        if not pristine.passed and pristine.returncode != 5:
             raise RuntimeError(
                 "subject suite is red on pristine code; hard stop before any model "
                 f"is called\n{pristine.output[-2000:]}"

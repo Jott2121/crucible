@@ -127,6 +127,25 @@ def test_assert_clean_tolerates_engine_artifacts_and_generated_tests_only(tmp_pa
         env.assert_clean()
 
 
+def test_preflight_accepts_subject_with_no_tests(tmp_path):
+    # third-party subjects get their tests stripped; "no tests collected"
+    # (pytest exit 5) is a valid pristine state — crucible's job is to create tests
+    import shutil, subprocess
+    from pathlib import Path
+
+    subject = tmp_path / "subject"
+    shutil.copytree(Path(__file__).parent / "fixtures" / "subject", subject)
+    shutil.rmtree(subject / "tests")
+    for cmd in (["git", "init", "-q"], ["git", "add", "-A"],
+                ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "seed"]):
+        subprocess.run(cmd, cwd=subject, check=True)
+    env = SubjectEnv(subject_dir=subject, tester_provider=FakeProvider([]),
+                     tester_model="fake-model", critic_provider=FakeProvider([]),
+                     critic_model="fake-model", module_path="subject_pkg/calc.py")
+    sha = env.preflight("subject_pkg/calc.py")
+    assert len(sha) == 40
+
+
 def test_retry_then_raise(tmp_path):
     class DyingProvider(FakeProvider):
         def __init__(self):
