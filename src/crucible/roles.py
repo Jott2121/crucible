@@ -34,7 +34,9 @@ def build_tester_prompt(module_path: str, module_source: str) -> RolePrompt:
 
 def build_critic_prompt(module_path, module_source, survivor_diffs) -> RolePrompt:
     system = _template("critic.md")
-    diffs = "\n\n".join(f"### Mutant `{mid}`\n```diff\n{d}\n```" for mid, d in survivor_diffs.items())
+    diffs = "\n\n".join(
+        f"### Mutant `{mid}`\n```diff\n{d}\n```" for mid, d in sorted(survivor_diffs.items())
+    )
     user = (
         f"Module `{module_path}`:\n\n```python\n{module_source}\n```\n\n"
         f"## Surviving mutants ({len(survivor_diffs)})\n\n{diffs}\n\nWrite the test file now."

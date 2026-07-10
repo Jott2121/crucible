@@ -24,3 +24,9 @@ def test_hash_stable_for_same_inputs():
         build_tester_prompt("p.py", "x = 1").prompt_sha256
         == build_tester_prompt("p.py", "x = 1").prompt_sha256
     )
+
+
+def test_critic_hash_canonical_over_insertion_order():
+    a = build_critic_prompt("p.py", "x = 1", {"m1": "d1", "m2": "d2"})
+    b = build_critic_prompt("p.py", "x = 1", {"m2": "d2", "m1": "d1"})
+    assert a.prompt_sha256 == b.prompt_sha256
