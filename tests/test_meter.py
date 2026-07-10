@@ -1,7 +1,7 @@
 import pytest
 from oracle_gate.providers import Usage
 
-from crucible.meter import UnpricedModel, cost_usd
+from crucible.meter import RATES_EXTRA, UnpricedModel, cost_usd
 
 
 def test_claude_tier_priced_from_meter_table():
@@ -27,3 +27,23 @@ def test_gpt_variant_is_not_silently_priced_at_base_rate():
 def test_unknown_model_fails_closed():
     with pytest.raises(UnpricedModel):
         cost_usd("mystery-model-9", Usage(10, 10))
+
+
+def test_unpriced_model_message_names_the_model():
+    with pytest.raises(UnpricedModel, match="mystery-model-9"):
+        cost_usd("mystery-model-9", Usage(10, 10))
+
+
+def test_empty_model_name_falls_back_to_empty_string_lookup(monkeypatch):
+    # a missing/None model name must key RATES_EXTRA with "" -- not with some
+    # placeholder string that could accidentally collide with a real extra-table key.
+    monkeypatch.setitem(RATES_EXTRA, "xxxx", (1.0, 2.0))
+    with pytest.raises(UnpricedModel):
+        cost_usd(None, Usage(1000, 1000))
+
+
+def test_cost_divisor_is_exactly_one_million():
+    # an off-by-one denominator (e.g. 1,000,001) is within default float-approx
+    # tolerance at small token counts, so scale up to make the error unmistakable.
+    cost = cost_usd("claude-sonnet-5", Usage(1_000_000_000, 0))
+    assert cost == pytest.approx(3000.0, rel=1e-9)

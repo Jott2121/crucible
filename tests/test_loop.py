@@ -13,13 +13,25 @@ def outcome(survivors):
 class FakeEnv:
     """Scripted env: measurements pop off a list; roles return canned replies."""
 
-    def __init__(self, measurements, reject_rounds=(), fail_calls=False, reject_on_write=False):
+    def __init__(
+        self,
+        measurements,
+        reject_rounds=(),
+        fail_calls=False,
+        reject_on_write=False,
+        fail_from_call=None,
+    ):
         self.measurements = list(measurements)
         self.reject_rounds = set(reject_rounds)
         self.fail_calls = fail_calls
+        # 0-indexed count of model calls (tester+critic combined, in call order);
+        # once the running count reaches fail_from_call, that call and all later ones fail.
+        self.fail_from_call = fail_from_call
         self.reject_on_write = reject_on_write
         self.written, self.removed = [], []
+        self.calls = []  # records "tester"/"critic" in the order env was asked to speak
         self._round = 0
+        self._call_count = 0
 
     def measure(self):
         return self.measurements.pop(0)
@@ -27,17 +39,22 @@ class FakeEnv:
     def survivor_diff(self, mid):
         return f"diff-of-{mid}"
 
-    def _reply(self):
-        if self.fail_calls:
+    def _reply(self, role):
+        self.calls.append(role)
+        should_fail = self.fail_calls or (
+            self.fail_from_call is not None and self._call_count >= self.fail_from_call
+        )
+        self._call_count += 1
+        if should_fail:
             raise RuntimeError("model down")
         return RoundReply("```python\nassert True\n```", "a" * 64, "claude-sonnet-5", Usage(10, 5))
 
     def call_tester(self):
-        return self._reply()
+        return self._reply("tester")
 
     def call_critic(self, survivor_diffs):
         self.last_diffs = survivor_diffs
-        return self._reply()
+        return self._reply("critic")
 
     def write_test_file(self, round_no, arm, content):
         if self.reject_on_write and round_no in self.reject_rounds:
@@ -63,7 +80,19 @@ def test_oneshot_is_round_zero_only():
     result = oneshot(env, LoopConfig(arm="oneshot"))
     assert len(result.rounds) == 1
     assert result.rounds[0].role == "tester"
+    assert result.rounds[0].round == 0
     assert result.rounds[0].survivors_after == ["m1", "m2"]
+    # round 0 must ask the tester, never the critic, for its reply
+    assert env.calls == ["tester"]
+
+
+def test_successful_round_records_the_written_test_file_path():
+    # on a round that validates cleanly, rec.test_file must be the path the env
+    # actually wrote to (not left at some placeholder set earlier in the try block).
+    env = FakeEnv([outcome(["m1"])])
+    result = oneshot(env, LoopConfig(arm="oneshot"))
+    assert result.rounds[0].test_file == "tests/crucible_r0_oneshot_test.py"
+    assert result.rounds[0].test_file == env.written[0]
 
 
 def test_loop_records_kills_and_stops_clean():
@@ -72,6 +101,11 @@ def test_loop_records_kills_and_stops_clean():
     assert result.verdict == "clean"
     assert result.rounds[1].kills == ["m1"]
     assert result.rounds[2].kills == ["m2"]
+    # round/role/survivors_before bookkeeping on the first critic round
+    assert result.rounds[1].round == 1
+    assert result.rounds[1].role == "critic"
+    assert result.rounds[1].survivors_before == ["m1", "m2"]
+    assert env.calls == ["tester", "critic", "critic"]
 
 
 def test_loop_goes_dry_after_k_zero_kill_rounds():
@@ -79,6 +113,7 @@ def test_loop_goes_dry_after_k_zero_kill_rounds():
     result = harden(env, LoopConfig(dry_rounds=2))
     assert result.verdict == "dry"
     assert len(result.rounds) == 3  # tester + 2 dry critic rounds
+    assert result.total_cost_usd == pytest.approx(0.03)  # 3 rounds x $0.01 each
 
 
 def test_loop_hits_round_cap():
@@ -141,3 +176,35 @@ def test_rejected_tester_round_is_not_clean():
     result = oneshot(env, LoopConfig(arm="oneshot"))
     assert result.verdict == "rejected"
     assert result.rounds[0].status == "rejected"
+    # the model was still called (and billed) before the write was rejected
+    assert result.total_cost_usd == pytest.approx(0.01)
+
+
+def test_critic_round_abort_uses_correct_status_and_cost():
+    # tester round succeeds (round 0); the critic's model call (round 1) fails.
+    env = FakeEnv([outcome(["m1"])], fail_from_call=1)
+    result = harden(env, LoopConfig())
+    assert result.verdict == "aborted"
+    assert len(result.rounds) == 2
+    assert result.rounds[1].role == "critic"
+    assert result.rounds[1].status == "aborted"
+    # the failed critic call never priced out; only the tester round's cost counts
+    assert result.total_cost_usd == pytest.approx(0.01)
+
+
+def test_dry_counter_resets_to_zero_on_a_kill_round():
+    # dry_rounds=1: if the dry counter didn't reset on a kill, one kill round would
+    # be mistaken for a dry round and stop the loop one round too early.
+    env = FakeEnv([outcome(["m1", "m2"]), outcome(["m2"]), outcome([])])
+    result = harden(env, LoopConfig(dry_rounds=1))
+    assert result.verdict == "clean"
+    assert len(result.rounds) == 3  # tester + 2 critic rounds, not cut short after round 1
+
+
+def test_clean_verdict_when_last_round_exhausts_the_budget():
+    # the final round exactly kills the last survivor at the budget cap: the loop's
+    # top-of-iteration early-return never fires, so the tail "clean" computation must.
+    env = FakeEnv([outcome(["m1"]), outcome([])])
+    result = harden(env, LoopConfig(max_rounds=1, dry_rounds=99))
+    assert result.verdict == "clean"
+    assert len(result.rounds) == 2
