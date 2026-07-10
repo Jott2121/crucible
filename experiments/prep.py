@@ -82,8 +82,24 @@ def prepare(subject):
         if reqs.exists():
             run([str(VENV_PIP), "install", "-q", "-r", str(reqs)])
 
-    smoke = run([str(VENV_PYTHON), "-m", "pytest", "-q"], cwd=clone_dir, check=False)
-    smoke_ok = smoke.returncode in (0, 5)  # 5 = no tests collected (expected post-strip)
+    pytest_cmd = [str(VENV_PYTHON), "-m", "pytest", "-q"]
+    if subject.get("strip_tests"):
+        # Stripping the suite leaves a dangling `testpaths` in the subject's own pytest
+        # config; pytest warns "No files were found in testpaths" at config time, and a
+        # subject with filterwarnings=["error"] (e.g. packaging) escalates that warning
+        # into a hard crash. The warning is a direct, expected artifact of the deliberate
+        # strip, so silence exactly that warning for stripped subjects only (CLI -W
+        # outranks ini filterwarnings in pytest).
+        pytest_cmd += ["-W", "ignore::pytest.PytestConfigWarning"]
+    smoke = run(pytest_cmd, cwd=clone_dir, check=False)
+    # Exit 5 ("no tests collected") is only an honest outcome for subjects whose
+    # test suite was deliberately stripped. A non-stripped subject exiting 5 means
+    # its own test suite silently failed to collect -- that's a real failure, not
+    # an expected post-strip state, and must not be papered over as smoke-ok.
+    if subject.get("strip_tests"):
+        smoke_ok = smoke.returncode in (0, 5)
+    else:
+        smoke_ok = smoke.returncode == 0
 
     mutmut_check = run([str(VENV_PYTHON), "-m", "mutmut", "--version"], cwd=clone_dir, check=False)
     mutmut_ok = mutmut_check.returncode == 0
