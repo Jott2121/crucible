@@ -1,7 +1,7 @@
 import pytest
 from oracle_gate.providers import Usage
 
-from crucible.engine import MutationOutcome
+from crucible.engine import MutationOutcome, SandboxStatsFailure
 from crucible.guardrails import GuardrailViolation
 from crucible.loop import LoopConfig, LoopResult, RoundReply, harden, oneshot
 
@@ -246,6 +246,46 @@ def test_integrity_violation_after_measure_aborts_the_run():
     assert result.rounds[0].status == "aborted"
     assert "integrity" in result.rounds[0].note
     assert result.rounds[0].survivors_after == ["m1"]
+
+
+def test_post_write_sandbox_stats_failure_is_a_rejected_round_not_a_plausible_zero():
+    # v5: a generated test that passes validity but crashes mutmut's own
+    # sandbox (SandboxStatsFailure from the post-write env.measure() call)
+    # must reject the round -- never get recorded as a real zero-kill
+    # measurement, which is exactly the silent-corruption bug this fixes.
+    class SandboxFailEnv(FakeEnv):
+        def __init__(self, *a, **kw):
+            super().__init__(*a, **kw)
+            self._measure_calls = 0
+
+        def measure(self):
+            self._measure_calls += 1
+            if self._measure_calls == 2:  # the post-write measure, not the baseline
+                raise SandboxStatsFailure("mutmut run failed: runner returned 1")
+            return super().measure()
+
+    env = SandboxFailEnv([outcome(["m1", "m2"])])
+    result = oneshot(env, LoopConfig(arm="oneshot"))
+    assert result.rounds[0].status == "rejected"
+    assert "sandbox-invalid" in result.rounds[0].note
+    assert "runner returned 1" in result.rounds[0].note
+    assert result.rounds[0].test_file is None
+    assert result.rounds[0].survivors_after == ["m1", "m2"]
+    assert env.removed == ["tests/crucible_r0_oneshot_test.py"]
+    assert result.verdict == "rejected"
+
+
+def test_baseline_sandbox_stats_failure_propagates_uncaught():
+    # v5: the PRE-round baseline measure can't be broken by a generated test
+    # (none exists yet) -- if it raises SandboxStatsFailure, that is a real
+    # subject config error and must crash loud, not be swallowed as a round.
+    class BrokenBaselineEnv(FakeEnv):
+        def measure(self):
+            raise SandboxStatsFailure("subject config is broken")
+
+    env = BrokenBaselineEnv([])
+    with pytest.raises(SandboxStatsFailure, match="subject config is broken"):
+        oneshot(env, LoopConfig(arm="oneshot"))
 
 
 def test_on_round_streams_each_record_in_order():

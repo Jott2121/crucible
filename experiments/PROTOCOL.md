@@ -317,6 +317,105 @@ v4 amendment: config/engine/tooling fix, not an interactive-gate design change (
 subject, or metric definition changed) — applied under the same "PRE-DATA, before any
 paid cell for these subjects" standing as the v2 amendment.
 
+**Amendment (protocol_version 5 — sandbox stats-failure fails loud instead of recording a
+plausible zero; two PAID cells reclassified; a second, distinct scoping bug found and
+flagged, NOT fixed by this amendment):**
+
+`crucible.engine.MutmutEngine._zero_test_baseline` (the v4 fix above) has a blind spot: its
+own confirmatory check — a bare `pytest -q --ignore=mutants` — runs on the **pristine**
+subject tree, never through mutmut's `mutants/` sandbox. A generated test that passes that
+pristine check can still crash the instant mutmut wraps the module (a directory `also_copy`
+never carried in, or mutmut's own trampoline rejecting a package-qualified import), leaving
+every mutant `not checked` for a reason that has nothing to do with legitimate zero
+coverage. `_zero_test_baseline` could not tell the two cases apart and silently converted
+the crash into a **false all-survived zero** — the exact silent-corruption mechanism named
+in this amendment's title.
+
+- **Reproduced for real, in a throwaway `/tmp` clone, no real clone touched.** The
+  `attrition-risk-ml` `oneshot` cell's own archived accepted test
+  (`experiments/runs/attrition-risk-ml/oneshot-20260710T175155Z/accepted/
+  crucible_r0_oneshot_test.py`) was copied into a scratch copy of
+  `~/crucible-subjects/attrition-risk-ml` (never the real clone). It passes cleanly against
+  the pristine module (`pytest -q`: 18 passed) and passes the `_zero_test_baseline`
+  confirmatory check too (`pytest -q --ignore=mutants`: 23 passed, exit 0) — but `python -m
+  mutmut run` in that same scratch clone crashes: `AssertionError: Failed trampoline hit.
+  Module name starts with `src.`, which is invalid` inside mutmut's own trampoline, ending
+  in `failed to collect stats. runner returned 1`. This is byte-for-byte the shape of the
+  real recorded run (`experiments/runs/attrition-risk-ml/oneshot-20260710T175155Z/
+  result.json`: `baseline_counts` = `{"killed": 0, "survived": 255, ...}`, `status: "ok"`,
+  no error ever raised) — confirming the real run's 255-survived-0-killed baseline was this
+  exact laundered crash, not a real measurement.
+- **Fix, at the engine level.** `crucible.engine.MutmutEngine.measure` now wraps its `run`
+  callable in a `_RunTee` that captures the `mutmut run` invocation's stdout+stderr (the one
+  subprocess call in `oracle_gate.runner.run_mutation` whose output is otherwise discarded
+  after only its exit code is checked). When `undetected()` raises `UnclassifiedStatus`
+  (every mutant `not checked`), `_sandbox_stats_failure_tail` scans that captured output for
+  `"failed to collect stats. runner returned <N>"` with `N != 5`, or an early `"Stopping
+  after <N> failures"` abort — `runner returned 5` (no test files exist anywhere) is the one
+  legitimate empty-suite signal, left to `_zero_test_baseline`; any other code or an early
+  abort means pytest itself broke or failed *inside* the sandbox, a real crash. A match
+  raises `SandboxStatsFailure(RuntimeError)` — checked, and takes priority, BEFORE
+  `_zero_test_baseline` ever runs its own (blind) confirmatory check — naming the failing
+  tail of `mutmut run`'s output in the message.
+- **Fix, in the loop.** `crucible.loop._round`'s post-write `after = env.measure()` call now
+  catches `SandboxStatsFailure` separately from the existing `GuardrailViolation` handling:
+  the generated test file is removed (`env.remove_test_file`, archived to the run's
+  `rejected/` dir when an artifact dir is set, same as any other rejected round), the round
+  is recorded `status="rejected"`, `note="sandbox-invalid: " + str(exc)`, and
+  `survivors_after` is left equal to `survivors_before` — the round contributes zero kills
+  to any metric, exactly like any other rejected round (§6), instead of ever being recorded
+  as a real measurement. The **PRE-round baseline** measure (`pre = env.measure()` in
+  `crucible.loop._run`, called before any generated test exists) is deliberately left
+  unguarded: a `SandboxStatsFailure` there cannot be caused by a generated test and is a
+  genuine subject-config error, so it propagates uncaught and crashes the run loud, per this
+  protocol's existing stance on hard-stop config errors (§3.2).
+- **Two PAID cells reclassified INSTRUMENT-INVALID, not counted data:**
+  `attrition-risk-ml` `oneshot` (`oneshot-20260710T175155Z`, $0.123393) and `loop-same`
+  (`loop-same-20260710T175320Z`, $0.878028) — both driven by the exact crash reproduced
+  above. Both cells are preserved as evidence and will be fresh reruns under `crucible`
+  v5 (the rerun itself is out of scope for this amendment — see `DEVIATIONS.md`).
+- **`rag-guard`'s two PAID cells (`oneshot-20260710T174312Z`, $0.110742;
+  `loop-same-20260710T174420Z`, $0.373071) are ALSO reclassified INSTRUMENT-INVALID, but
+  investigation found a DIFFERENT root cause that this amendment's detector does NOT catch.**
+  `rag-guard`'s `pytest_args` scope (`protocol.json`: `["tests/test_guard.py"]`) is passed
+  verbatim to mutmut's own `PytestRunner._pytest_args_regular_run` as the **sole**
+  test-selection argument for its stats-collection pytest invocation
+  (`mutmut/__main__.py`) — an include-list, not an additional filter. A freshly generated
+  `tests/crucible_*_test.py` file is copied into `mutants/` (confirmed: it is present on
+  disk there) but mutmut **never asks pytest to collect it**, so it can never contribute a
+  kill, in any round, regardless of what it asserts. This produces no `"failed to collect
+  stats"` or `"Stopping after"` marker — mutmut completes normally, with a real,
+  internally-consistent killed/survived split — so v5's detector cannot and does not fire
+  for it. Confirmed against the recorded receipt
+  (`experiments/runs/rag-guard/loop-same-20260710T174420Z/receipt.jsonl`): baseline and all
+  3 rounds report the byte-identical `{"killed": 45, "survived": 26}` and `kills: []` every
+  round. **Rerunning `rag-guard` under v5 alone will reproduce this identical silent zero —
+  a separate scope fix (e.g. widening `pytest_args` to also collect
+  `tests/crucible_*_test.py`, or dropping the include-list restriction in favor of another
+  fix for the file it exists to exclude, `tests/test_hook.py`) is required first.** Not built
+  under this amendment (out of scope; flagged for a future amendment/DEVIATIONS entry before
+  any rerun).
+- **Open concern, NOT resolved by this amendment: `graph-guard`'s currently-COUNTED cells
+  show the identical signature.** `graph-guard` carries the same shape of `pytest_args`
+  restriction (`["tests/test_ppr.py"]`) as `rag-guard`. Its counted `oneshot` cell
+  (`oneshot-20260710T170024Z`, $0.206295) shows `kills: []` with baseline and round-0 counts
+  byte-identical (`{"killed": 58, "survived": 22}`); its counted `loop-same` cell
+  (`loop-same-20260710T170726Z`, $0.610452) shows the same at round 0 (`kills: []`,
+  identical `{"killed": 58, "survived": 22}`) before its two critic rounds both hit the
+  pristine-validity rejection gate. §3.2's v4 amendment stated "graph-guard zeros occurred
+  at validity stage pre-measure" for its earlier shakeout cells — that remains true for the
+  *rejected* rounds, but it does **not** account for round 0's zero-kills-with-identical-
+  counts pattern in either counted cell, which structurally matches the same
+  `pytest_args`-exclusion mechanism just confirmed for `rag-guard`, not a genuine "the
+  tester found nothing to kill" result. **This protocol's prior determination that
+  graph-guard's counted cells are unaffected is therefore NOT verified and must be treated
+  as an open question — not a stated fact — until the same reproduction-and-fix discipline
+  applied to `attrition-risk-ml` above is applied to `graph-guard`.** No `graph-guard` data
+  is reclassified by this amendment (that requires its own verification pass); this is
+  logged here so it is not silently trusted in the interim.
+
+v5 approved by Jeff Otterson 2026-07-10 (interactive gate).
+
 ## 4. Metrics
 
 - **Primary statistic — per-mutant paired kill outcomes, exact McNemar, two-sided.** Implemented

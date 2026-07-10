@@ -22,11 +22,75 @@ class ScopeError(RuntimeError):
     """The subject clone has no pyproject.toml to carry [tool.mutmut] scope."""
 
 
+class SandboxStatsFailure(RuntimeError):
+    """mutmut's own stats phase failed inside its mutants/ sandbox for a reason
+    OTHER than "no tests exist anywhere" (that case, `runner returned 5`, is the
+    legitimate empty-suite baseline `_zero_test_baseline` already handles).
+
+    This is the silent-plausible-zero bug: a generated test can pass validity
+    (it collects and passes when run directly against the pristine clone --
+    `SubjectEnv.validate`'s pristine-twice check, OUTSIDE mutmut's sandbox) and
+    still crash the instant mutmut wraps the module inside mutants/ -- e.g. the
+    test asserts a directory `also_copy` never carried in, or mutmut's own
+    trampoline rejects a package-qualified import (`Failed trampoline hit`).
+    mutmut then prints "failed to collect stats. runner returned <N>" (N != 5)
+    or aborts early with "Stopping after <N> failures", and reports every
+    mutant `not checked`. `_zero_test_baseline`'s own confirmatory pytest run
+    passes fine because it runs on the pristine tree, never through mutmut's
+    trampoline, so it cannot tell a real empty-coverage baseline apart from
+    this sandbox-only crash -- it would otherwise launder the crash into a
+    false all-survived zero. This exception exists so the caller rejects the
+    round instead of ever recording that plausible zero."""
+
+
 @dataclass(frozen=True)
 class MutationOutcome:
     counts: dict
     survivors: list[str]
     all_mutants: int
+
+
+# exit 5 = "no tests collected anywhere" -- the one `runner returned` code that
+# IS the legitimate empty-suite baseline (protocol §3: idna/packaging's
+# strip_tests subjects), left for `_zero_test_baseline` to classify. Any other
+# code, or an early "Stopping after N failures" abort, means pytest itself
+# broke or failed INSIDE the sandbox -- a real crash, not empty coverage.
+_LEGITIMATE_EMPTY_SUITE_RUNNER_CODE = 5
+_STATS_FAILURE_RE = re.compile(r"failed to collect stats\.\s*runner returned (\d+)", re.I)
+_STOPPING_AFTER_RE = re.compile(r"stopping after \d+ failures?", re.I)
+
+
+def _sandbox_stats_failure_tail(stdout: str, lines: int = 40) -> str | None:
+    """None when a captured `mutmut run` invocation's stdout+stderr shows no
+    sandbox-only failure; otherwise the last `lines` lines of it, for the
+    exception message (naming the failing test output tail, per spec)."""
+    if not stdout:
+        return None
+    match = _STATS_FAILURE_RE.search(stdout)
+    if match and int(match.group(1)) != _LEGITIMATE_EMPTY_SUITE_RUNNER_CODE:
+        return "\n".join(stdout.splitlines()[-lines:])
+    if _STOPPING_AFTER_RE.search(stdout):
+        return "\n".join(stdout.splitlines()[-lines:])
+    return None
+
+
+class _RunTee:
+    """Wraps a `run` callable, capturing the stdout+stderr of the `mutmut run`
+    invocation specifically -- the one call in `oracle_gate.runner.run_mutation`
+    whose output can show a sandbox stats-phase failure, which the cicd-stats
+    JSON and `mutmut results` text (the only things run_mutation returns) do
+    not otherwise surface: run_mutation checks `mutmut run`'s exit code is
+    non-fatal (survivors alone make it non-zero) and then discards its stdout."""
+
+    def __init__(self, run):
+        self._run = run
+        self.run_stdout = ""
+
+    def __call__(self, cmd, *args, **kwargs):
+        proc = self._run(cmd, *args, **kwargs)
+        if list(cmd[-2:]) == ["mutmut", "run"]:
+            self.run_stdout = (getattr(proc, "stdout", "") or "") + (getattr(proc, "stderr", "") or "")
+        return proc
 
 
 class MutmutEngine:
@@ -35,11 +99,22 @@ class MutmutEngine:
         self.run = run
 
     def measure(self) -> MutationOutcome:
-        counts, results_text = run_mutation(self.cwd, run=self.run)
+        tee = _RunTee(self.run)
+        counts, results_text = run_mutation(self.cwd, run=tee)
         mutants = parse_results(results_text)
         try:
             survivors = [m.id for m in undetected(mutants)]
         except UnclassifiedStatus as exc:
+            failure_tail = _sandbox_stats_failure_tail(tee.run_stdout)
+            if failure_tail is not None:
+                raise SandboxStatsFailure(
+                    f"{exc}; mutmut's stats phase failed inside its own mutants/ "
+                    "sandbox (not a legitimate empty-suite baseline) -- likely a "
+                    "generated test that passes on the pristine module but crashes "
+                    "once mutmut wraps it (a directory also_copy doesn't carry in, "
+                    "a trampoline import mismatch, etc). Tail of `mutmut run` "
+                    f"output:\n{failure_tail}"
+                ) from exc
             zero_test_outcome = self._zero_test_baseline(mutants)
             if zero_test_outcome is not None:
                 return zero_test_outcome

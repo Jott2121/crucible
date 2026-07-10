@@ -2,7 +2,13 @@ from pathlib import Path
 
 import pytest
 
-from crucible.engine import MutationOutcome, MutmutEngine, ScopeError, write_scope
+from crucible.engine import (
+    MutationOutcome,
+    MutmutEngine,
+    SandboxStatsFailure,
+    ScopeError,
+    write_scope,
+)
 
 RESULTS = """\
     subject_pkg.calc.x_clamp__mutmut_1: killed
@@ -240,6 +246,97 @@ def test_measure_reraises_when_pytest_confirms_a_real_error(tmp_path):
     })
     with pytest.raises(RuntimeError, match="mutmut evaluated no mutants"):
         MutmutEngine(tmp_path, run=run).measure()
+
+
+def test_measure_healthy_run_unaffected_by_stats_failure_detector(tmp_path):
+    """v5: the new tee/detector plumbing around `mutmut run` must not change
+    behavior for a normal, fully-classified run (the common case)."""
+    (tmp_path / "mutants").mkdir()
+    (tmp_path / "mutants" / "mutmut-cicd-stats.json").write_text(
+        '{"killed": 1, "survived": 2, "no_coverage": 0, "timeout": 0}'
+    )
+    run = FakeRun({
+        "mutmut --version": (0, "mutmut, version 3.6.0"),
+        "mutmut run": (2, "healthy summary, no failure markers\n"),
+        "mutmut export-cicd-stats": (0, ""),
+        "mutmut results --all true": (0, RESULTS),
+    })
+    outcome = MutmutEngine(tmp_path, run=run).measure()
+    assert outcome.survivors == [
+        "subject_pkg.calc.x_clamp__mutmut_2",
+        "subject_pkg.calc.x_rate__mutmut_1",
+    ]
+    assert outcome.all_mutants == 3
+
+
+def test_measure_raises_sandbox_stats_failure_when_runner_returned_nonfive(tmp_path):
+    """v5: a generated test that crashes mutmut's own sandbox (e.g. it asserts
+    a directory also_copy never carried in) leaves every mutant "not checked"
+    -- the same surface shape as the legitimate empty-suite case -- but
+    mutmut's `mutmut run` stdout names a real runner failure (`runner
+    returned 1`, not 5). SandboxStatsFailure must fire BEFORE
+    `_zero_test_baseline` can launder this into a false all-survived zero."""
+    (tmp_path / "mutants").mkdir()
+    (tmp_path / "mutants" / "mutmut-cicd-stats.json").write_text(
+        '{"killed": 0, "survived": 0, "no_coverage": 0, "timeout": 0}'
+    )
+    run = FakeRun({
+        "mutmut --version": (0, "mutmut, version 3.6.0"),
+        "mutmut run": (1,
+            "....F\n"
+            "AssertionError: some sandbox-only crash\n"
+            "failed to collect stats. runner returned 1\n"),
+        "mutmut export-cicd-stats": (0, ""),
+        "mutmut results --all true": (0, "    subject_pkg.calc.x_clamp__mutmut_1: not checked\n"),
+        # scripted so a detector bug that skips straight to the fallback
+        # doesn't accidentally still raise for the right reason
+        "pytest -q --ignore=mutants": (0, "5 passed in 0.5s"),
+    })
+    with pytest.raises(SandboxStatsFailure, match="runner returned 1"):
+        MutmutEngine(tmp_path, run=run).measure()
+
+
+def test_measure_raises_sandbox_stats_failure_on_stopping_after_marker(tmp_path):
+    """v5: mutmut can also abort the stats phase early with "Stopping after
+    N failures" rather than the "failed to collect stats" message; this must
+    be detected too."""
+    (tmp_path / "mutants").mkdir()
+    (tmp_path / "mutants" / "mutmut-cicd-stats.json").write_text(
+        '{"killed": 0, "survived": 0, "no_coverage": 0, "timeout": 0}'
+    )
+    run = FakeRun({
+        "mutmut --version": (0, "mutmut, version 3.6.0"),
+        "mutmut run": (1, "....F\nStopping after 1 failures!\n"),
+        "mutmut export-cicd-stats": (0, ""),
+        "mutmut results --all true": (0, "    subject_pkg.calc.x_clamp__mutmut_1: not checked\n"),
+        "pytest -q --ignore=mutants": (0, "5 passed in 0.5s"),
+    })
+    with pytest.raises(SandboxStatsFailure, match="Stopping after 1 failures"):
+        MutmutEngine(tmp_path, run=run).measure()
+
+
+def test_measure_does_not_mistake_legitimate_empty_suite_for_sandbox_failure(tmp_path):
+    """v5: `runner returned 5` -- "no tests exist anywhere" -- is the
+    legitimate empty-suite signal `_zero_test_baseline` already handles
+    (protocol §3.2 v4); it must NOT be mistaken for a sandbox crash."""
+    (tmp_path / "mutants").mkdir()
+    (tmp_path / "mutants" / "mutmut-cicd-stats.json").write_text(
+        '{"killed": 0, "survived": 0, "no_coverage": 0, "timeout": 0}'
+    )
+    run = FakeRun({
+        "mutmut --version": (0, "mutmut, version 3.6.0"),
+        "mutmut run": (1, "failed to collect stats. runner returned 5\n"),
+        "mutmut export-cicd-stats": (0, ""),
+        "mutmut results --all true": (0,
+            "    subject_pkg.calc.x_clamp__mutmut_1: not checked\n"
+            "    subject_pkg.calc.x_rate__mutmut_1: not checked\n"),
+        "pytest -q --ignore=mutants": (5, "no tests ran in 0.01s"),
+    })
+    outcome = MutmutEngine(tmp_path, run=run).measure()
+    assert outcome.survivors == [
+        "subject_pkg.calc.x_clamp__mutmut_1",
+        "subject_pkg.calc.x_rate__mutmut_1",
+    ]
 
 
 def test_measure_reraises_when_not_checked_is_mixed_with_classified_status(tmp_path):

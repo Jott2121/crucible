@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 
 from oracle_gate.providers import Usage
 
+from crucible.engine import SandboxStatsFailure
 from crucible.guardrails import GuardrailViolation
 
 
@@ -105,6 +106,17 @@ def _round(env, cfg, round_no, role, survivors_before) -> RoundRecord:
 
     try:
         after = env.measure()
+    except SandboxStatsFailure as exc:
+        # the generated test passed pristine validation but crashes mutmut's own
+        # sandbox (e.g. it asserts a directory also_copy never carried in) --
+        # NOT a legitimate zero-kill measurement. Reject the round rather than
+        # ever recording the plausible-zero this would otherwise produce.
+        env.remove_test_file(path)
+        rec.status, rec.note, rec.test_file = "rejected", f"sandbox-invalid: {exc}", None
+        rec.survivors_after = list(survivors_before)
+        return rec
+
+    try:
         # integrity attestation: executing the generated tests must not have
         # touched the tree; a tampered tree means the measurement is untrustworthy
         # and the run cannot continue.
