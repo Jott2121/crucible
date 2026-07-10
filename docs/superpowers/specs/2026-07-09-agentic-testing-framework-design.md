@@ -84,7 +84,7 @@ ai-agentic-code-testing/
 │   ├── prompts/         # versioned prompt files (hash goes into every receipt)
 │   ├── guardrails.py    # add-only, validity gate, flake check, anti-weakening
 │   ├── runner.py        # pytest execution wrapper (subprocess, timeouts)
-│   ├── receipts.py      # thin glue emitting oracle-gate evidence packages
+│   ├── receipts.py      # crucible-native JSON receipts, SHA-bound (oracle-gate evidence-package emission deferred)
 │   ├── meter.py         # thin glue over agent-cost-attribution pricing/metering
 │   └── cli.py           # crucible harden | oneshot | experiment | report
 ├── tests/               # unit (fake env) + integration (marked, real APIs)

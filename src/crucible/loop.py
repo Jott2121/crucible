@@ -79,6 +79,9 @@ def _round(env, cfg, round_no, role, survivors_before) -> RoundRecord:
             reply = env.call_critic(diffs)
     except Exception as exc:  # model/network failure after env-level retries
         rec.status, rec.note = "aborted", f"model call failed: {type(exc).__name__}: {exc}"
+        # an aborted round killed nothing: keep the survivor context rather than
+        # letting the receipt read as "0 survivors left"
+        rec.survivors_after = list(survivors_before)
         return rec
 
     rec.prompt_sha256, rec.model = reply.prompt_sha256, reply.model

@@ -205,6 +205,8 @@ def test_critic_round_abort_uses_correct_status_and_cost():
     assert result.rounds[1].status == "aborted"
     # the failed critic call never priced out; only the tester round's cost counts
     assert result.total_cost_usd == pytest.approx(0.01)
+    # an aborted round keeps its survivor context, never reads as "0 survivors left"
+    assert result.rounds[1].survivors_after == ["m1"]
 
 
 def test_dry_counter_resets_to_zero_on_a_kill_round():

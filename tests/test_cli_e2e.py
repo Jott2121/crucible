@@ -104,3 +104,5 @@ def test_harden_end_to_end_survives_engine_artifacts(tmp_path):
     meta = json.loads((runs[0] / "meta.json").read_text())
     assert meta["tester_provider"] == "fake"
     assert meta["crucible_version"] and meta["mutmut_version"] and meta["oracle_gate_version"]
+    # the report command must consume the receipts this very run just wrote
+    assert main(["report", str(runs[0])]) == 0
