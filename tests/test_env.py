@@ -172,6 +172,29 @@ def test_preflight_accepts_subject_with_no_tests(tmp_path):
     assert len(sha) == 40
 
 
+def test_preflight_creates_pyproject_when_subject_clone_has_none(tmp_path):
+    # a clone with no pyproject.toml/setup.py/setup.cfg at all (e.g.
+    # attrition-risk-ml) has nowhere for mutmut to read [tool.mutmut] from;
+    # preflight must create a minimal scope-only file rather than raising
+    # ScopeError, since crucible operates on a disposable clone
+    import shutil, subprocess
+    from pathlib import Path
+
+    subject = tmp_path / "subject"
+    shutil.copytree(Path(__file__).parent / "fixtures" / "subject", subject)
+    (subject / "pyproject.toml").unlink()
+    for cmd in (["git", "init", "-q"], ["git", "add", "-A"],
+                ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "seed"]):
+        subprocess.run(cmd, cwd=subject, check=True)
+    env = SubjectEnv(subject_dir=subject, tester_provider=FakeProvider([]),
+                     tester_model="fake-model", critic_provider=FakeProvider([]),
+                     critic_model="fake-model", module_path="subject_pkg/calc.py")
+    sha = env.preflight("subject_pkg/calc.py")
+    assert len(sha) == 40
+    text = (subject / "pyproject.toml").read_text()
+    assert "[tool.mutmut]" in text and '"subject_pkg/calc.py"' in text
+
+
 SALVAGEABLE_TESTS = (
     "from subject_pkg.calc import acceptance_rate, clamp\n\n\n"
     "def test_clamp_low():\n    assert clamp(-5, 0, 10) == 0\n\n\n"

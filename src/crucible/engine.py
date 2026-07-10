@@ -36,10 +36,13 @@ class MutmutEngine:
 
     def measure(self) -> MutationOutcome:
         counts, results_text = run_mutation(self.cwd, run=self.run)
+        mutants = parse_results(results_text)
         try:
-            mutants = parse_results(results_text)
             survivors = [m.id for m in undetected(mutants)]
         except UnclassifiedStatus as exc:
+            zero_test_outcome = self._zero_test_baseline(mutants)
+            if zero_test_outcome is not None:
+                return zero_test_outcome
             raise RuntimeError(
                 f"{exc}; mutmut evaluated no mutants — usually a broken [tool.mutmut] "
                 "scope (missing also_copy?) or a collection error inside the mutants "
@@ -50,6 +53,74 @@ class MutmutEngine:
             counts=counts,
             survivors=survivors,
             all_mutants=len(mutants),
+        )
+
+    def _zero_test_baseline(self, mutants) -> MutationOutcome | None:
+        """Every generated mutant sits at status "not checked" in exactly two
+        legitimate cases, both amounting to the same mechanically provable
+        fact -- nothing exercises the mutated module, so nothing could have
+        killed a mutant:
+
+        (a) the subject has literally zero test files anywhere. mutmut's
+            baseline "Running stats" phase is a bare pytest run over the whole
+            subject, and it hard-fails -- "failed to collect stats. runner
+            returned 5" -- rather than reporting 0% coverage, when pytest
+            itself finds nothing to collect. That is exactly the pristine
+            state a stripped third-party subject starts a cell in (protocol
+            §3: "scored against a genuinely empty starting suite").
+        (b) the subject's existing test suite collects and passes cleanly
+            (exit 0) but genuinely never executes the mutated module (a
+            module with zero test coverage, e.g. attrition-risk-ml's train.py
+            per protocol §3.1's pre-declared "degenerate maximal-headroom
+            false-pass case"). mutmut's per-mutant "no tests" status already
+            gets this exact treatment (oracle_gate.survivors.UNDETECTED) when
+            SOME but not all mutants in a file lack coverage; mutmut's own
+            global sanity check ("Stopping early, because we could not find
+            any test case for any mutant") just aborts before classifying
+            anything at the 100%-uncovered boundary instead of reporting
+            "no tests" for every mutant. This extends the same semantics to
+            that boundary rather than inventing a new one.
+
+        Any OTHER cause of "not checked" (a real [tool.mutmut] scope bug: a
+        missing also_copy entry, an unrelated test file failing to collect,
+        etc.) must still fail loud, so this only fires when (1) EVERY mutant
+        is "not checked" -- a partial mix means something real was measured
+        and a real bug is hiding in the rest -- and (2) a bare, unscoped
+        `pytest -q` in the subject confirms either (a) or (b) above (exit
+        code 5 or 0), never a genuine failure or collection error (exit code
+        1/2/3/4). Returns None when either condition fails, so the caller
+        raises the original loud error. This cannot mechanically distinguish
+        case (b) from a genuine scope bug that happens to leave an unrelated
+        green suite in place (e.g. source_paths pointing at the wrong file);
+        `experiments/validate_scopes.py` is the second line of defense for
+        that -- it also checks the mutant COUNT against the pre-registered
+        smoke figure, which a wrong-file scope would also disturb.
+        """
+        if not mutants or any(m.status != "not checked" for m in mutants):
+            return None
+        # --ignore=mutants: by this point mutmut has already generated its own
+        # mutants/ tree (a copy of source_paths + also_copy, including any
+        # also_copy'd test files this subject keeps). An unscoped `pytest -q`
+        # from the subject root would otherwise collect the SAME test module
+        # basename from both the real tests/ dir and its mutants/ mirror and
+        # error out on pytest's "import file mismatch" -- a collision this
+        # confirmatory check causes by running after mutation generation, not
+        # a real failure of the subject's own suite.
+        pristine = self.run(
+            [sys.executable, "-m", "pytest", "-q", "--ignore=mutants"],
+            cwd=str(self.cwd), capture_output=True, text=True,
+        )
+        if pristine.returncode not in (0, 5):
+            return None
+        ids = [m.id for m in mutants]
+        return MutationOutcome(
+            counts={
+                "killed": 0, "survived": len(ids), "total": len(ids),
+                "no_tests": 0, "skipped": 0, "suspicious": 0, "timeout": 0,
+                "check_was_interrupted_by_user": 0, "segfault": 0,
+            },
+            survivors=ids,
+            all_mutants=len(ids),
         )
 
     def survivor_diff(self, mutant_id: str) -> str:
@@ -67,10 +138,19 @@ _MUTMUT_TABLE = re.compile(r"^\[tool\.mutmut\]\n(?:(?!^\[).)*", re.M | re.S)
 
 def write_scope(pyproject_path: Path, source_paths: list[str],
                  also_copy: list[str] | None = None,
-                 pytest_args: list[str] | None = None) -> None:
+                 pytest_args: list[str] | None = None,
+                 create_if_missing: bool = False) -> None:
     pyproject_path = Path(pyproject_path)
     if not pyproject_path.exists():
-        raise ScopeError(f"{pyproject_path} does not exist; cannot scope mutmut")
+        if not create_if_missing:
+            raise ScopeError(f"{pyproject_path} does not exist; cannot scope mutmut")
+        # A subject clone with no packaging metadata at all (e.g. a plain
+        # source tree, no pyproject.toml/setup.cfg) has nowhere for mutmut to
+        # read [tool.mutmut] from. crucible operates on a disposable clone, so
+        # it is safe to create a minimal file carrying ONLY the mutmut scope
+        # table -- never real project metadata, which crucible has no basis
+        # to invent.
+        pyproject_path.write_text("# created by crucible preflight — mutmut scope only\n")
     paths = ", ".join(f'"{p}"' for p in source_paths)
     lines = ["[tool.mutmut]", f"source_paths = [{paths}]"]
     if also_copy:

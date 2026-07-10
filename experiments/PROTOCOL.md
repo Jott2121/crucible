@@ -231,6 +231,92 @@ is logged, never silently discarded.
 
 v3 amendment approved by Jeff Otterson 2026-07-10 (interactive gate).
 
+**Amendment (protocol_version 4 — scope transcription corrections after free dry-run
+validation caught mismatches; zero counted cells affected, all failures pre-model, $0):**
+the H1 grid's first pass hit all-`not checked` mutant status (identical failure class to
+pilot attempt 1, §3.2's protocol_version-2 amendment) on 4 of 5 subjects — `rag-guard`,
+`idna`, `packaging`, `attrition-risk-ml` — every one of it before any model was ever
+called (8 cells, $0 total; `graph-guard`'s two cells, run first, were unaffected and stand
+as counted data). `experiments/validate_scopes.py` (new, stdlib-only, $0) was built to
+reproduce and fix all four for free before any further paid cell runs, and diagnosis found
+two distinct root causes, not one:
+
+- **`rag-guard`: a real scope-transcription gap.** §3.2's table always named
+  `tests/test_guard.py` as the scope's test selection in prose, but `experiments/
+  protocol.json`'s machine-readable `subjects` map (the config `SubjectEnv.preflight`
+  actually writes) never carried a `pytest_args` entry for it — unlike `graph-guard`,
+  which does exclude `test_sparql_vs_ppr.py` this way. Without it, mutmut's baseline
+  stats phase collects the WHOLE `tests/` dir, including `tests/test_hook.py`, which
+  imports a top-level `bin` package never in `also_copy` (`ModuleNotFoundError: No module
+  named 'bin'`) — a genuine collection error, not a design tradeoff. Fixed:
+  `protocol.json`'s `rag-guard` entry now carries `"pytest_args": ["tests/test_guard.py"]`,
+  matching the smoke config recorded in `.superpowers/sdd/task-3-fix-report.md`. Verified:
+  71 mutants / 45 killed / 26 survived — exact match to the recorded smoke count.
+- **`idna` and `packaging`: not a scope bug — a real mutmut/tooling limitation with the
+  "genuinely empty starting suite" design.** Both are `strip_tests: true` subjects whose
+  entire `tests/` directory is removed before any cell runs (§3, "scored against a
+  genuinely empty starting suite"). mutmut's own baseline "Running stats" phase is a bare
+  pytest run over the whole subject; with zero test files anywhere, pytest exits 5 ("no
+  tests ran"), and mutmut treats that as a hard failure ("failed to collect stats. runner
+  returned 5") rather than reporting 0% coverage — every generated mutant is left at
+  status `not checked` forever, which `oracle_gate.survivors.undetected` correctly refuses
+  to classify (fail-closed by design). No `[tool.mutmut]` scope change can fix this: it
+  reproduces identically once `packaging`'s separate preflight blocker (below) is cleared.
+  Fixed at the engine level, not the config level: `crucible.engine.MutmutEngine.measure`
+  (`_zero_test_baseline`) now recognizes this exact precondition — ALL generated mutants
+  "not checked" AND a bare, unscoped `pytest -q --ignore=mutants` confirming either zero
+  tests exist anywhere (exit 5) or a real, passing suite that simply never executes the
+  mutated module (exit 0, e.g. `attrition-risk-ml`'s pre-declared §3.1 degenerate case) —
+  and returns every mutant as an undetected survivor by construction (mechanically proven,
+  not guessed), instead of raising. Any other cause of `not checked` (a real collection
+  error, a partial mix of `not checked` and classified statuses) still fails loud;
+  `validate_scopes.py` is the second line of defense, since a wrong-file scope would also
+  disturb the mutant COUNT it checks. Verified: `idna` 187 mutants (exact match to smoke's
+  denominator; 0 killed / 187 survived vs. smoke's 126/61, expected — smoke was measured
+  against `idna`'s own unstripped suite at selection time, not the real empty-suite
+  baseline); `packaging` 69 mutants (exact match; 0/69 vs. smoke's 36/33, same reason).
+- **`packaging` additionally: a preflight-level config bug, separate from the above.** The
+  strip (`git rm -rq tests`) left a dangling `testpaths = ["tests"]` in `packaging`'s own
+  `[tool.pytest.ini_options]`; pytest issues `PytestConfigWarning: No files were found in
+  testpaths` at config time, and `packaging`'s own `filterwarnings = ["error"]` escalates
+  that warning into a hard collection-time crash (`pytest` exit 2, not the honest exit 5
+  `SubjectEnv.preflight` expects from a stripped subject). `experiments/prep.py`'s own
+  smoke check already silenced this with `-W ignore::pytest.PytestConfigWarning`, but
+  `crucible.runner.run_tests` (what `SubjectEnv.preflight` actually calls at cell time)
+  carries no such flag, so this was a hard stop before any model call. Fixed in the clone
+  (`~/crucible-subjects/packaging/pyproject.toml`, stale `testpaths` line removed, commit
+  `crucible: drop stale testpaths after strip`) and in `experiments/prep.py`
+  (`drop_stale_testpaths`, runs automatically after every future strip, only when the
+  removed line names exactly the directory that strip deleted). Verified: fresh
+  `prep.py --only packaging` reproduces the fix with no manual step.
+- **`attrition-risk-ml`: the clone has no `pyproject.toml` at all** (not a third-party
+  `pypi-git` subject; nowhere for mutmut to read `[tool.mutmut]` from), so
+  `crucible.engine.write_scope` raised `ScopeError` before any model was ever called.
+  Fixed: `write_scope` gained `create_if_missing: bool = False`; when `True` and the file
+  is absent, it creates a minimal file carrying ONLY the `[tool.mutmut]` table (comment:
+  "created by crucible preflight — mutmut scope only" — crucible never invents real
+  project metadata for a disposable clone). `SubjectEnv.preflight` now always passes
+  `create_if_missing=True`. Verified: 255 mutants / 0 killed / 255 survived — exact match
+  to smoke (§3.1's pre-declared degenerate zero-kill case; both smoke and the real
+  baseline measure the same zero-coverage state, so the split matches exactly here, unlike
+  `idna`/`packaging`).
+
+`experiments/validate_scopes.py` reuses the real `crucible.env.SubjectEnv` (`reset_clone`
++ `preflight`, `FakeProvider`, never a real model call) and `crucible.engine.MutmutEngine.
+measure` for all five subjects, comparing measured `(mutants, killed, survived)` against
+`subjects.json`'s recorded smoke counts, and is the free dry-run gate that should have
+existed before the H1 grid ran. All five subjects verified MATCH (`graph-guard` and
+`attrition-risk-ml` and `rag-guard` exactly; `idna`/`packaging` on mutant count, with the
+killed/survived split legitimately differing as designed — see above). The content of
+§3.2's frozen-scope table is otherwise unchanged; this amendment corrects the machine
+transcription and the tooling gaps discovered exercising it, not the pre-registered
+design. Zero counted cells are affected: all 8 failed attempts across the 4 subjects were
+pre-model, $0 (`experiments/DEVIATIONS.md`).
+
+v4 amendment: config/engine/tooling fix, not an interactive-gate design change (no arm,
+subject, or metric definition changed) — applied under the same "PRE-DATA, before any
+paid cell for these subjects" standing as the v2 amendment.
+
 ## 4. Metrics
 
 - **Primary statistic — per-mutant paired kill outcomes, exact McNemar, two-sided.** Implemented

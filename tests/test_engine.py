@@ -76,6 +76,35 @@ def test_write_scope_requires_pyproject(tmp_path):
         write_scope(tmp_path / "pyproject.toml", ["x.py"])
 
 
+def test_write_scope_requires_pyproject_even_with_create_if_missing_false(tmp_path):
+    with pytest.raises(ScopeError):
+        write_scope(tmp_path / "pyproject.toml", ["x.py"], create_if_missing=False)
+
+
+def test_write_scope_creates_pyproject_when_missing_and_create_if_missing_true(tmp_path):
+    py = tmp_path / "pyproject.toml"
+    assert not py.exists()
+    write_scope(py, ["src/train.py"], also_copy=["src", "data"], create_if_missing=True)
+    assert py.exists()
+    text = py.read_text()
+    assert "# created by crucible preflight" in text
+    assert "[tool.mutmut]" in text
+    assert 'source_paths = ["src/train.py"]' in text
+    assert 'also_copy = ["src", "data"]' in text
+    # ONLY the mutmut scope table -- crucible never invents real project metadata
+    assert "[project]" not in text
+    assert "[build-system]" not in text
+
+
+def test_write_scope_create_if_missing_does_not_disturb_an_existing_file(tmp_path):
+    py = tmp_path / "pyproject.toml"
+    py.write_text('[project]\nname = "s"\n')
+    write_scope(py, ["pkg/mod.py"], create_if_missing=True)
+    text = py.read_text()
+    assert '[project]\nname = "s"' in text
+    assert "[tool.mutmut]" in text
+
+
 def test_write_scope_includes_also_copy_when_given(tmp_path):
     py = tmp_path / "pyproject.toml"
     py.write_text('[project]\nname = "s"\n')
@@ -132,6 +161,103 @@ def test_measure_reraises_unclassified_status_as_runtime_error(tmp_path):
         "mutmut run": (2, ""),
         "mutmut export-cicd-stats": (0, ""),
         "mutmut results --all true": (0, "    subject_pkg.calc.x_clamp__mutmut_1: not checked\n"),
+        # scripted "pytest -q" rc=2 (a real failure/usage error, neither 0 nor
+        # 5) -- NOT the zero-test case, so the loud error must still fire.
+        "pytest -q --ignore=mutants": (2, "INTERNALERROR"),
+    })
+    with pytest.raises(RuntimeError, match="mutmut evaluated no mutants"):
+        MutmutEngine(tmp_path, run=run).measure()
+
+
+def test_measure_treats_all_not_checked_as_zero_test_baseline_when_no_tests_exist(tmp_path):
+    """Every mutant "not checked" + a bare `pytest -q` confirming zero tests
+    exist anywhere (exit 5) is the legitimate pristine baseline for a stripped
+    third-party subject (protocol §3: "genuinely empty starting suite") --
+    mutmut's own stats phase hard-fails on zero tests rather than reporting 0%
+    coverage, but an empty suite provably kills nothing, so every mutant is a
+    survivor by construction, not a guess."""
+    (tmp_path / "mutants").mkdir()
+    (tmp_path / "mutants" / "mutmut-cicd-stats.json").write_text(
+        '{"killed": 0, "survived": 0, "no_coverage": 0, "timeout": 0}'
+    )
+    run = FakeRun({
+        "mutmut --version": (0, "mutmut, version 3.6.0"),
+        "mutmut run": (1, ""),
+        "mutmut export-cicd-stats": (0, ""),
+        "mutmut results --all true": (0,
+            "    subject_pkg.calc.x_clamp__mutmut_1: not checked\n"
+            "    subject_pkg.calc.x_rate__mutmut_1: not checked\n"),
+        "pytest -q --ignore=mutants": (5, "no tests ran in 0.01s"),
+    })
+    outcome = MutmutEngine(tmp_path, run=run).measure()
+    assert outcome.survivors == [
+        "subject_pkg.calc.x_clamp__mutmut_1",
+        "subject_pkg.calc.x_rate__mutmut_1",
+    ]
+    assert outcome.all_mutants == 2
+    assert outcome.counts["killed"] == 0
+    assert outcome.counts["survived"] == 2
+
+
+def test_measure_treats_all_not_checked_as_zero_test_baseline_when_suite_is_green_but_uncovered(tmp_path):
+    """Every mutant "not checked" + a bare `pytest -q` that PASSES (exit 0) is
+    the other legitimate case: a real, passing test suite that just never
+    happens to execute the mutated module (e.g. attrition-risk-ml's train.py,
+    protocol §3.1's pre-declared "degenerate maximal-headroom false-pass
+    case"). This is provably zero coverage, not a guess -- the suite ran
+    clean, it just never touched this file."""
+    (tmp_path / "mutants").mkdir()
+    (tmp_path / "mutants" / "mutmut-cicd-stats.json").write_text(
+        '{"killed": 0, "survived": 0, "no_coverage": 0, "timeout": 0}'
+    )
+    run = FakeRun({
+        "mutmut --version": (0, "mutmut, version 3.6.0"),
+        "mutmut run": (1, ""),
+        "mutmut export-cicd-stats": (0, ""),
+        "mutmut results --all true": (0, "    subject_pkg.calc.x_clamp__mutmut_1: not checked\n"),
+        "pytest -q --ignore=mutants": (0, "5 passed in 0.5s"),
+    })
+    outcome = MutmutEngine(tmp_path, run=run).measure()
+    assert outcome.survivors == ["subject_pkg.calc.x_clamp__mutmut_1"]
+    assert outcome.all_mutants == 1
+
+
+def test_measure_reraises_when_pytest_confirms_a_real_error(tmp_path):
+    """All-"not checked" alone is not enough: if a bare `pytest -q` does NOT
+    confirm either legitimate zero-coverage case (e.g. a real collection
+    error elsewhere, exit 1/2 rather than 0/5), this is a genuine scope bug
+    and must still fail loud rather than being silently treated as valid."""
+    (tmp_path / "mutants").mkdir()
+    (tmp_path / "mutants" / "mutmut-cicd-stats.json").write_text(
+        '{"killed": 0, "survived": 0, "no_coverage": 0, "timeout": 0}'
+    )
+    run = FakeRun({
+        "mutmut --version": (0, "mutmut, version 3.6.0"),
+        "mutmut run": (1, ""),
+        "mutmut export-cicd-stats": (0, ""),
+        "mutmut results --all true": (0, "    subject_pkg.calc.x_clamp__mutmut_1: not checked\n"),
+        "pytest -q --ignore=mutants": (1, "ERROR collecting tests/test_unrelated.py"),
+    })
+    with pytest.raises(RuntimeError, match="mutmut evaluated no mutants"):
+        MutmutEngine(tmp_path, run=run).measure()
+
+
+def test_measure_reraises_when_not_checked_is_mixed_with_classified_status(tmp_path):
+    """A mix of "not checked" and real statuses means something WAS measured
+    -- a real bug (e.g. a scope that only partially resolves) hides in the
+    rest, so the zero-test fallback must not paper over it."""
+    (tmp_path / "mutants").mkdir()
+    (tmp_path / "mutants" / "mutmut-cicd-stats.json").write_text(
+        '{"killed": 0, "survived": 1, "no_coverage": 0, "timeout": 0}'
+    )
+    run = FakeRun({
+        "mutmut --version": (0, "mutmut, version 3.6.0"),
+        "mutmut run": (1, ""),
+        "mutmut export-cicd-stats": (0, ""),
+        "mutmut results --all true": (0,
+            "    subject_pkg.calc.x_clamp__mutmut_1: not checked\n"
+            "    subject_pkg.calc.x_rate__mutmut_1: survived\n"),
+        "pytest -q --ignore=mutants": (5, "no tests ran in 0.01s"),
     })
     with pytest.raises(RuntimeError, match="mutmut evaluated no mutants"):
         MutmutEngine(tmp_path, run=run).measure()

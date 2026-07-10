@@ -88,9 +88,11 @@ class SubjectEnv:
             if self.scope is not None:
                 write_scope(self.subject_dir / "pyproject.toml", [module_path],
                            also_copy=self.scope.get("also_copy"),
-                           pytest_args=self.scope.get("pytest_args"))
+                           pytest_args=self.scope.get("pytest_args"),
+                           create_if_missing=True)
             else:
-                write_scope(self.subject_dir / "pyproject.toml", [module_path])
+                write_scope(self.subject_dir / "pyproject.toml", [module_path],
+                           create_if_missing=True)
             if self._git("status", "--porcelain").strip():
                 self._git("add", "pyproject.toml")
                 self._git("-c", "user.email=crucible@local", "-c", "user.name=crucible",

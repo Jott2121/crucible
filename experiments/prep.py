@@ -56,6 +56,38 @@ def find_test_dir(clone_dir):
     return None
 
 
+_TESTPATHS_LINE = re.compile(r'^testpaths\s*=\s*\[[^\]]*\]\s*\n', re.M)
+
+
+def drop_stale_testpaths(clone_dir, test_dir):
+    """Stripping a subject's test suite (git rm -rq test_dir) can leave a
+    dangling `testpaths = ["<test_dir>"]` in the subject's own [tool.pytest.
+    ini_options]. pytest then warns "No files were found in testpaths" at
+    config time; a subject whose OWN config also sets
+    filterwarnings=["error"] (e.g. packaging) escalates that warning into a
+    hard collection-time crash instead of the honest "no tests collected"
+    (exit 5) `SubjectEnv.preflight` expects from a stripped subject -- unlike
+    this script's own smoke check below, `crucible.runner.run_tests` (what
+    the real experiment's preflight calls) does not carry a `-W ignore`
+    workaround, so a stale testpaths line here becomes a hard-stop before any
+    model is ever called. Only remove a line that names exactly the
+    directory this strip just deleted, so this never touches an unrelated
+    testpaths entry (e.g. one still pointing at a docs/ or examples/ test
+    dir this strip did not remove).
+    """
+    pyproject = clone_dir / "pyproject.toml"
+    if not pyproject.exists():
+        return
+    text = pyproject.read_text()
+    match = _TESTPATHS_LINE.search(text)
+    if not match or f'"{test_dir}"' not in match.group(0):
+        return
+    pyproject.write_text(_TESTPATHS_LINE.sub("", text, count=1))
+    run(["git", *GIT_IDENTITY, "add", "pyproject.toml"], cwd=clone_dir)
+    run(["git", *GIT_IDENTITY, "commit", "-q", "-m", "crucible: drop stale testpaths after strip"],
+        cwd=clone_dir)
+
+
 def prepare(subject):
     name = subject["name"]
     clone_dir = CRUCIBLE_SUBJECTS / name
@@ -71,6 +103,7 @@ def prepare(subject):
         if test_dir:
             run(["git", *GIT_IDENTITY, "rm", "-rq", test_dir], cwd=clone_dir)
             run(["git", *GIT_IDENTITY, "commit", "-q", "-m", "crucible: strip test suite"], cwd=clone_dir)
+            drop_stale_testpaths(clone_dir, test_dir)
 
     has_pkg_metadata = any((clone_dir / f).exists() for f in ("pyproject.toml", "setup.py", "setup.cfg"))
     if has_pkg_metadata:
