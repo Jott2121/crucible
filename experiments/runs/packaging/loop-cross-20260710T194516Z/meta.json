@@ -1,0 +1,14 @@
+{
+  "subject": "/Users/jeffreyotterson/crucible-subjects/packaging",
+  "module": "src/packaging/_elffile.py",
+  "head_sha": "318f97928d57a92219e0a78e9e477f87d3847d92",
+  "arm": "loop-cross",
+  "protocol_version": 8,
+  "tester_provider": "anthropic",
+  "tester_model": "claude-sonnet-5",
+  "critic_provider": "openai",
+  "critic_model": "gpt-5.6-terra",
+  "max_rounds": 4,
+  "dry_rounds": 2,
+  "started_at": "20260710T194516Z"
+}
