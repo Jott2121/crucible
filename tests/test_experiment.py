@@ -126,3 +126,60 @@ def test_run_arm_raises_protocol_error_on_module_mismatch(tmp_path):
     with pytest.raises(ProtocolError, match="does not match"):
         run_arm(PROTOCOL_FOR_RUN_ARM, "oneshot", tmp_path / "graph-guard",
                 tmp_path / "runs", "graph_guard/wrong.py")
+
+
+def test_run_arm_wires_the_run_dir_into_env_set_artifact_dir(tmp_path, monkeypatch):
+    # run_arm must call env.set_artifact_dir(run_dir) right after creating the writer,
+    # so a rejected/salvaged test file lands under this cell's own receipt directory
+    # (rejected-artifact preservation, v3) rather than being silently discarded.
+    from crucible import env as env_module
+    from crucible.engine import MutationOutcome
+    from crucible.experiment import run_arm
+    from crucible.loop import RoundReply
+
+    calls = {}
+
+    class FakeSubjectEnv:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        def preflight(self, module_path):
+            return "a" * 40
+
+        def set_artifact_dir(self, run_dir):
+            calls["artifact_dir"] = run_dir
+
+        def measure(self):
+            return MutationOutcome(counts={"survived": 0}, survivors=[], all_mutants=0)
+
+        def call_tester(self):
+            from oracle_gate.providers import Usage
+            return RoundReply("```python\nassert True\n```", "a" * 64, "fake-model", Usage(1, 1))
+
+        def write_test_file(self, round_no, arm, content):
+            return f"tests/crucible_r{round_no}_{arm}_test.py"
+
+        def validate(self, test_path):
+            return []
+
+        def remove_test_file(self, path):
+            pass
+
+        def assert_clean(self):
+            pass
+
+        def cost_usd(self, model, usage):
+            return 0.0
+
+    monkeypatch.setattr(env_module, "SubjectEnv", FakeSubjectEnv)
+
+    run_arm(PROTOCOL_FOR_RUN_ARM, "oneshot", tmp_path / "graph-guard",
+            tmp_path / "runs", "graph_guard/ppr.py")
+
+    assert "artifact_dir" in calls
+    run_dir = calls["artifact_dir"]
+    assert run_dir.parent == tmp_path / "runs" / "graph-guard"
+    assert run_dir.name.startswith("oneshot-")
+    # set_artifact_dir must be called BEFORE any round runs, so a round-0 rejection
+    # has somewhere to land -- the receipt dir must already exist on disk by then.
+    assert run_dir.exists()

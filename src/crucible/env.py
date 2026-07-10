@@ -10,7 +10,13 @@ import time
 from pathlib import Path
 
 from crucible.engine import MutmutEngine, write_scope
-from crucible.guardrails import GuardrailViolation, assert_add_only, extract_test_file, test_filename, validate_new_tests
+from crucible.guardrails import (
+    GuardrailViolation,
+    assert_add_only,
+    extract_test_file,
+    salvage_new_tests,
+    test_filename,
+)
 from crucible.loop import RoundReply
 from crucible.meter import cost_usd
 from crucible.roles import build_critic_prompt, build_tester_prompt
@@ -35,6 +41,9 @@ class SubjectEnv:
         self.scope = scope
         self.engine = MutmutEngine(self.subject_dir, run=run)
         self._sleep = time.sleep
+        # set by run_arm via set_artifact_dir(run_dir); None = no preservation (unit
+        # tests, and any caller that hasn't opted in keep today's unlink/delete behavior)
+        self._artifact_dir: Path | None = None
 
     # --- git (fail loud: a swallowed git error corrupts provenance) ---
     def _git(self, *args) -> str:
@@ -135,13 +144,52 @@ class SubjectEnv:
         tests_dir = self.subject_dir / "tests"
         return [str(Path("tests") / p.name) for p in tests_dir.glob("crucible_*_test.py")]
 
-    def validate(self, test_path) -> None:
-        validate_new_tests(self.subject_dir, test_path,
-                           lambda cwd, test_paths=None, timeout=300:
-                           run_tests(cwd, test_paths=test_paths, timeout=timeout, run=self.run))
+    def set_artifact_dir(self, run_dir) -> None:
+        """Opt in to rejected-artifact preservation: called by run_arm with the run's
+        receipt directory right after the writer is created. Without this, a rejected
+        or salvaged-away test file is unlinked/discarded as before (unit tests, and any
+        caller that never opts in)."""
+        self._artifact_dir = Path(run_dir)
 
-    def remove_test_file(self, path) -> None:
-        (self.subject_dir / path).unlink(missing_ok=True)
+    def _read_test_file_text(self, cwd, path) -> str:
+        return (Path(cwd) / path).read_text()
+
+    def _write_test_file_text(self, cwd, path, content) -> None:
+        (Path(cwd) / path).write_text(content)
+
+    def validate(self, test_path) -> list[str]:
+        """Per-test salvage (v3): pristine-failing tests are dropped, not the whole
+        file. Returns the names dropped (possibly empty). When an artifact dir is set,
+        the pre-salvage original is preserved to <artifact_dir>/salvaged/<name>.orig
+        before pruning, so a dropped test is data (wrong-oracle evidence), not lost."""
+        original = None
+        if self._artifact_dir is not None:
+            original = (self.subject_dir / test_path).read_text()
+        dropped = salvage_new_tests(
+            self.subject_dir, test_path,
+            lambda cwd, test_paths=None, timeout=300:
+                run_tests(cwd, test_paths=test_paths, timeout=timeout, run=self.run),
+            self._read_test_file_text, self._write_test_file_text,
+        )
+        if dropped and self._artifact_dir is not None:
+            salvaged_dir = self._artifact_dir / "salvaged"
+            salvaged_dir.mkdir(parents=True, exist_ok=True)
+            (salvaged_dir / f"{Path(test_path).name}.orig").write_text(original)
+        return dropped
+
+    def remove_test_file(self, path, label="rejected") -> None:
+        """A rejected round leaves no trace in the subject clone. When an artifact dir
+        is set (run_arm's real runs), the file is preserved there instead of deleted —
+        a rejected test is interesting data (spec: never counted as a kill, but never
+        thrown away either), not just discarded."""
+        full = self.subject_dir / path
+        if self._artifact_dir is not None:
+            rejected_dir = self._artifact_dir / "rejected"
+            rejected_dir.mkdir(parents=True, exist_ok=True)
+            if full.exists():
+                full.replace(rejected_dir / f"{label}-{Path(path).name}")
+            return
+        full.unlink(missing_ok=True)
 
     def assert_clean(self, allowed_new=None) -> None:
         """Post-round integrity attestation: after tests execute, the tree must show

@@ -21,10 +21,12 @@ class FakeEnv:
         fail_calls=False,
         reject_on_write=False,
         fail_from_call=None,
+        dropped_by_round=None,
     ):
         self.measurements = list(measurements)
         self.reject_rounds = set(reject_rounds)
         self.fail_calls = fail_calls
+        self.dropped_by_round = dropped_by_round or {}
         # 0-indexed count of model calls (tester+critic combined, in call order);
         # once the running count reaches fail_from_call, that call and all later ones fail.
         self.fail_from_call = fail_from_call
@@ -68,6 +70,7 @@ class FakeEnv:
     def validate(self, test_path):
         if self._round in self.reject_rounds:
             raise GuardrailViolation("invalid: scripted rejection")
+        return list(self.dropped_by_round.get(self._round, []))
 
     def remove_test_file(self, path):
         self.removed.append(path)
@@ -253,6 +256,25 @@ def test_on_round_streams_each_record_in_order():
     result = harden(env, LoopConfig(), on_round=seen.append)
     assert seen == result.rounds
     assert len(seen) == 3
+
+
+def test_round_records_dropped_tests_from_env_validate():
+    # v3 salvage: env.validate returns the names of any pristine-failing tests it
+    # dropped from the file; the round must carry that forward in its receipt rather
+    # than discarding it, and a round where nothing was dropped keeps an empty list.
+    env = FakeEnv(
+        [outcome(["m1", "m2"]), outcome(["m1"])],
+        dropped_by_round={0: ["test_wrong_oracle"]},
+    )
+    result = oneshot(env, LoopConfig(arm="oneshot"))
+    assert result.rounds[0].dropped_tests == ["test_wrong_oracle"]
+    assert result.rounds[0].status == "ok"  # a salvaged round is still ok, not rejected
+
+
+def test_round_dropped_tests_defaults_to_empty_list_when_nothing_dropped():
+    env = FakeEnv([outcome(["m1"]), outcome(["m1"])])
+    result = oneshot(env, LoopConfig(arm="oneshot"))
+    assert result.rounds[0].dropped_tests == []
 
 
 def test_clean_verdict_when_last_round_exhausts_the_budget():

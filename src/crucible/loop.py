@@ -11,7 +11,8 @@ The `env` duck-type (implemented for real in Task 11's CLI, faked in tests):
   env.call_tester() -> RoundReply
   env.call_critic(survivor_diffs: dict[str, str]) -> RoundReply
   env.write_test_file(round_no, arm, content) -> str  (repo-relative path; add-only check)
-  env.validate(test_path) -> None  (raises GuardrailViolation)
+  env.validate(test_path) -> list[str]  (raises GuardrailViolation; returns names of any
+    pristine-failing tests salvaged/dropped from the file -- v3 per-test salvage)
   env.remove_test_file(path) -> None  (a rejected round leaves no trace)
   env.assert_clean() -> None  (post-round integrity attestation; raises GuardrailViolation)
   env.cost_usd(model, usage) -> float
@@ -57,6 +58,7 @@ class RoundRecord:
     counts: dict = field(default_factory=dict)
     status: str = "ok"
     note: str = ""
+    dropped_tests: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -92,7 +94,8 @@ def _round(env, cfg, round_no, role, survivors_before) -> RoundRecord:
     try:
         path = env.write_test_file(round_no, cfg.arm, reply.text)
         rec.test_file = path
-        env.validate(path)
+        dropped = env.validate(path)
+        rec.dropped_tests = list(dropped or [])
     except GuardrailViolation as exc:
         if path is not None:
             env.remove_test_file(path)

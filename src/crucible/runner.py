@@ -15,7 +15,11 @@ class TestRunResult:
 
 
 def run_tests(cwd, test_paths=None, timeout=300, run=subprocess.run) -> TestRunResult:
-    cmd = [sys.executable, "-m", "pytest", "-q", *(test_paths or [])]
+    # -rf forces the "FAILED path::name" short-summary lines pytest already prints by
+    # default in this repo's config, but not necessarily under every addopts/ini a
+    # third-party subject might carry; guardrails.salvage_new_tests parses those lines
+    # to identify which specific test(s) to drop, so they must not be suppressible.
+    cmd = [sys.executable, "-m", "pytest", "-q", "-rf", *(test_paths or [])]
     try:
         proc = run(cmd, cwd=str(cwd), capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired:

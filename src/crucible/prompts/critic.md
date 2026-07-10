@@ -12,3 +12,6 @@ Rules, all mandatory:
   `assert result == pytest.approx(0.25, rel=1e-6)`) and `import pytest` at the top.
 - Before finishing, mentally execute your test file top to bottom: every import must exist,
   every name must be defined, and it must collect cleanly under pytest.
+- For algorithmic/numeric code where the exact convention is ambiguous from the signature and
+  docstring alone, prefer asserting provable properties (ranges, sums, orderings, invariants)
+  over exact computed constants.

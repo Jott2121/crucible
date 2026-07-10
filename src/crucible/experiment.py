@@ -102,6 +102,10 @@ def run_arm(protocol: dict, arm_name: str, subject_dir, runs_root, module_path: 
         "critic_provider": critic_cfg["provider"], "critic_model": critic_cfg["model"],
         "max_rounds": cfg.max_rounds, "dry_rounds": cfg.dry_rounds, "started_at": stamp,
     })
+    # rejected-artifact preservation (v3): a rejected or salvaged-away test file lands
+    # under this cell's own receipt dir instead of being discarded. Wired before any
+    # round runs so round 0's rejection has somewhere to land.
+    env.set_artifact_dir(run_dir)
     fn = oneshot if arm["mode"] == "oneshot" else harden
     result = fn(env, cfg, on_round=writer.append)
     writer.finish(result.verdict, result.total_cost_usd, extra={

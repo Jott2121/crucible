@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from oracle_gate.providers import Usage
 
 from crucible.env import SubjectEnv
@@ -168,6 +170,100 @@ def test_preflight_accepts_subject_with_no_tests(tmp_path):
                      critic_model="fake-model", module_path="subject_pkg/calc.py")
     sha = env.preflight("subject_pkg/calc.py")
     assert len(sha) == 40
+
+
+SALVAGEABLE_TESTS = (
+    "from subject_pkg.calc import acceptance_rate, clamp\n\n\n"
+    "def test_clamp_low():\n    assert clamp(-5, 0, 10) == 0\n\n\n"
+    "def test_rate_value():\n    assert acceptance_rate(10, 5) == 0.5\n\n\n"
+    "def test_wrong_oracle():\n    assert acceptance_rate(10, 5) == 0.99\n"
+)
+
+ALL_GOOD_TESTS = (
+    "from subject_pkg.calc import acceptance_rate, clamp\n\n\n"
+    "def test_clamp_low():\n    assert clamp(-5, 0, 10) == 0\n\n\n"
+    "def test_rate_value():\n    assert acceptance_rate(10, 5) == 0.5\n"
+)
+
+ALL_WRONG_TESTS = (
+    "from subject_pkg.calc import acceptance_rate\n\n\n"
+    "def test_wrong_a():\n    assert acceptance_rate(10, 5) == 0.99\n\n\n"
+    "def test_wrong_b():\n    assert acceptance_rate(1, 1) == 0.5\n"
+)
+
+
+def test_validate_salvages_the_pristine_failing_test_and_returns_its_name(tmp_path):
+    env = _env(tmp_path, [])
+    path = env.write_test_file(0, "loop", SALVAGEABLE_TESTS)
+    dropped = env.validate(path)
+    assert dropped == ["test_wrong_oracle"]
+    remaining = (env.subject_dir / path).read_text()
+    assert "test_wrong_oracle" not in remaining
+    assert "test_clamp_low" in remaining and "test_rate_value" in remaining
+
+
+def test_validate_all_green_returns_empty_list_and_leaves_file_untouched(tmp_path):
+    env = _env(tmp_path, [])
+    path = env.write_test_file(0, "loop", ALL_GOOD_TESTS)
+    dropped = env.validate(path)
+    assert dropped == []
+    assert (env.subject_dir / path).read_text() == ALL_GOOD_TESTS + "\n"
+
+
+def test_validate_raises_when_every_test_has_a_wrong_oracle(tmp_path):
+    import pytest
+
+    from crucible.guardrails import GuardrailViolation
+
+    env = _env(tmp_path, [])
+    path = env.write_test_file(0, "loop", ALL_WRONG_TESTS)
+    with pytest.raises(GuardrailViolation, match="invalid"):
+        env.validate(path)
+
+
+def test_remove_test_file_unlinks_when_no_artifact_dir_set(tmp_path):
+    env = _env(tmp_path, [])
+    path = env.write_test_file(1, "loop", "def test_x():\n    assert True\n")
+    env.remove_test_file(path)
+    assert not (env.subject_dir / path).exists()
+
+
+def test_set_artifact_dir_preserves_rejected_file_instead_of_deleting(tmp_path):
+    env = _env(tmp_path, [])
+    artifact_dir = tmp_path / "run-dir"
+    artifact_dir.mkdir()
+    env.set_artifact_dir(artifact_dir)
+    path = env.write_test_file(1, "loop", "def test_x():\n    assert True\n")
+    env.remove_test_file(path)
+    assert not (env.subject_dir / path).exists()
+    preserved = artifact_dir / "rejected" / "rejected-crucible_r1_loop_test.py"
+    assert preserved.exists()
+    assert preserved.read_text() == "def test_x():\n    assert True\n\n"
+
+
+def test_validate_preserves_pre_salvage_original_when_artifact_dir_set(tmp_path):
+    env = _env(tmp_path, [])
+    artifact_dir = tmp_path / "run-dir"
+    artifact_dir.mkdir()
+    env.set_artifact_dir(artifact_dir)
+    path = env.write_test_file(0, "loop", SALVAGEABLE_TESTS)
+    dropped = env.validate(path)
+    assert dropped == ["test_wrong_oracle"]
+    orig = artifact_dir / "salvaged" / f"{Path(path).name}.orig"
+    assert orig.exists()
+    assert "test_wrong_oracle" in orig.read_text()
+    assert "test_wrong_oracle" not in (env.subject_dir / path).read_text()
+
+
+def test_validate_writes_no_salvaged_copy_when_nothing_was_dropped(tmp_path):
+    env = _env(tmp_path, [])
+    artifact_dir = tmp_path / "run-dir"
+    artifact_dir.mkdir()
+    env.set_artifact_dir(artifact_dir)
+    path = env.write_test_file(0, "loop", ALL_GOOD_TESTS)
+    dropped = env.validate(path)
+    assert dropped == []
+    assert not (artifact_dir / "salvaged").exists()
 
 
 def test_retry_then_raise(tmp_path):

@@ -183,6 +183,54 @@ recorded here: `tester 9235e2f3fb8cfc3c`, `critic bdacfa09451a7220` (16-char pre
 `crucible.roles.build_tester_prompt`/`build_critic_prompt`). Prompt-v2 amendment approved by Jeff
 Otterson 2026-07-10 (interactive gate).
 
+**Amendment (protocol_version 3 — per-test salvage, artifact preservation, prompt v3, PRE-DATA):**
+the v2 pilot cells were still all-or-nothing at the validity gate: a graph-guard file with 13
+pristine-passing tests died entirely because 1 test computed its expected value from a different
+PageRank convention than this pinned subject uses (a wrong-oracle test, not a bad file). Mutation-
+testing convention treats the pinned subject as ground truth at baseline, so a pristine-failing
+test is droppable as an invalid oracle for that one test, not a reason to reject 12 good tests
+alongside it — and the drop is itself interesting data (which convention the model assumed), so it
+is logged, never silently discarded.
+
+- **Per-test salvage.** `crucible.guardrails.validate_new_tests` (all-or-nothing) is kept for
+  compatibility; `SubjectEnv.validate` now calls the new `crucible.guardrails.salvage_new_tests`,
+  which runs the generated file on pristine code, and on red parses the pytest failure summary for
+  the specific failing test name(s), removes exactly those `FunctionDef` nodes (AST parse/
+  unparse), and re-validates (pass, then flake-check) the pruned file. A pristine-failing test is
+  **dropped, never counted as a kill in any metric in §4**, and the round's `dropped_tests` field
+  (new on `RoundRecord`) records which test(s) were dropped, per round, in every receipt.
+  `crucible.runner.run_tests` now passes `-rf` so the "FAILED path::name" summary line the parser
+  depends on cannot be suppressed by a subject's own pytest addopts/ini.
+- **Rejected-artifact preservation.** `SubjectEnv.set_artifact_dir(run_dir)` (called by
+  `crucible.experiment.run_arm` right after the receipt writer is created, before any round runs)
+  makes a rejected test file land at `<run_dir>/rejected/<label>-<filename>` instead of being
+  unlinked, and the pre-salvage original of a pruned file lands at
+  `<run_dir>/salvaged/<filename>.orig` before pruning. Every rejected or salvaged-away test file
+  from every counted cell is therefore preserved evidence under `experiments/runs/`, not lost.
+- **One new prompt line.** `src/crucible/prompts/tester.md` and `src/crucible/prompts/critic.md`
+  each gained: "For algorithmic/numeric code where the exact convention is ambiguous from the
+  signature and docstring alone, prefer asserting provable properties (ranges, sums, orderings,
+  invariants) over exact computed constants." — a direct response to the graph-guard wrong-oracle
+  case (a different PageRank convention is exactly this kind of ambiguity). ALL counted cells run
+  under prompt v3 (uniform bar, same rule as the v2 bump).
+- **graph-guard v2 cells reclassified.** The two graph-guard cells run under prompt v2
+  (`experiments/runs/graph-guard/oneshot-20260710T164217Z/`,
+  `experiments/runs/graph-guard/loop-same-20260710T164442Z/`, $0.37 total, both verdict rejected at
+  round 0 — one zero-collection, one wrong-oracle 1-of-14 test) are reclassified as shakeout under
+  this amendment, same as pilot attempt 2's v1 cells: not counted data. graph-guard's counted cells
+  will be fresh runs under prompt v3 with salvage active, so the wrong-oracle test is dropped and
+  logged instead of failing the whole file. Total shakeout spend is now $0.73 across 4 cells (see
+  `DEVIATIONS.md`).
+- **Prompt v3 sha256 hashes.** Computed via `crucible.roles.build_tester_prompt`/
+  `build_critic_prompt` against this repo's own fixture module (`module_path="subject_pkg/calc.py"`,
+  `module_source=` the contents of `tests/fixtures/subject/subject_pkg/calc.py`, `survivor_diffs={}`
+  for the critic) — a fixed, reproducible-from-repo canonical input, not any real subject's content
+  (a real subject's hash necessarily varies with that module's source, so it cannot serve as a
+  version identifier by itself): `tester 98abbb8532990865`, `critic 703335c0af111836` (16-char
+  prefixes).
+
+v3 amendment approved by Jeff Otterson 2026-07-10 (interactive gate).
+
 ## 4. Metrics
 
 - **Primary statistic — per-mutant paired kill outcomes, exact McNemar, two-sided.** Implemented

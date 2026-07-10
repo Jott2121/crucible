@@ -1,5 +1,5 @@
 {
-  "protocol_version": 2,
+  "protocol_version": 3,
   "tester": {"provider": "anthropic", "model": "claude-sonnet-5"},
   "rounds": {"max_rounds": 4, "dry_rounds": 2},
   "arms": {
