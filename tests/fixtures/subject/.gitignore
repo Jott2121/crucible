@@ -1,0 +1,9 @@
+*.egg-info/
+__pycache__/
+*.pyc
+.pytest_cache/
+mutants/
+.mutmut-cache
+.coverage
+coverage.json
+mutmut-cicd-stats.json
