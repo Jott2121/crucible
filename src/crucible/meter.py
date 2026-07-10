@@ -25,9 +25,9 @@ def _rates(model: str) -> tuple[float, float]:
     tier = _tier(model)
     if tier is not None:
         return PRICES[tier]
-    for prefix, rates in RATES_EXTRA.items():
-        if (model or "").lower().startswith(prefix):
-            return rates
+    rates = RATES_EXTRA.get((model or "").lower())
+    if rates is not None:
+        return rates
     raise UnpricedModel(f"no verified $/MTok rate for {model!r}; add it to RATES_EXTRA")
 
 

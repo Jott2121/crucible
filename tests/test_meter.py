@@ -18,6 +18,12 @@ def test_gpt_priced_from_extra_table():
     assert cost_usd("gpt-5.6", Usage(1_000_000, 1_000_000)) == pytest.approx(15.75)
 
 
+def test_gpt_variant_is_not_silently_priced_at_base_rate():
+    # exact match only: a distinct-priced future variant must fail closed
+    with pytest.raises(UnpricedModel):
+        cost_usd("gpt-5.6-preview", Usage(10, 10))
+
+
 def test_unknown_model_fails_closed():
     with pytest.raises(UnpricedModel):
         cost_usd("mystery-model-9", Usage(10, 10))
