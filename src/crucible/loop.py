@@ -72,19 +72,21 @@ def _round(env, cfg, round_no, role, survivors_before) -> RoundRecord:
             diffs = {mid: env.survivor_diff(mid) for mid in survivors_before}
             reply = env.call_critic(diffs)
     except Exception as exc:  # model/network failure after env-level retries
-        rec.status, rec.note = "aborted", f"model call failed: {exc}"
+        rec.status, rec.note = "aborted", f"model call failed: {type(exc).__name__}: {exc}"
         return rec
 
     rec.prompt_sha256, rec.model = reply.prompt_sha256, reply.model
     rec.usage_in, rec.usage_out = reply.usage.input_tokens, reply.usage.output_tokens
     rec.cost_usd = env.cost_usd(reply.model, reply.usage)
 
-    path = env.write_test_file(round_no, cfg.arm, reply.text)
-    rec.test_file = path
+    path = None
     try:
+        path = env.write_test_file(round_no, cfg.arm, reply.text)
+        rec.test_file = path
         env.validate(path)
     except GuardrailViolation as exc:
-        env.remove_test_file(path)
+        if path is not None:
+            env.remove_test_file(path)
         rec.status, rec.note, rec.test_file = "rejected", str(exc), None
         rec.survivors_after = list(survivors_before)
         return rec
@@ -117,7 +119,7 @@ def _run(env, cfg, rounds_budget) -> LoopResult:
         if dry >= cfg.dry_rounds:
             return LoopResult(rounds, "dry", _cost(rounds))
 
-    verdict = "clean" if not survivors else "cap"
+    verdict = "clean" if not survivors else ("cap" if rounds_budget else "oneshot")
     return LoopResult(rounds, verdict, _cost(rounds))
 
 
