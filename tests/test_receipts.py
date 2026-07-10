@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from crucible.loop import RoundRecord
 from crucible.receipts import ReceiptWriter, load_run
 
@@ -23,3 +25,9 @@ def test_append_is_durable_per_round(tmp_path):
     # no finish() — simulate a crash; the round must still be on disk
     lines = (tmp_path / "run2" / "receipt.jsonl").read_text().strip().splitlines()
     assert len(lines) == 1 and json.loads(lines[0])["role"] == "tester"
+
+
+def test_run_dir_reuse_fails_loud(tmp_path):
+    ReceiptWriter(tmp_path / "run3", {"a": 1})
+    with pytest.raises(FileExistsError):
+        ReceiptWriter(tmp_path / "run3", {"a": 1})

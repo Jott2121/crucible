@@ -15,7 +15,8 @@ from pathlib import Path
 class ReceiptWriter:
     def __init__(self, run_dir, meta: dict):
         self.run_dir = Path(run_dir)
-        self.run_dir.mkdir(parents=True, exist_ok=True)
+        # A reused run_dir would interleave two runs' receipt lines; refuse loudly.
+        self.run_dir.mkdir(parents=True, exist_ok=False)
         (self.run_dir / "meta.json").write_text(json.dumps(meta, indent=2))
 
     def append(self, record) -> None:
