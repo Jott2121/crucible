@@ -28,6 +28,22 @@ where = ["src"]
 [tool.setuptools.package-data]
 crucible = ["prompts/*.md"]
 
+[tool.mutmut]
+source_paths = [
+    "src/crucible/loop.py",
+    "src/crucible/guardrails.py",
+    "src/crucible/report.py",
+    "src/crucible/meter.py",
+    "src/crucible/roles.py",
+]
+pytest_add_cli_args_test_selection = ["tests/"]
+# also_copy: pytest_add_cli_args_test_selection = ["tests/"] collects the WHOLE
+# suite, and several tests import crucible modules outside source_paths
+# (engine.py, cli.py, etc). mutmut's sandbox only contains files listed in
+# source_paths, so those imports raise ModuleNotFoundError inside the mutants/
+# copy unless the rest of the package is also present (unmutated).
+also_copy = ["src/crucible"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [
