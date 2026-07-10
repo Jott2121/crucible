@@ -8,6 +8,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class TestRunResult:
+    __test__ = False  # name starts with Test; tell pytest it is not a test class
     passed: bool
     returncode: int
     output: str
