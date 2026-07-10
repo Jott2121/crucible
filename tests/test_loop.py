@@ -134,3 +134,10 @@ def test_abort_note_carries_exception_type():
     env.fail_calls = True
     result = harden(env, LoopConfig())
     assert "RuntimeError" in result.rounds[-1].note
+
+
+def test_rejected_tester_round_is_not_clean():
+    env = FakeEnv([], reject_rounds={0})
+    result = oneshot(env, LoopConfig(arm="oneshot"))
+    assert result.verdict == "rejected"
+    assert result.rounds[0].status == "rejected"

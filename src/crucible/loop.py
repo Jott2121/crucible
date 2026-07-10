@@ -102,8 +102,10 @@ def _run(env, cfg, rounds_budget) -> LoopResult:
 
     first = _round(env, cfg, 0, "tester", survivors_before=[])
     rounds.append(first)
-    if first.status == "aborted":
-        return LoopResult(rounds, "aborted", _cost(rounds))
+    if first.status != "ok":
+        # a run whose tester round never produced valid tests measured nothing;
+        # "clean" must be impossible here
+        return LoopResult(rounds, first.status, _cost(rounds))
     survivors = first.survivors_after
 
     dry = 0

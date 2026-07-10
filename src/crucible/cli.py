@@ -1,6 +1,6 @@
 """crucible CLI. Subcommands: oneshot, harden (report arrives in Task 12).
 
-Plain-ASCII output. Exit codes: 0 = ran to a verdict (clean/dry/cap/oneshot); 3 = aborted.
+Plain-ASCII output. Exit codes: 0 = clean/dry/cap/oneshot; 3 = aborted/rejected.
 """
 from __future__ import annotations
 
@@ -54,7 +54,7 @@ def _cmd_run(args, mode):
         print(f"  round {r.round} [{r.role:6s}] {r.status:8s} "
               f"kills={len(r.kills):2d} survivors_after={len(r.survivors_after):3d}")
     print(f"receipt: {run_dir}")
-    return 3 if result.verdict == "aborted" else 0
+    return 3 if result.verdict in ("aborted", "rejected") else 0
 
 
 def main(argv=None) -> int:
