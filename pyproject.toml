@@ -11,8 +11,8 @@ requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "Jeff Otterson" }]
 dependencies = [
-    "oracle-gate @ git+https://github.com/Jott2121/oracle-gate@main#subdirectory=tool",
-    "agent-cost-attribution @ git+https://github.com/Jott2121/agent-cost-attribution@main",
+    "oracle-gate @ git+https://github.com/Jott2121/oracle-gate@ce9b0b93ba59afa4598a85738db9abd7f975e8bc#subdirectory=tool",
+    "agent-cost-attribution @ git+https://github.com/Jott2121/agent-cost-attribution@b502b093e5344beea06dcafcf32239e90302ddad",
     "mutmut>=3,<4",
 ]
 
