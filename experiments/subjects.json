@@ -1,0 +1,65 @@
+{
+  "subjects": [
+    {
+      "name": "attrition-risk-ml",
+      "source": "local:~/attrition-risk-ml",
+      "pinned_sha": "4f50427aaca53bbba12d2604ee03e549d4ac1f9f",
+      "module": "src/train.py",
+      "strip_tests": false,
+      "notes": "284 lines, core train/score module. Not previously mutation-hardened (no mutants/ dir, no prior mutmut history in this repo)."
+    },
+    {
+      "name": "graph-guard",
+      "source": "local:~/graph-guard",
+      "pinned_sha": "bb52f2de23a122fe373db204d8eecea98b8693f1",
+      "module": "graph_guard/ppr.py",
+      "strip_tests": false,
+      "notes": "51 lines, pure math (personalized PageRank + node specificity), stdlib-only, no network/IO. Chosen over eval_metrics.py (already mutation-hardened, ceiling effect) and guards.py (couples to store/graph_retriever); ppr.py is self-contained. Below the third-party 100-800 floor, but the brief explicitly names ppr.py/guards.py as the local-subject choice for headroom."
+    },
+    {
+      "name": "rag-guard",
+      "source": "local:~/rag-guard",
+      "pinned_sha": "2738f12cf689ab09a10e77e82176a62ae28bc35f",
+      "module": "rag_guard/guard.py",
+      "strip_tests": false,
+      "notes": "57 lines, the core guard/redaction module (should_refuse, groundedness, redact_pii) named directly by the task brief. Pure regex/logic, no network."
+    },
+    {
+      "name": "pygments",
+      "source": "pypi-git",
+      "repo_url": "https://github.com/pygments/pygments.git",
+      "pinned_sha": "f1a91515811a39e361f18cce6923c1195b865f33",
+      "module": "pygments/regexopt.py",
+      "strip_tests": true,
+      "notes": "102 lines, stdlib-only (re/itertools/operator), no sibling imports. Recursive regex-optimization algorithm -- rich branching. Smoke: 132 mutants (101 killed / 31 survived). also_copy=[\"pygments\"] required in mutmut scope because pytest itself imports pygments.formatters/lexer for colorized tracebacks when pygments is installed in the same venv."
+    },
+    {
+      "name": "python-dateutil",
+      "source": "pypi-git",
+      "repo_url": "https://github.com/dateutil/dateutil.git",
+      "pinned_sha": "48bd1af97e71baf8e96fce5b663d589caac8f147",
+      "module": "src/dateutil/parser/isoparser.py",
+      "strip_tests": true,
+      "notes": "416 lines, ISO-8601 parser class. Imports dateutil.tz (sibling) and six (external, pip-installed). Smoke: 427 mutants (380 killed / 47 survived). also_copy=[\"src/dateutil\"] required in mutmut scope for the sibling import to resolve inside mutmut's mutants/ copy."
+    }
+  ],
+  "selection_log": [
+    "METHOD NOTE: candidates 1-12 were evaluated for criterion-4 self-containment strictly (a module importing a sibling file inside its own package was disqualified, since mutmut's mutants/ tree only materializes files listed in [tool.mutmut] source_paths). Partway through the walk (candidate 13, pygments) the mutmut `also_copy` config key was found, which copies additional files/dirs into the mutants/ tree unmutated, resolving sibling-import and transitive-dependency failures without mutating those files. This was applied going forward (candidates 13-15) but earlier skips (1-12) were NOT retroactively reopened, to keep the rank-ordered walk causally honest (no re-deciding earlier verdicts after acquiring a technique that could favor a specific later outcome).",
+    "1. boto3: skipped -- criterion 5 (mutmut smoke run killed after ~3.5 min, no output; boto3's combined unit+functional pytest baseline collection is too slow for the ~3 min smoke timebox). Module that would have been targeted: boto3/__init__.py (107 lines, first alphabetically in the 100-800 range).",
+    "2. packaging: skipped -- criterion 5 (mutmut smoke run failed: pytest's own `_pytest/config/__init__.py` does `from packaging.version import Version` for its own minversion check; editable-installing the candidate package under the same import name as pytest's own dependency broke that import inside the mutmut child process -- self-referential naming collision). Module that would have been targeted: src/packaging/_elffile.py (108 lines, first alphabetically qualifying: injected-stream ELF header parser, no real IO of its own).",
+    "3. urllib3: skipped -- criterion 5 (mutmut smoke run infeasible: test/conftest.py unconditionally imports a live dummyserver test harness requiring trio + hypercorn + quart; installing that whole chain exceeded the quick-smoke timebox). Module that would have been targeted: src/urllib3/_collections.py (486 lines, first alphabetically qualifying after __init__.py [network request() dispatch, disqualified] and _base_connection.py [Protocol/type stubs only, no executable logic]; HTTPHeaderDict + RecentlyUsedContainer, stdlib-only, no network).",
+    "4. certifi: skipped -- criterion 4 (no module in the 100-800 line range anywhere in the package; core.py is 83 lines and the rest is the CA bundle data file / __main__ shim).",
+    "5. idna: skipped -- criterion 5 (mutmut smoke run failed: idna/cli.py [128 lines, first alphabetically qualifying module -- argparse-based encode/decode CLI, no network] does `from . import IDNAError, decode, encode`; mutmut's mutants/ tree only contained cli.py, so the sibling idna/__init__.py needed for that import was absent and collection errored).",
+    "6. requests: skipped -- criterion 5 (first alphabetically qualifying self-contained module was requests/compat.py [115 lines, stdlib + urllib3 imports only; earlier candidates __init__.py (network request() dispatch), adapters.py/api.py (network), auth.py/cookies.py/structures.py/status_codes.py (sibling-coupled to .compat/.cookies/.utils), _types.py (type-alias stubs, no executable logic) were disqualified first]; compat.py has no dedicated test file and is only exercised indirectly via test_requests.py / test_lowlevel.py, which require a live local test server -- infeasible within the smoke timebox).",
+    "7. typing-extensions: skipped -- criterion 2 (license is the Python Software Foundation License; not MIT, BSD, or Apache).",
+    "8. charset-normalizer: skipped -- criterion 4 (every module in the 100-800 line range -- cd.py, models.py, utils.py, cli/__main__.py -- imports from the package's own 2055-line constant.py; no self-contained qualifying module; also note the project ships a mypyc-compiled build path alongside a pure-Python fallback).",
+    "9. botocore: skipped -- criterion 5 (same monorepo/test-infrastructure family as boto3, rank 1, which already timed out on an identical smoke pattern; repo is 477MB dominated by generated AWS service-definition test fixtures; extrapolated infeasible without repeating the multi-minute cost already paid once -- verified module-tree structure via GitHub API without a full clone).",
+    "10. setuptools: skipped -- criterion 5 (setuptools/_normalization.py [180 lines, self-contained -- only stdlib + external `packaging` imports, doctested] editable-installs and runs its own doctests cleanly, but the mutmut smoke run fails inside mutants/: the project's root conftest.py auto-loads `setuptools.tests.fixtures` [needs jaraco.path/path]; after disabling that plugin, pytest's own `filterwarnings` config still references `setuptools.command.editable_wheel.InformationOnly`, unavailable in the single-file mutants/ copy -- a packaging tool testing itself creates a bootstrap conflict).",
+    "11. cryptography: excluded -- criterion 1 (compiled extension package -- PyPI wheel metadata shows no pure-Python `py3-none-any` build; not installable as pure Python). No clone needed.",
+    "12. aiobotocore: skipped -- criterion 4 (every substantial top-level module -- client.py, credentials.py, session.py, endpoint.py, httpsession.py/httpxsession.py, utils.py, signers.py, etc. -- is async network-wrapper glue over botocore; no self-contained plain-logic module in the 100-800 line range).",
+    "13. pygments: SELECTED. Module pygments/regexopt.py (102 lines, first alphabetically qualifying after __init__.py [82 lines, below 100], __main__.py [17 lines, too small], cmdline.py [668 lines but sibling-coupled to pygments.lexers/.formatters/.filters/.styles and does file IO], console.py/filter.py [70 lines, too small], formatter.py [129 lines but sibling-coupled to .util/.styles], lexer.py [963 lines, too big], modeline.py/plugin.py [too small]). Stdlib-only (re, itertools, operator), no sibling imports, no network. mutmut smoke (with also_copy=[\"pygments\"] to satisfy pytest's own transitive `from pygments.formatters.terminal import TerminalFormatter` at import time): 132 mutants, 101 killed, 31 survived. BSD-2-Clause. Pygments team, no Jeff familiarity.",
+    "14. pluggy: skipped -- criterion 5, infrastructure prerequisite (pluggy is pytest's own plugin/hook-dispatch engine; mutating pluggy while using pytest itself as the mutation-test runner risks corrupting the runner's own hook execution mid-mutation-run, not merely an import-resolution issue `also_copy` can fix -- no safe smoke path exists inside a pytest-based harness).",
+    "15. python-dateutil: SELECTED. Module src/dateutil/parser/isoparser.py (416 lines, first alphabetically qualifying after __init__.py/_common.py [too small] and easter.py [89 lines, below 100]; parser/__init__.py too small; parser/_parser.py too big [~1500+ lines]). Imports dateutil.tz (sibling) and six (external pip dep). mutmut smoke (with also_copy=[\"src/dateutil\"] for the sibling import, and pytest pinned <9 + pytest-cov installed to satisfy the project's own `no_cover` marker and deprecation-as-error warnings config): 427 mutants, 380 killed, 47 survived. Apache-2.0 / BSD dual license. dateutil/Paul Ganssle, no Jeff familiarity.",
+    "STOPPED at 15 candidates walked (well under the 30-candidate BLOCKED threshold) once 2 qualifying packages were found: pygments and python-dateutil."
+  ]
+}

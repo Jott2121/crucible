@@ -1,0 +1,124 @@
+#!/usr/bin/env python3
+"""Prepare crucible subjects: clone each pinned subject into ~/crucible-subjects/<name>,
+checkout its pinned SHA, strip tests for third-party subjects, install into this repo's
+venv, and smoke-test with pytest. Subject repos are READ-ONLY sources -- all mutation
+happens in the clone under ~/crucible-subjects, never in the original repo.
+
+Usage: .venv/bin/python experiments/prep.py [--only NAME]
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import shutil
+import subprocess
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+SUBJECTS_JSON = REPO_ROOT / "experiments" / "subjects.json"
+VENV_PIP = REPO_ROOT / ".venv" / "bin" / "pip"
+VENV_PYTHON = REPO_ROOT / ".venv" / "bin" / "python"
+CRUCIBLE_SUBJECTS = Path.home() / "crucible-subjects"
+GIT_IDENTITY = ["-c", "user.email=crucible@local", "-c", "user.name=crucible"]
+
+
+def run(cmd, cwd=None, check=True):
+    proc = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
+    if check and proc.returncode != 0:
+        raise RuntimeError(f"command failed: {' '.join(map(str, cmd))}\n{proc.stdout}\n{proc.stderr}")
+    return proc
+
+
+def source_url(subject):
+    if subject["source"] == "pypi-git":
+        return subject["repo_url"]
+    # local:~/attrition-risk-ml -> ~/attrition-risk-ml -> expanded absolute path
+    return str(Path(subject["source"].removeprefix("local:")).expanduser())
+
+
+def extra_groups(pyproject_path):
+    """All [project.optional-dependencies] group names, so `pip install -e .[all,groups]`
+    pulls in whatever a subject's own test suite needs (e.g. graph-guard's rdf/dev extras)."""
+    if not pyproject_path.exists():
+        return []
+    text = pyproject_path.read_text()
+    match = re.search(r"^\[project\.optional-dependencies\]\n((?:(?!^\[).)*)", text, re.M | re.S)
+    if not match:
+        return []
+    return re.findall(r"^(\w[\w-]*)\s*=", match.group(1), re.M)
+
+
+def find_test_dir(clone_dir):
+    for name in ("tests", "test"):
+        if (clone_dir / name).is_dir():
+            return name
+    return None
+
+
+def prepare(subject):
+    name = subject["name"]
+    clone_dir = CRUCIBLE_SUBJECTS / name
+    if clone_dir.exists():
+        shutil.rmtree(clone_dir)
+    CRUCIBLE_SUBJECTS.mkdir(parents=True, exist_ok=True)
+
+    run(["git", "clone", "--quiet", source_url(subject), str(clone_dir)])
+    run(["git", "checkout", "--quiet", subject["pinned_sha"]], cwd=clone_dir)
+
+    if subject.get("strip_tests"):
+        test_dir = find_test_dir(clone_dir)
+        if test_dir:
+            run(["git", *GIT_IDENTITY, "rm", "-rq", test_dir], cwd=clone_dir)
+            run(["git", *GIT_IDENTITY, "commit", "-q", "-m", "crucible: strip test suite"], cwd=clone_dir)
+
+    has_pkg_metadata = any((clone_dir / f).exists() for f in ("pyproject.toml", "setup.py", "setup.cfg"))
+    if has_pkg_metadata:
+        extras = extra_groups(clone_dir / "pyproject.toml")
+        target = f"{clone_dir}[{','.join(extras)}]" if extras else str(clone_dir)
+        run([str(VENV_PIP), "install", "-q", "-e", target])
+    else:
+        reqs = clone_dir / "requirements.txt"
+        if reqs.exists():
+            run([str(VENV_PIP), "install", "-q", "-r", str(reqs)])
+
+    smoke = run([str(VENV_PYTHON), "-m", "pytest", "-q"], cwd=clone_dir, check=False)
+    smoke_ok = smoke.returncode in (0, 5)  # 5 = no tests collected (expected post-strip)
+
+    mutmut_check = run([str(VENV_PYTHON), "-m", "mutmut", "--version"], cwd=clone_dir, check=False)
+    mutmut_ok = mutmut_check.returncode == 0
+
+    ok = smoke_ok and mutmut_ok
+    detail = "ok" if ok else f"pytest_rc={smoke.returncode} mutmut_rc={mutmut_check.returncode}"
+    return ok, detail
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--only", help="prepare only this subject name")
+    args = parser.parse_args()
+
+    subjects = json.loads(SUBJECTS_JSON.read_text())["subjects"]
+    if args.only:
+        subjects = [s for s in subjects if s["name"] == args.only]
+        if not subjects:
+            raise SystemExit(f"no subject named {args.only!r} in subjects.json")
+
+    results = []
+    for subject in subjects:
+        name = subject["name"]
+        try:
+            ok, detail = prepare(subject)
+        except Exception as exc:  # noqa: BLE001 -- report, don't crash the whole batch
+            ok, detail = False, str(exc).splitlines()[0][:200]
+        results.append((name, ok, detail))
+        print(f"{'PREPARED' if ok else 'FAILED':10} {name:20} {detail}")
+
+    print()
+    print(f"{sum(1 for _, ok, _ in results if ok)}/{len(results)} subjects prepared")
+    if not all(ok for _, ok, _ in results):
+        raise SystemExit(1)
+
+
+if __name__ == "__main__":
+    main()
