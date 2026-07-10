@@ -2,7 +2,3 @@
 name = "subject-fixture"
 version = "0.0.1"
 requires-python = ">=3.11"
-
-[tool.mutmut]
-source_paths = ["subject_pkg/calc.py"]
-pytest_add_cli_args_test_selection = ["tests/"]

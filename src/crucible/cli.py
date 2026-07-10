@@ -35,8 +35,9 @@ def _cmd_run(args, mode):
                      module_path=args.module)
     cfg = LoopConfig(max_rounds=args.rounds, dry_rounds=args.dry_rounds, arm=mode)
 
-    # hard stop (dirty clone / red suite / non-git dir) before any token is spent
-    head_sha = env.preflight()
+    # hard stop (dirty clone / red suite / non-git dir) before any token is spent;
+    # also writes+commits the [tool.mutmut] scope for --module inside the clone
+    head_sha = env.preflight(module_path=args.module)
 
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run_dir = Path(args.runs_dir) / f"{stamp}-{subject.name}-{mode}"

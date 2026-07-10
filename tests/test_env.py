@@ -98,6 +98,18 @@ def test_preflight_green_returns_head_sha(tmp_path):
     assert len(sha) == 40 and all(c in "0123456789abcdef" for c in sha)
 
 
+def test_preflight_writes_scope_and_commits_it_in_the_clone(tmp_path):
+    env = _env(tmp_path, [])
+    seed = env.head_sha()
+    sha = env.preflight(module_path="subject_pkg/calc.py")
+    text = (env.subject_dir / "pyproject.toml").read_text()
+    assert "[tool.mutmut]" in text and '"subject_pkg/calc.py"' in text
+    # the scope edit is committed inside the clone, so the tree ends clean and
+    # the returned sha (which receipts bind to) INCLUDES the scope
+    assert env._filtered_status().strip() == ""
+    assert sha != seed and len(sha) == 40
+
+
 def test_retry_then_raise(tmp_path):
     class DyingProvider(FakeProvider):
         def __init__(self):

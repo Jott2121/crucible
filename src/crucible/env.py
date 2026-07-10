@@ -9,7 +9,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from crucible.engine import MutmutEngine
+from crucible.engine import MutmutEngine, write_scope
 from crucible.guardrails import GuardrailViolation, assert_add_only, extract_test_file, test_filename, validate_new_tests
 from crucible.loop import RoundReply
 from crucible.meter import cost_usd
@@ -54,14 +54,23 @@ class SubjectEnv:
                     or line[:2] == "??" and line[3:].strip().startswith("mutants/"))
         )
 
-    def preflight(self) -> str:
+    def preflight(self, module_path: str | None = None) -> str:
         """Hard stop before any model is called: the clone must be a git work tree,
-        clean, and green on pristine code. Returns the HEAD sha receipts bind to."""
+        clean, and green on pristine code. If module_path is given, [tool.mutmut]
+        scope is written and committed inside the clone, so the returned HEAD sha
+        (which receipts bind to) includes the scope. ScopeError (no pyproject.toml)
+        propagates — also a hard stop."""
         self._git("rev-parse", "--is-inside-work-tree")
         if self._filtered_status().strip():
             raise RuntimeError(
                 "subject clone is dirty; commit or clean it (receipts must bind to a commit)"
             )
+        if module_path:
+            write_scope(self.subject_dir / "pyproject.toml", [module_path])
+            if self._git("status", "--porcelain").strip():
+                self._git("add", "pyproject.toml")
+                self._git("-c", "user.email=crucible@local", "-c", "user.name=crucible",
+                          "commit", "-qm", f"crucible: scope mutmut to {module_path}")
         pristine = run_tests(self.subject_dir, run=self.run)
         if not pristine.passed:
             raise RuntimeError(
