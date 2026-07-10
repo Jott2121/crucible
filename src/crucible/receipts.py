@@ -1,9 +1,9 @@
 """Receipts: one JSONL line per round, appended durably as the loop runs.
 
 meta.json binds the run to the subject's commit SHA and the exact config; receipt.jsonl
-carries the per-round evidence (prompt hashes, usage, kills); result.json is the verdict.
-A crash loses at most the in-flight round (error-swallowing lesson: never buffer a run's
-evidence in memory).
+carries the per-round evidence (prompt hashes, usage, kills); result.json is the verdict
+plus the baseline denominator. A crash loses at most the in-flight round
+(error-swallowing lesson: never buffer a run's evidence in memory).
 """
 from __future__ import annotations
 
@@ -17,17 +17,18 @@ class ReceiptWriter:
         self.run_dir = Path(run_dir)
         # A reused run_dir would interleave two runs' receipt lines; refuse loudly.
         self.run_dir.mkdir(parents=True, exist_ok=False)
-        (self.run_dir / "meta.json").write_text(json.dumps(meta, indent=2))
+        (self.run_dir / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
     def append(self, record) -> None:
         line = json.dumps(dataclasses.asdict(record))
-        with open(self.run_dir / "receipt.jsonl", "a") as f:
+        with open(self.run_dir / "receipt.jsonl", "a", encoding="utf-8") as f:
             f.write(line + "\n")
 
-    def finish(self, verdict: str, total_cost_usd: float) -> None:
-        (self.run_dir / "result.json").write_text(
-            json.dumps({"verdict": verdict, "total_cost_usd": total_cost_usd})
-        )
+    def finish(self, verdict: str, total_cost_usd: float, extra: dict | None = None) -> None:
+        result = {"verdict": verdict, "total_cost_usd": total_cost_usd}
+        if extra:
+            result.update(extra)
+        (self.run_dir / "result.json").write_text(json.dumps(result), encoding="utf-8")
 
 
 def load_run(run_dir) -> dict:
@@ -35,12 +36,12 @@ def load_run(run_dir) -> dict:
     rounds = []
     receipt = run_dir / "receipt.jsonl"
     if receipt.exists():
-        rounds = [json.loads(l) for l in receipt.read_text().strip().splitlines() if l]
+        rounds = [json.loads(l) for l in receipt.read_text(encoding="utf-8").strip().splitlines() if l]
     result = None
     if (run_dir / "result.json").exists():
-        result = json.loads((run_dir / "result.json").read_text())
+        result = json.loads((run_dir / "result.json").read_text(encoding="utf-8"))
     return {
-        "meta": json.loads((run_dir / "meta.json").read_text()),
+        "meta": json.loads((run_dir / "meta.json").read_text(encoding="utf-8")),
         "rounds": rounds,
         "result": result,
     }

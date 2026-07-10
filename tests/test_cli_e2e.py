@@ -98,3 +98,9 @@ def test_harden_end_to_end_survives_engine_artifacts(tmp_path):
     # the critical assertion: round 1 must NOT be rejected by its own engine's artifacts
     assert receipt[1]["status"] == "ok"
     assert receipt[1]["kills"], "critic round must kill at least one named survivor"
+    # receipts carry the full denominator + provenance
+    result = json.loads((runs[0] / "result.json").read_text())
+    assert result["baseline_all_mutants"] > 0
+    meta = json.loads((runs[0] / "meta.json").read_text())
+    assert meta["tester_provider"] == "fake"
+    assert meta["crucible_version"] and meta["mutmut_version"] and meta["oracle_gate_version"]

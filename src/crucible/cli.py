@@ -5,11 +5,13 @@ Plain-ASCII output. Exit codes: 0 = clean/dry/cap/oneshot; 3 = aborted/rejected.
 from __future__ import annotations
 
 import argparse
+import importlib.metadata
 import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+import crucible
 from crucible.env import SubjectEnv
 from crucible.loop import LoopConfig, harden, oneshot
 from crucible.providers_ext import FakeProvider, get_provider
@@ -38,14 +40,21 @@ def _cmd_run(args, mode):
     writer = ReceiptWriter(run_dir, {
         "subject": str(subject), "module": args.module, "head_sha": env.head_sha(),
         "arm": mode, "tester_model": args.tester_model, "critic_model": args.critic_model,
-        "critic_provider": args.critic, "max_rounds": args.rounds,
-        "dry_rounds": args.dry_rounds, "started_at": stamp,
+        "tester_provider": args.tester, "critic_provider": args.critic,
+        "max_rounds": args.rounds, "dry_rounds": args.dry_rounds, "started_at": stamp,
+        "crucible_version": crucible.__version__,
+        "oracle_gate_version": importlib.metadata.version("oracle-gate"),
+        "mutmut_version": importlib.metadata.version("mutmut"),
     })
 
     result = oneshot(env, cfg) if mode == "oneshot" else harden(env, cfg)
     for rec in result.rounds:
         writer.append(rec)
-    writer.finish(result.verdict, result.total_cost_usd)
+    writer.finish(result.verdict, result.total_cost_usd, extra={
+        "baseline_survivors": result.baseline_survivors,
+        "baseline_all_mutants": result.baseline_all_mutants,
+        "baseline_counts": result.baseline_counts,
+    })
 
     print(f"verdict: {result.verdict}   cost: ${result.total_cost_usd:.4f}")
     for r in result.rounds:
