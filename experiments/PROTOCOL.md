@@ -738,7 +738,7 @@ confirmed to be the identical mechanism at the Tester role: round 0 (the only ro
 ever reached for `graph-guard`, since a rejected Tester round ends the cell) hit the cap and was
 laundered into "invalid: fails on pristine code," never recorded as a truncation. No `loop-cross`
 critic round in any counted cell ever billed `usage_out` at or near 16000 (observed range across
-all `loop-cross` critic rounds: 314-9614, `rag-guard`/`idna`/`packaging`/`attrition-risk-ml`
+all `loop-cross` critic rounds: 431-3687, `rag-guard`/`idna`/`packaging`/`attrition-risk-ml`
 combined) — confirming the terse-vs-verbose asymmetry described above directly from the data, not
 merely asserted from each model's general style.
 
