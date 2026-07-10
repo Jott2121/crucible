@@ -80,7 +80,7 @@ markers = [
     "slow: shells out to mutmut (minutes)",
     "integration: real model APIs (never in CI)",
 ]
-addopts = "-m 'not integration'"
+addopts = "-m 'not integration' --ignore=tests/fixtures"
 ```
 
 - [ ] **Step 3: Write the failing packaging test**
