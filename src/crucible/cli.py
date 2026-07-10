@@ -55,6 +55,24 @@ def _cmd_run(args, mode):
     return 3 if result.verdict in ("aborted", "rejected") else 0
 
 
+def _cmd_report(args) -> int:
+    from crucible.receipts import load_run
+    from crucible.report import mcnemar_exact, paired_kills, summarize
+
+    runs = [load_run(p) for p in args.runs]
+    for r in runs:
+        s = summarize(r)
+        cpk = f"${s['cost_per_kill']:.4f}" if s["cost_per_kill"] is not None else "n/a"
+        print(f"{s['arm']:8s} verdict={s['verdict']:6s} baseline={s['baseline_survivors']:3d} "
+              f"killed={s['killed']:3d} cost=${s['cost_usd']:.4f} cost/kill={cpk}")
+    if len(runs) == 2:
+        both, a_only, b_only, neither = paired_kills(runs[0], runs[1])
+        p = mcnemar_exact(a_only, b_only)
+        print(f"paired 2x2: both={both} a_only={a_only} b_only={b_only} neither={neither}")
+        print(f"McNemar exact p = {p:.6f}")
+    return 0
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="crucible")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -70,7 +88,11 @@ def main(argv=None) -> int:
         p.add_argument("--dry-rounds", type=int, default=2)
         p.add_argument("--runs-dir", default="runs")
         p.add_argument("--fake-replies", default=None)
+    rp = sub.add_parser("report")
+    rp.add_argument("runs", nargs="+")
     args = parser.parse_args(argv)
+    if args.cmd == "report":
+        return _cmd_report(args)
     return _cmd_run(args, args.cmd)
 
 
