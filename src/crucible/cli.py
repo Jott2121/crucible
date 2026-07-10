@@ -47,9 +47,8 @@ def _cmd_run(args, mode):
         "mutmut_version": importlib.metadata.version("mutmut"),
     })
 
-    result = oneshot(env, cfg) if mode == "oneshot" else harden(env, cfg)
-    for rec in result.rounds:
-        writer.append(rec)
+    run_fn = oneshot if mode == "oneshot" else harden
+    result = run_fn(env, cfg, on_round=writer.append)
     writer.finish(result.verdict, result.total_cost_usd, extra={
         "baseline_survivors": result.baseline_survivors,
         "baseline_all_mutants": result.baseline_all_mutants,

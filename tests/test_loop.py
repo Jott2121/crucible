@@ -213,6 +213,16 @@ def test_dry_counter_resets_to_zero_on_a_kill_round():
     assert len(result.rounds) == 3  # tester + 2 critic rounds, not cut short after round 1
 
 
+def test_on_round_streams_each_record_in_order():
+    # the caller's on_round hook must see every record, in order, as it lands —
+    # that is what makes receipts durable per round instead of buffered to the end.
+    env = FakeEnv([outcome(["m1", "m2"]), outcome(["m1", "m2"]), outcome(["m2"]), outcome([])])
+    seen = []
+    result = harden(env, LoopConfig(), on_round=seen.append)
+    assert seen == result.rounds
+    assert len(seen) == 3
+
+
 def test_clean_verdict_when_last_round_exhausts_the_budget():
     # the final round exactly kills the last survivor at the budget cap: the loop's
     # top-of-iteration early-return never fires, so the tail "clean" computation must.

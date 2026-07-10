@@ -104,7 +104,7 @@ def _round(env, cfg, round_no, role, survivors_before) -> RoundRecord:
     return rec
 
 
-def _run(env, cfg, rounds_budget) -> LoopResult:
+def _run(env, cfg, rounds_budget, on_round=None) -> LoopResult:
     rounds: list[RoundRecord] = []
 
     # Pristine baseline: measure BEFORE any generated test exists, so round 0's
@@ -120,6 +120,8 @@ def _run(env, cfg, rounds_budget) -> LoopResult:
 
     first = _round(env, cfg, 0, "tester", survivors_before=pre.survivors)
     rounds.append(first)
+    if on_round is not None:
+        on_round(first)
     if first.status != "ok":
         # a run whose tester round never produced valid tests measured nothing;
         # "clean" must be impossible here
@@ -132,6 +134,8 @@ def _run(env, cfg, rounds_budget) -> LoopResult:
             return _result("clean")
         rec = _round(env, cfg, n, "critic", survivors)
         rounds.append(rec)
+        if on_round is not None:
+            on_round(rec)
         if rec.status == "aborted":
             return _result("aborted")
         survivors = rec.survivors_after
@@ -147,9 +151,9 @@ def _cost(rounds) -> float:
     return sum(r.cost_usd for r in rounds)
 
 
-def harden(env, cfg: LoopConfig) -> LoopResult:
-    return _run(env, cfg, rounds_budget=cfg.max_rounds)
+def harden(env, cfg: LoopConfig, on_round=None) -> LoopResult:
+    return _run(env, cfg, rounds_budget=cfg.max_rounds, on_round=on_round)
 
 
-def oneshot(env, cfg: LoopConfig) -> LoopResult:
-    return _run(env, cfg, rounds_budget=0)
+def oneshot(env, cfg: LoopConfig, on_round=None) -> LoopResult:
+    return _run(env, cfg, rounds_budget=0, on_round=on_round)
