@@ -669,6 +669,126 @@ auth and live credits against `gpt-5.6-terra` before this pin.
 v8 approved by Jeff Otterson 2026-07-10 (interactive gate) — closes §9's "MUST be verified
 before the first `loop-cross` (H2) call" requirement.
 
+**Amendment (protocol_version 9 — Anthropic output cap silently truncated same-lineage critic
+replies, laundered into misleading rejection notes; four counted cells reclassified
+INSTRUMENT-INVALID; found by a final adversarial review of the completed analysis, after all
+15 counted cells had already run):**
+
+`src/crucible/providers_ext.py`'s `LongAnthropicProvider` set `max_tokens=16000` on every
+Anthropic call (the Tester in every arm; the Critic in `loop-same`) and nowhere in
+`crucible.env.SubjectEnv._call` or `crucible.loop._round` was a reply's `usage.output_tokens`
+ever compared against that cap, and `stop_reason`/truncation was never inspected at all. A
+reply that hit the wall came back as ordinary, well-formed-looking text cut off mid-JSON or
+mid-test-file, indistinguishable at the call site from a complete reply — it was handed
+straight to guardrail validation, which then failed it for an unrelated-sounding reason (an
+unterminated fenced code block reads as "expected exactly one fenced python block, found 0";
+a syntactically broken test file reads as "invalid: fails on pristine code"), and the round was
+recorded rejected under that misleading note with no trace anywhere in the receipt that the
+reply had in fact been silently cut off billed and unusable, not a bad test.
+
+**Mechanism of the asymmetry.** The Tester is `claude-sonnet-5` (`anthropic`) in every arm and
+every subject (§2); the `loop-same` Critic is also `anthropic`/`claude-sonnet-5` — the
+**same-lineage** configuration H2 is built to isolate. Claude Sonnet 5 writes long: critic
+replies that walk through each survivor's diff and reasoning routinely approached or exceeded
+the old 16000-token ceiling. The `loop-cross` Critic, `gpt-5.6-terra` (`openai`), writes terse
+by comparison and never hit any cap in any counted cell (verified below). The result is a
+structural, lineage-correlated failure mode entirely orthogonal to either critic's actual test-
+writing quality: the same-lineage arm this protocol measures against a cross-lineage arm was the
+*only* one mechanically capable of losing whole rounds to silent truncation, which would bias
+any H2 comparison toward making `loop-same` look worse than its real output, for a reason having
+nothing to do with lineage-driven test quality.
+
+**Detection asymmetry — a residual limitation, not closed by this fix.** `OpenAIProvider`
+(`oracle_gate.providers`, used for the `loop-cross` Critic) sends no `max_tokens` in its request
+body at all and carries no `output_cap` class attribute; `SubjectEnv._call`'s truncation check
+is `cap = getattr(provider, "output_cap", None); if cap is not None and usage.output_tokens >=
+cap: raise TruncatedOutput(...)` — a provider with no `output_cap` is never checked, by
+construction. If GPT-5.6-terra ever truncates a reply against whatever ceiling OpenAI's API
+enforces server-side, this protocol's instrumentation would launder it exactly the way the
+Anthropic case above was laundered, with no mechanical detection and no receipt trace. This
+amendment does not close that gap — it is named here as a standing, asymmetric blind spot: only
+providers that declare a mechanical `output_cap` are checked for truncation at all.
+
+**Verified receipt evidence (this protocol's own re-derivation, not the originating review's
+count).** Reading every round of every one of the 15 cells in the (then-current)
+`experiments/counted.json` directly from `receipt.jsonl`: **8 rounds carry `status="rejected"`
+across counted cells, of which 7 billed `usage_out` exactly `16000`** — the earlier review that
+flagged this defect reported "6 of 7"; recomputing independently from the receipts finds an
+eighth rejected round it missed (`attrition-risk-ml` `loop-same`, round 1, critic, note
+"expected exactly one fenced python block, found 0", `usage_out=16000` — a second truncated
+critic round in the same cell as the round-2 rejection already suspected). The 7 confirmed
+truncations:
+
+| Subject | Arm | Round | Role | usage_out | Rejection note (as recorded) |
+|---|---|---:|---|---:|---|
+| graph-guard | loop-same | 1 | critic | 16000 | invalid: fails on pristine code |
+| graph-guard | loop-same | 2 | critic | 16000 | invalid: fails on pristine code |
+| graph-guard | loop-cross | 0 | tester | 16000 | invalid: fails on pristine code |
+| packaging | loop-same | 1 | critic | 16000 | invalid: fails on pristine code |
+| packaging | loop-same | 2 | critic | 16000 | invalid: fails on pristine code |
+| attrition-risk-ml | loop-same | 1 | critic | 16000 | expected exactly one fenced python block, found 0 |
+| attrition-risk-ml | loop-same | 2 | critic | 16000 | invalid: fails on pristine code |
+
+The 8th rejected round, `attrition-risk-ml` `loop-cross` round 4 (critic, `usage_out=1433`,
+"invalid: every generated test failed on pristine code (dropped
+['test_run_writes_metrics_to_lowercase_metrics_json'], nothing left to salvage)"), is a genuine
+content-based rejection, not truncation (`usage_out` is nowhere near the cap) — that cell is
+unaffected by this defect and is not reclassified. `graph-guard`'s `loop-cross` cell's death is
+confirmed to be the identical mechanism at the Tester role: round 0 (the only round `loop-cross`
+ever reached for `graph-guard`, since a rejected Tester round ends the cell) hit the cap and was
+laundered into "invalid: fails on pristine code," never recorded as a truncation. No `loop-cross`
+critic round in any counted cell ever billed `usage_out` at or near 16000 (observed range across
+all `loop-cross` critic rounds: 314-9614, `rag-guard`/`idna`/`packaging`/`attrition-risk-ml`
+combined) — confirming the terse-vs-verbose asymmetry described above directly from the data, not
+merely asserted from each model's general style.
+
+**Fix (already committed, code-reviewed and reviewer-approved before this amendment, commit
+`68968c1`):** `LongAnthropicProvider.output_cap` raised from the old hardcoded 16000 to 32000,
+now the single source of truth both `_body` (the actual request) and `env._call` (the mechanical
+check) read from. `env._call` compares every reply's `usage.output_tokens` against
+`getattr(provider, "output_cap", None)` and raises `TruncatedOutput` — never retried (retrying a
+capped call would bill and likely truncate again) — carrying the billed usage, model, and
+prompt hash. `crucible.loop._round` catches `TruncatedOutput` and records the round honestly:
+`status="rejected"`, `note` exactly `"truncated: output hit max_tokens cap (output_tokens=<N> >=
+max_tokens=<CAP>)"`, the round's real billed cost entered in the receipt (the tokens were spent
+and must be metered, per §9), zero kills credited, and the raw truncated reply archived to the
+run's `rejected/` directory via the new `env.archive_rejected_text` (evidence preserved, never
+discarded, same posture as every other rejected-round artifact under §6). A truncation at round
+0 of any arm still fails that cell's verdict loud through the existing verdict path — it is a
+missing cell, not a silently-recovered one.
+
+**Consequence: four counted cells reclassified INSTRUMENT-INVALID, preserved as evidence, fresh
+reruns under this amendment to follow (`experiments/DEVIATIONS.md`):**
+
+- `graph-guard` `loop-same-20260710T191858Z` ($0.606144) — rounds 1 and 2 (both critic) truncated.
+- `graph-guard` `loop-cross-20260710T194101Z` ($0.243735) — round 0 (tester) truncated, killing
+  the whole cell.
+- `packaging` `loop-same-20260710T181157Z` ($0.691623) — rounds 1 and 2 (both critic) truncated.
+- `attrition-risk-ml` `loop-same-20260710T193123Z` ($0.809325) — rounds 1 and 2 (both critic)
+  truncated.
+
+**The remaining 11 counted cells stand — verified, not assumed.** Every other counted cell's
+accepted rounds were checked directly against the receipts: no accepted (`status` other than
+`"rejected"`/`"aborted"`) round in any counted cell anywhere billed `usage_out` at or equal to
+16000 — the highest accepted-round output among all 15 cells is `idna` `loop-same` round 0
+(`usage_out=14623`, a near-miss, still `status="ok"`). Every counted cell's `oneshot` arm (the
+only arm with no Critic round at all) is unaffected in every subject. `rag-guard` and `idna`'s
+`loop-same`/`loop-cross` cells are unaffected — no rejected round appears in either subject's
+receipts at all.
+
+**Why this biases H1 conservative, not inflated.** Every truncation-caused rejection above
+occurred in a `loop-same` critic round or a `loop-cross` tester round — never in `oneshot` (no
+critic round exists to truncate) and never crediting a phantom kill (a rejected round always
+credits zero kills, `survivors_after = survivors_before`, per §6). The practical effect of this
+defect, wherever it hit, was to silently *remove* critic rounds `loop-same` should have gotten
+to run — reducing, never inflating, the kills `loop-same` could show against `oneshot`. If H1's
+pooled result favors `loop-same` despite this defect suppressing some of its own rounds, the true
+effect (measured under the v9 fix, after the four cells above are rerun) can only be as large or
+larger, never smaller, than what the defect-affected data showed — the defect works against H1's
+own hypothesis, not for it.
+
+v9 approved by Jeff Otterson 2026-07-10 (interactive gate).
+
 ## 4. Metrics
 
 - **Primary statistic — per-mutant paired kill outcomes, exact McNemar, two-sided.** Implemented
