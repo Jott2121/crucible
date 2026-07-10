@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "crucible"
+version = "0.1.0"
+description = "Adversarial test-hardening loop for AI-built code: Tester vs Critic closing mutation feedback, mechanical verdicts, metered spend, receipts."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Jeff Otterson" }]
+dependencies = [
+    "oracle-gate @ git+https://github.com/Jott2121/oracle-gate@ce9b0b93ba59afa4598a85738db9abd7f975e8bc#subdirectory=tool",
+    "agent-cost-attribution @ git+https://github.com/Jott2121/agent-cost-attribution@b502b093e5344beea06dcafcf32239e90302ddad",
+    "mutmut>=3,<4",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+crucible = "crucible.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+crucible = ["prompts/*.md"]
+
+[tool.mutmut]
+source_paths = [
+    "src/crucible/loop.py",
+    "src/crucible/guardrails.py",
+    "src/crucible/report.py",
+    "src/crucible/meter.py",
+    "src/crucible/roles.py",
+]
+pytest_add_cli_args_test_selection = ["tests/"]
+# also_copy: pytest_add_cli_args_test_selection = ["tests/"] collects the WHOLE
+# suite, and several tests import crucible modules outside source_paths
+# (engine.py, cli.py, etc). mutmut's sandbox only contains files listed in
+# source_paths, so those imports raise ModuleNotFoundError inside the mutants/
+# copy unless the rest of the package is also present (unmutated).
+also_copy = ["src/crucible"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "slow: shells out to mutmut (minutes)",
+    "integration: real model APIs (never in CI)",
+]
+addopts = "-m 'not integration' --ignore=tests/fixtures"
