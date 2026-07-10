@@ -1,0 +1,10 @@
+{
+  "protocol_version": 1,
+  "tester": {"provider": "anthropic", "model": "claude-sonnet-5"},
+  "rounds": {"max_rounds": 4, "dry_rounds": 2},
+  "arms": {
+    "oneshot": {"mode": "oneshot"},
+    "loop-same": {"mode": "harden", "critic": {"provider": "anthropic", "model": "claude-sonnet-5"}},
+    "loop-cross": {"mode": "harden", "critic": {"provider": "openai", "model": "gpt-5.6"}}
+  }
+}
