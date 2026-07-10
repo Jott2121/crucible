@@ -4,6 +4,7 @@ shape or conduct — every rule here is a hard check, not a prompt instruction.
 """
 from __future__ import annotations
 
+import ast
 import re
 from pathlib import Path
 
@@ -22,8 +23,12 @@ def extract_test_file(model_output: str) -> str:
             f"expected exactly one fenced python block, found {len(blocks)}"
         )
     content = blocks[0].strip("\n")
-    if "assert" not in content:
-        raise GuardrailViolation("no assert in generated test file")
+    try:
+        tree = ast.parse(content)
+    except SyntaxError as exc:
+        raise GuardrailViolation(f"generated test file is not valid python: {exc}") from None
+    if not any(isinstance(node, ast.Assert) for node in ast.walk(tree)):
+        raise GuardrailViolation("no assert statement in generated test file")
     return content
 
 

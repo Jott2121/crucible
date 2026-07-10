@@ -31,6 +31,18 @@ def test_no_assert_rejected():
         extract_test_file("```python\ndef test_a():\n    pass\n```")
 
 
+def test_assert_in_comment_or_string_rejected():
+    sneaky = '```python\ndef test_a():\n    x = "assert"  # assert nothing\n    x\n```'
+    with pytest.raises(GuardrailViolation, match="no assert statement"):
+        extract_test_file(sneaky)
+
+
+def test_invalid_python_rejected():
+    broken = "```python\ndef test_a(:\n    assert True\n```"
+    with pytest.raises(GuardrailViolation, match="not valid python"):
+        extract_test_file(broken)
+
+
 def test_filename_prefix():
     assert test_filename(2, "loop") == "crucible_r2_loop_test.py"
 
