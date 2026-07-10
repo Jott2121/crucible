@@ -7,7 +7,8 @@ from crucible.loop import LoopConfig, LoopResult, RoundReply, harden, oneshot
 
 
 def outcome(survivors):
-    return MutationOutcome(counts={}, survivors=list(survivors), all_mutants=10)
+    return MutationOutcome(counts={"survived": len(survivors)}, survivors=list(survivors),
+                           all_mutants=10)
 
 
 class FakeEnv:
@@ -83,6 +84,17 @@ def test_tester_round_kills_are_credited_against_baseline():
     result = oneshot(env, LoopConfig(arm="oneshot"))
     assert result.baseline_survivors == ["m1", "m2", "m3"]
     assert result.rounds[0].kills == ["m1", "m2"]
+
+
+def test_round_and_baseline_record_the_full_denominator():
+    # receipts must carry the denominator: all_mutants + counts per measured round,
+    # and the pristine baseline's own denominator on the result.
+    env = FakeEnv([outcome(["m1", "m2"]), outcome(["m1"])])
+    result = oneshot(env, LoopConfig(arm="oneshot"))
+    assert result.rounds[0].all_mutants == 10
+    assert result.rounds[0].counts == {"survived": 1}
+    assert result.baseline_all_mutants == 10
+    assert result.baseline_counts == {"survived": 2}
 
 
 def test_oneshot_is_round_zero_only():

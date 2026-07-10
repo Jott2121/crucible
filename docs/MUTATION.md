@@ -1,4 +1,33 @@
-# Mutation-Survivor Triage (Task 14a)
+# Mutation-Survivor Triage
+
+## Post-fix-wave re-run (Task 14b, 2026-07-10)
+
+The final-review fix wave (pristine baseline, per-round receipt streaming,
+preflight, integrity attestation, abort survivor-context) added new code to
+`loop.py`, growing the mutant population 375 -> 383.
+
+| | mutants | killed | survived | never reached | raw score |
+|---|---|---|---|---|---|
+| Task 14a final | 375 | 373 | 2 | 0 | 99.5% |
+| Post-fix-wave, before triage | 383 | 377 | 6 | 0 | 98.4% |
+| **Post-fix-wave, after triage** | **383** | **381** | **2** | **0** | **99.5%** |
+
+The 4 new survivors were all in `loop.py`'s new denominator plumbing — the
+`all_mutants`/`counts` fields set on RoundRecord and the `baseline_counts`
+argument to LoopResult — set but never asserted. One targeted test
+(`test_round_and_baseline_record_the_full_denominator` in `tests/test_loop.py`,
+plus giving the FakeEnv `outcome()` helper a non-empty counts dict so a dropped
+`baseline_counts=` argument is distinguishable from the dataclass default)
+killed all 4. Verified by a full re-run: `mutmut results` lists exactly the two
+Task 14a equivalent mutants below and nothing else. No untriaged survivors.
+
+The 2 remaining survivors are the same two analytically-verified equivalent
+mutants documented in the Task 14a section (`x_extract_test_file__mutmut_4`,
+`x_mcnemar_exact__mutmut_4`) — dispositions unchanged.
+
+---
+
+# Task 14a triage (historical)
 
 **Date:** 2026-07-10
 **Scope:** dogfood run over the five pure modules under `[tool.mutmut] source_paths`
