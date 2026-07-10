@@ -1,0 +1,14 @@
+{
+  "subject": "/Users/jeffreyotterson/crucible-subjects/graph-guard",
+  "module": "graph_guard/ppr.py",
+  "head_sha": "8f721a0a2637ecb81cbeef61f8367848ab5428ab",
+  "arm": "oneshot",
+  "protocol_version": 1,
+  "tester_provider": "anthropic",
+  "tester_model": "claude-sonnet-5",
+  "critic_provider": "anthropic",
+  "critic_model": "claude-sonnet-5",
+  "max_rounds": 4,
+  "dry_rounds": 2,
+  "started_at": "20260710T162658Z"
+}

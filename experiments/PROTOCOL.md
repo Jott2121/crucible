@@ -161,6 +161,17 @@ mutants/ tree **unmutated**, so in-package sibling imports and pytest's own tran
 resolve. Any departure from these scopes at run time is a protocol deviation and requires a
 `DEVIATIONS.md` entry (§6).
 
+**Amendment (protocol_version 2, PRE-DATA, made after pilot attempt 1 crashed before any model
+call — see `DEVIATIONS.md`):** the table above was frozen as prose only; `crucible experiment`'s
+`SubjectEnv.preflight` wrote only `source_paths` into the clone's `[tool.mutmut]`, never the
+`also_copy` entries, so mutmut's sandbox could not import the package and every mutant reported
+`not checked`. The content of the table is unchanged — `experiments/protocol.json` now carries it
+machine-readable under a `"subjects"` map (one entry per clone-dir name: `module`, `also_copy`,
+and, for graph-guard, `pytest_args` excluding `test_sparql_vs_ppr.py`), and `crucible.experiment
+.run_arm` threads it into `SubjectEnv`/`write_scope` so the frozen scope is what actually runs.
+This amendment happened before any paid model call was made against any subject, so no data is
+affected.
+
 ## 4. Metrics
 
 - **Primary statistic — per-mutant paired kill outcomes, exact McNemar, two-sided.** Implemented

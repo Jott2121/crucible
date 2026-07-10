@@ -27,6 +27,11 @@ def load_protocol(path) -> dict:
             raise ProtocolError(f"arm {name!r} has invalid mode {arm.get('mode')!r}")
         if arm["mode"] == "harden" and "critic" not in arm:
             raise ProtocolError(f"harden arm {name!r} needs a critic")
+    subjects = data.get("subjects")
+    if subjects is not None:
+        for subj_name, scope in subjects.items():
+            if "module" not in scope:
+                raise ProtocolError(f"subject {subj_name!r} scope missing required key 'module'")
     return data
 
 
@@ -61,11 +66,27 @@ def run_arm(protocol: dict, arm_name: str, subject_dir, runs_root, module_path: 
     critic_cfg = arm.get("critic", protocol["tester"])
     critic = tester if critic_cfg == protocol["tester"] else get_provider(critic_cfg["provider"])
 
+    subject_name = Path(subject_dir).name
+    subjects = protocol.get("subjects", {})
+    if subject_name not in subjects:
+        raise ProtocolError(
+            f"subject {subject_name!r} is not in protocol['subjects']; the scope must "
+            "be frozen in the protocol before this cell can run"
+        )
+    scope = subjects[subject_name]
+    if scope["module"] != module_path:
+        raise ProtocolError(
+            f"subject {subject_name!r} protocol module {scope['module']!r} does not "
+            f"match --module {module_path!r}; the receipt must not disagree with the "
+            "frozen config"
+        )
+
     env = SubjectEnv(
         subject_dir=Path(subject_dir),
         tester_provider=tester, tester_model=protocol["tester"]["model"],
         critic_provider=critic, critic_model=critic_cfg["model"],
         module_path=module_path,
+        scope=scope,
     )
     head_sha = env.preflight(module_path)
 

@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from oracle_gate.runner import run_mutation
-from oracle_gate.survivors import parse_results, undetected
+from oracle_gate.survivors import UnclassifiedStatus, parse_results, undetected
 
 
 class ScopeError(RuntimeError):
@@ -36,10 +36,19 @@ class MutmutEngine:
 
     def measure(self) -> MutationOutcome:
         counts, results_text = run_mutation(self.cwd, run=self.run)
-        mutants = parse_results(results_text)
+        try:
+            mutants = parse_results(results_text)
+            survivors = [m.id for m in undetected(mutants)]
+        except UnclassifiedStatus as exc:
+            raise RuntimeError(
+                f"{exc}; mutmut evaluated no mutants — usually a broken [tool.mutmut] "
+                "scope (missing also_copy?) or a collection error inside the mutants "
+                "sandbox; run `python -m mutmut run` in the subject to see the "
+                "underlying failure"
+            ) from exc
         return MutationOutcome(
             counts=counts,
-            survivors=[m.id for m in undetected(mutants)],
+            survivors=survivors,
             all_mutants=len(mutants),
         )
 
@@ -56,12 +65,21 @@ class MutmutEngine:
 _MUTMUT_TABLE = re.compile(r"^\[tool\.mutmut\]\n(?:(?!^\[).)*", re.M | re.S)
 
 
-def write_scope(pyproject_path: Path, source_paths: list[str]) -> None:
+def write_scope(pyproject_path: Path, source_paths: list[str],
+                 also_copy: list[str] | None = None,
+                 pytest_args: list[str] | None = None) -> None:
     pyproject_path = Path(pyproject_path)
     if not pyproject_path.exists():
         raise ScopeError(f"{pyproject_path} does not exist; cannot scope mutmut")
     paths = ", ".join(f'"{p}"' for p in source_paths)
-    table = f'[tool.mutmut]\nsource_paths = [{paths}]\n'
+    lines = ["[tool.mutmut]", f"source_paths = [{paths}]"]
+    if also_copy:
+        ac = ", ".join(f'"{p}"' for p in also_copy)
+        lines.append(f"also_copy = [{ac}]")
+    if pytest_args:
+        pa = ", ".join(f'"{p}"' for p in pytest_args)
+        lines.append(f"pytest_add_cli_args_test_selection = [{pa}]")
+    table = "\n".join(lines) + "\n"
     text = pyproject_path.read_text()
     if _MUTMUT_TABLE.search(text):
         text = _MUTMUT_TABLE.sub(table, text)

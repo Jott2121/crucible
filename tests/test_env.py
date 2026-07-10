@@ -110,6 +110,30 @@ def test_preflight_writes_scope_and_commits_it_in_the_clone(tmp_path):
     assert sha != seed and len(sha) == 40
 
 
+def test_preflight_writes_also_copy_when_scope_given(tmp_path):
+    import shutil, subprocess
+    from pathlib import Path
+
+    subject = tmp_path / "subject"
+    shutil.copytree(Path(__file__).parent / "fixtures" / "subject", subject)
+    subprocess.run(["git", "init", "-q"], cwd=subject, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=subject, check=True)
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "seed"],
+        cwd=subject, check=True,
+    )
+    p = FakeProvider([])
+    env = SubjectEnv(
+        subject_dir=subject, tester_provider=p, tester_model="fake-model",
+        critic_provider=p, critic_model="fake-model", module_path="subject_pkg/calc.py",
+        scope={"also_copy": ["subject_pkg"], "pytest_args": ["tests/test_calc.py"]},
+    )
+    env.preflight(module_path="subject_pkg/calc.py")
+    text = (env.subject_dir / "pyproject.toml").read_text()
+    assert 'also_copy = ["subject_pkg"]' in text
+    assert 'pytest_add_cli_args_test_selection = ["tests/test_calc.py"]' in text
+
+
 def test_assert_clean_tolerates_engine_artifacts_and_generated_tests_only(tmp_path):
     import pytest
 

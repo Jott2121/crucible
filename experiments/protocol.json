@@ -1,10 +1,33 @@
 {
-  "protocol_version": 1,
+  "protocol_version": 2,
   "tester": {"provider": "anthropic", "model": "claude-sonnet-5"},
   "rounds": {"max_rounds": 4, "dry_rounds": 2},
   "arms": {
     "oneshot": {"mode": "oneshot"},
     "loop-same": {"mode": "harden", "critic": {"provider": "anthropic", "model": "claude-sonnet-5"}},
     "loop-cross": {"mode": "harden", "critic": {"provider": "openai", "model": "gpt-5.6"}}
+  },
+  "subjects": {
+    "attrition-risk-ml": {
+      "module": "src/train.py",
+      "also_copy": ["src", "data"]
+    },
+    "graph-guard": {
+      "module": "graph_guard/ppr.py",
+      "also_copy": ["graph_guard"],
+      "pytest_args": ["tests/test_ppr.py"]
+    },
+    "rag-guard": {
+      "module": "rag_guard/guard.py",
+      "also_copy": ["rag_guard"]
+    },
+    "packaging": {
+      "module": "src/packaging/_elffile.py",
+      "also_copy": ["src/packaging"]
+    },
+    "idna": {
+      "module": "idna/cli.py",
+      "also_copy": ["idna"]
+    }
   }
 }

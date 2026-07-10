@@ -26,12 +26,13 @@ ENGINE_ARTIFACTS = ("mutants/", "mutants", "coverage.json", ".mutmut-cache")
 
 class SubjectEnv:
     def __init__(self, subject_dir, tester_provider, tester_model, critic_provider,
-                 critic_model, module_path, run=subprocess.run):
+                 critic_model, module_path, run=subprocess.run, scope: dict | None = None):
         self.subject_dir = Path(subject_dir)
         self.tester_provider, self.tester_model = tester_provider, tester_model
         self.critic_provider, self.critic_model = critic_provider, critic_model
         self.module_path = module_path
         self.run = run
+        self.scope = scope
         self.engine = MutmutEngine(self.subject_dir, run=run)
         self._sleep = time.sleep
 
@@ -66,7 +67,12 @@ class SubjectEnv:
                 "subject clone is dirty; commit or clean it (receipts must bind to a commit)"
             )
         if module_path:
-            write_scope(self.subject_dir / "pyproject.toml", [module_path])
+            if self.scope is not None:
+                write_scope(self.subject_dir / "pyproject.toml", [module_path],
+                           also_copy=self.scope.get("also_copy"),
+                           pytest_args=self.scope.get("pytest_args"))
+            else:
+                write_scope(self.subject_dir / "pyproject.toml", [module_path])
             if self._git("status", "--porcelain").strip():
                 self._git("add", "pyproject.toml")
                 self._git("-c", "user.email=crucible@local", "-c", "user.name=crucible",
