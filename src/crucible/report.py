@@ -21,9 +21,11 @@ def _killed(run: dict) -> set[str]:
 
 
 def _baseline(run: dict) -> set[str]:
+    """Pristine-baseline survivors: what survived BEFORE any generated test ran
+    (round 0's survivors_before, measured on the untouched clone)."""
     for r in run["rounds"]:
         if r["round"] == 0:
-            return set(r["survivors_after"])
+            return set(r.get("survivors_before", []))
     return set()
 
 

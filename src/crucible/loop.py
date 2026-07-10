@@ -52,6 +52,8 @@ class RoundRecord:
     survivors_before: list[str] = field(default_factory=list)
     survivors_after: list[str] = field(default_factory=list)
     kills: list[str] = field(default_factory=list)
+    all_mutants: int = 0
+    counts: dict = field(default_factory=dict)
     status: str = "ok"
     note: str = ""
 
@@ -61,6 +63,9 @@ class LoopResult:
     rounds: list[RoundRecord]
     verdict: str
     total_cost_usd: float
+    baseline_survivors: list[str] = field(default_factory=list)
+    baseline_all_mutants: int = 0
+    baseline_counts: dict = field(default_factory=dict)
 
 
 def _round(env, cfg, round_no, role, survivors_before) -> RoundRecord:
@@ -94,35 +99,48 @@ def _round(env, cfg, round_no, role, survivors_before) -> RoundRecord:
     after = env.measure()
     rec.survivors_after = list(after.survivors)
     rec.kills = [m for m in survivors_before if m not in set(after.survivors)]
+    rec.all_mutants = after.all_mutants
+    rec.counts = dict(after.counts)
     return rec
 
 
 def _run(env, cfg, rounds_budget) -> LoopResult:
     rounds: list[RoundRecord] = []
 
-    first = _round(env, cfg, 0, "tester", survivors_before=[])
+    # Pristine baseline: measure BEFORE any generated test exists, so round 0's
+    # kills are real (tester kills = baseline survivors minus post-round survivors)
+    # and the H1 arm comparison shares an honest denominator.
+    pre = env.measure()
+
+    def _result(verdict: str) -> LoopResult:
+        return LoopResult(rounds, verdict, _cost(rounds),
+                          baseline_survivors=list(pre.survivors),
+                          baseline_all_mutants=pre.all_mutants,
+                          baseline_counts=dict(pre.counts))
+
+    first = _round(env, cfg, 0, "tester", survivors_before=pre.survivors)
     rounds.append(first)
     if first.status != "ok":
         # a run whose tester round never produced valid tests measured nothing;
         # "clean" must be impossible here
-        return LoopResult(rounds, first.status, _cost(rounds))
+        return _result(first.status)
     survivors = first.survivors_after
 
     dry = 0
     for n in range(1, rounds_budget + 1):
         if not survivors:
-            return LoopResult(rounds, "clean", _cost(rounds))
+            return _result("clean")
         rec = _round(env, cfg, n, "critic", survivors)
         rounds.append(rec)
         if rec.status == "aborted":
-            return LoopResult(rounds, "aborted", _cost(rounds))
+            return _result("aborted")
         survivors = rec.survivors_after
         dry = dry + 1 if not rec.kills else 0
         if dry >= cfg.dry_rounds:
-            return LoopResult(rounds, "dry", _cost(rounds))
+            return _result("dry")
 
     verdict = "clean" if not survivors else ("cap" if rounds_budget else "oneshot")
-    return LoopResult(rounds, verdict, _cost(rounds))
+    return _result(verdict)
 
 
 def _cost(rounds) -> float:

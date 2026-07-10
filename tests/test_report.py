@@ -3,8 +3,13 @@ import pytest
 from crucible.report import _killed, mcnemar_exact, paired_kills, summarize
 
 
-def run_dict(survivors_baseline, kills_by_round, cost=1.0, arm="loop"):
-    rounds = [{"round": 0, "role": "tester", "kills": [], "survivors_after": survivors_baseline,
+def run_dict(survivors_baseline, kills_by_round, cost=1.0, arm="loop", round0_kills=None):
+    """Baseline = round 0's survivors_before (the pristine pre-measure); round 0
+    may itself kill (the tester's honest credit)."""
+    round0_kills = round0_kills or []
+    after0 = [m for m in survivors_baseline if m not in round0_kills]
+    rounds = [{"round": 0, "role": "tester", "kills": round0_kills,
+               "survivors_before": survivors_baseline, "survivors_after": after0,
                "cost_usd": 0.5, "status": "ok"}]
     for i, kills in enumerate(kills_by_round, start=1):
         rounds.append({"round": i, "role": "critic", "kills": kills,
@@ -26,8 +31,10 @@ def test_mcnemar_exact_p_value_is_capped_at_one():
 
 
 def test_paired_kills_2x2():
-    a = run_dict(["m1", "m2", "m3", "m4"], [["m1", "m2"]])
-    b = run_dict(["m1", "m2", "m3", "m4"], [["m2", "m3"]])
+    # honest semantics: same pristine baseline both runs; kills split across
+    # round 0 (tester credit) and later rounds — the 2x2 shape is unchanged.
+    a = run_dict(["m1", "m2", "m3", "m4"], [["m2"]], round0_kills=["m1"])
+    b = run_dict(["m1", "m2", "m3", "m4"], [["m3"]], round0_kills=["m2"])
     both, a_only, b_only, neither = paired_kills(a, b)
     assert (both, a_only, b_only, neither) == (1, 1, 1, 1)
 
