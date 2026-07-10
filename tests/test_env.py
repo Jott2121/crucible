@@ -266,6 +266,28 @@ def test_validate_writes_no_salvaged_copy_when_nothing_was_dropped(tmp_path):
     assert not (artifact_dir / "salvaged").exists()
 
 
+def test_reset_clone_removes_stray_artifacts_and_reverts_tracked_files(tmp_path):
+    env = _env(tmp_path, [])
+    # a prior cell's accepted generated test, left untracked in the clone
+    (env.subject_dir / "tests" / "crucible_r9_x_test.py").write_text(
+        "def test_stray():\n    assert True\n"
+    )
+    # engine cache from a prior cell's mutation run
+    (env.subject_dir / "mutants").mkdir()
+    (env.subject_dir / "mutants" / "junk.json").write_text("{}")
+    # a tracked file modified in place (e.g. preflight's scope-write, uncommitted)
+    calc_path = env.subject_dir / "subject_pkg" / "calc.py"
+    original = calc_path.read_text()
+    calc_path.write_text(original + "\n# tampered\n")
+
+    env.reset_clone()
+
+    assert not (env.subject_dir / "tests" / "crucible_r9_x_test.py").exists()
+    assert not (env.subject_dir / "mutants").exists()
+    assert calc_path.read_text() == original
+    assert env._filtered_status().strip() == ""
+
+
 def test_retry_then_raise(tmp_path):
     class DyingProvider(FakeProvider):
         def __init__(self):

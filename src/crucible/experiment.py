@@ -88,6 +88,11 @@ def run_arm(protocol: dict, arm_name: str, subject_dir, runs_root, module_path: 
         module_path=module_path,
         scope=scope,
     )
+    # Cell isolation: cells share a subject clone but must each start from the
+    # clone's committed state, or the previous cell's accepted crucible_ test
+    # files (untracked, since only the arm's own receipt tracks them) leave the
+    # clone dirty and preflight correctly refuses to run.
+    env.reset_clone()
     head_sha = env.preflight(module_path)
 
     cfg = LoopConfig(max_rounds=protocol["rounds"]["max_rounds"],

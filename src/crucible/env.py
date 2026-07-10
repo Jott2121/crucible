@@ -5,6 +5,7 @@ Everything the loop's duck-type promises, wired to the adapters. Retries live he
 """
 from __future__ import annotations
 
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -63,6 +64,14 @@ class SubjectEnv:
                     {a.rstrip("/") for a in ENGINE_ARTIFACTS}
                     or line[:2] == "??" and line[3:].strip().startswith("mutants/"))
         )
+
+    def reset_clone(self) -> None:
+        """Cell isolation: restore the clone to its committed state. Removes prior
+        cells' generated tests and engine caches; tracked files reset to HEAD."""
+        self._git("checkout", "--", ".")
+        for p in (self.subject_dir / "tests").glob("crucible_*_test.py"):
+            p.unlink()
+        shutil.rmtree(self.subject_dir / "mutants", ignore_errors=True)
 
     def preflight(self, module_path: str | None = None) -> str:
         """Hard stop before any model is called: the clone must be a git work tree,

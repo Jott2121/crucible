@@ -143,6 +143,9 @@ def test_run_arm_wires_the_run_dir_into_env_set_artifact_dir(tmp_path, monkeypat
         def __init__(self, **kwargs):
             self.kwargs = kwargs
 
+        def reset_clone(self):
+            pass
+
         def preflight(self, module_path):
             return "a" * 40
 
@@ -183,3 +186,59 @@ def test_run_arm_wires_the_run_dir_into_env_set_artifact_dir(tmp_path, monkeypat
     # set_artifact_dir must be called BEFORE any round runs, so a round-0 rejection
     # has somewhere to land -- the receipt dir must already exist on disk by then.
     assert run_dir.exists()
+
+
+def test_run_arm_resets_the_clone_before_preflight(tmp_path, monkeypatch):
+    # Cell isolation (v3 fix): sequential cells share a subject clone. The previous
+    # cell's accepted crucible_ test files are left untracked in the clone, so the
+    # next cell's preflight would otherwise correctly refuse "subject clone is
+    # dirty". run_arm must call env.reset_clone() before env.preflight(), never after.
+    from crucible import env as env_module
+    from crucible.engine import MutationOutcome
+    from crucible.experiment import run_arm
+    from crucible.loop import RoundReply
+
+    order = []
+
+    class FakeSubjectEnv:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        def reset_clone(self):
+            order.append("reset_clone")
+
+        def preflight(self, module_path):
+            order.append("preflight")
+            return "a" * 40
+
+        def set_artifact_dir(self, run_dir):
+            pass
+
+        def measure(self):
+            return MutationOutcome(counts={"survived": 0}, survivors=[], all_mutants=0)
+
+        def call_tester(self):
+            from oracle_gate.providers import Usage
+            return RoundReply("```python\nassert True\n```", "a" * 64, "fake-model", Usage(1, 1))
+
+        def write_test_file(self, round_no, arm, content):
+            return f"tests/crucible_r{round_no}_{arm}_test.py"
+
+        def validate(self, test_path):
+            return []
+
+        def remove_test_file(self, path):
+            pass
+
+        def assert_clean(self):
+            pass
+
+        def cost_usd(self, model, usage):
+            return 0.0
+
+    monkeypatch.setattr(env_module, "SubjectEnv", FakeSubjectEnv)
+
+    run_arm(PROTOCOL_FOR_RUN_ARM, "oneshot", tmp_path / "graph-guard",
+            tmp_path / "runs", "graph_guard/ppr.py")
+
+    assert order == ["reset_clone", "preflight"]
