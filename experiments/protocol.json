@@ -1,5 +1,5 @@
 {
-  "protocol_version": 6,
+  "protocol_version": 7,
   "tester": {
     "provider": "anthropic",
     "model": "claude-sonnet-5"
@@ -34,7 +34,11 @@
         "src",
         "data"
       ],
-      "canary": "\"\"\"Free canary (crucible v6 amendment): asserts a stable fact about train.py's\nown logic (not a bare constant) so mutmut's trampoline records real coverage.\n\nImported via a manually-inserted src/ sys.path entry rather than\n`from src.train import ...`: mutmut's own trampoline hard-asserts against any\nmodule dotted-name starting with `src.` (mutmut/__main__.py\nrecord_trampoline_hit), which the package-qualified import triggers the\ninstant any train.py function is actually called inside mutmut's mutants/\nsandbox (this is the same crash class DEVIATIONS.md records for the\nattrition-risk-ml v5 reclassification). mutmut's own setup_source_paths()\nadds mutants/src to sys.path specifically so tests can import the bare\nmodule name instead; this test does the same by hand so it also resolves\nidentically outside the sandbox (pristine, where mutants/ doesn't exist).\"\"\"\nimport sys\nfrom pathlib import Path\n\nsys.path.insert(0, str(Path(__file__).resolve().parents[1] / \"src\"))\n\nfrom train import _candidates  # noqa: E402\n\n\ndef test_canary_candidates_has_three_named_models():\n    assert set(_candidates().keys()) == {\"LogisticRegression\", \"RandomForest\", \"XGBoost\"}\n"
+      "extra_files": {
+        "conftest.py": "import sys, pathlib\nsys.path.insert(0, str(pathlib.Path(__file__).parent / \"src\"))\n"
+      },
+      "import_hint": "Import the module under test as `import train` / `from train import ...` (the src/ directory is on sys.path via conftest; do NOT import src.train).",
+      "canary": "\"\"\"Free canary (crucible v7 amendment): asserts a stable fact about train.py's\nown logic (not a bare constant) so mutmut's trampoline records real coverage.\n\nImported the same way protocol.json's import_hint mandates for real generated\ntests (`from train import ...`, never `from src.train import ...`): the\nrepo-root conftest.py shim (protocol.json extra_files) puts src/ on\nsys.path, so this needs no manual per-file sys.path hack (dropped from the v6\ncanary). `from src.train import ...` still crashes mutmut's own trampoline\nthe instant a real function in train.py is called inside its mutants/\nsandbox (mutmut/__main__.py record_trampoline_hit hard-asserts against any\nmodule dotted-name starting with `src.`) -- see DEVIATIONS.md's\nattrition-risk-ml v5 reclassification and the v6 amendment's canary note.\"\"\"\nfrom train import _candidates\n\n\ndef test_canary_candidates_has_three_named_models():\n    assert set(_candidates().keys()) == {\"LogisticRegression\", \"RandomForest\", \"XGBoost\"}\n"
     },
     "graph-guard": {
       "module": "graph_guard/ppr.py",

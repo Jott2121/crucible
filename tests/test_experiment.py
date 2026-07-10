@@ -101,6 +101,70 @@ def test_load_protocol_v1_without_subjects_still_works(tmp_path):
     assert "subjects" not in loaded
 
 
+# --- v7: optional per-subject extra_files / import_hint fields ---
+
+PROTOCOL_V7 = dict(
+    PROTOCOL,
+    protocol_version=7,
+    subjects={
+        "attrition-risk-ml": {
+            "module": "src/train.py",
+            "also_copy": ["src", "data"],
+            "extra_files": {"conftest.py": "import sys\n"},
+            "import_hint": "Import as `import train`, not `import src.train`.",
+        },
+        "rag-guard": {"module": "rag_guard/guard.py", "also_copy": ["rag_guard"]},
+    },
+)
+
+
+def test_load_protocol_v7_accepts_extra_files_and_import_hint(tmp_path):
+    p = tmp_path / "protocol.json"
+    p.write_text(json.dumps(PROTOCOL_V7))
+    loaded = load_protocol(p)
+    scope = loaded["subjects"]["attrition-risk-ml"]
+    assert scope["extra_files"] == {"conftest.py": "import sys\n"}
+    assert scope["import_hint"] == "Import as `import train`, not `import src.train`."
+
+
+def test_load_protocol_v7_subject_without_new_fields_still_works(tmp_path):
+    p = tmp_path / "protocol.json"
+    p.write_text(json.dumps(PROTOCOL_V7))
+    loaded = load_protocol(p)
+    scope = loaded["subjects"]["rag-guard"]
+    assert "extra_files" not in scope and "import_hint" not in scope
+
+
+def test_load_protocol_rejects_non_dict_extra_files(tmp_path):
+    bad = dict(PROTOCOL_V7, subjects={
+        "attrition-risk-ml": {"module": "src/train.py", "extra_files": ["conftest.py"]},
+    })
+    p = tmp_path / "protocol.json"
+    p.write_text(json.dumps(bad))
+    with pytest.raises(ProtocolError, match="extra_files"):
+        load_protocol(p)
+
+
+def test_load_protocol_rejects_extra_files_with_non_string_content(tmp_path):
+    bad = dict(PROTOCOL_V7, subjects={
+        "attrition-risk-ml": {"module": "src/train.py", "extra_files": {"conftest.py": 123}},
+    })
+    p = tmp_path / "protocol.json"
+    p.write_text(json.dumps(bad))
+    with pytest.raises(ProtocolError, match="extra_files"):
+        load_protocol(p)
+
+
+def test_load_protocol_rejects_non_string_import_hint(tmp_path):
+    bad = dict(PROTOCOL_V7, subjects={
+        "attrition-risk-ml": {"module": "src/train.py", "import_hint": ["not", "a", "string"]},
+    })
+    p = tmp_path / "protocol.json"
+    p.write_text(json.dumps(bad))
+    with pytest.raises(ProtocolError, match="import_hint"):
+        load_protocol(p)
+
+
 PROTOCOL_FOR_RUN_ARM = {
     "protocol_version": 2,
     "tester": {"provider": "fake", "model": "fake-model"},

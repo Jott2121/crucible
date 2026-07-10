@@ -562,6 +562,93 @@ This is verified directly against the installed `mutmut` package source in this 
 v6 approved by Jeff Otterson 2026-07-10 (interactive gate) — continuation of the same
 instrument-repair approval standing established for v5.
 
+**Amendment (protocol_version 7 — src-layout import shim + per-subject import hint,
+instrument-repair continuation; no paid cell run under this amendment):**
+
+v6's canary section flagged, but did not fix, a standing `mutmut`-library limitation:
+`attrition-risk-ml`'s `src/train.py` is only importable, from `mutmut`'s own trampoline's
+perspective, as the bare module name `train` — a dotted `src.train` import crashes
+`record_trampoline_hit` (`mutmut/__main__.py`) the instant any real function in the module
+is called inside the `mutants/` sandbox. `src.train` is nonetheless the natural, arguably
+only-obvious import a model or a human would write given the repo's real package layout
+(the subject's own `tests/test_data.py` already imports `src.data` this way). Left
+unaddressed, every real generated Tester/Critic test against `attrition-risk-ml` would hit
+`SandboxStatsFailure` (v5) on its first round, every round, for a reason that has nothing to
+do with test quality.
+
+- **Fix: per-subject `extra_files` — a clone-root import shim, committed with the scope.**
+  `experiments/protocol.json` subjects may now carry an optional `extra_files` map
+  (filename → file content) alongside the existing `module`/`also_copy`/`pytest_args`/
+  `canary` keys. `attrition-risk-ml`'s entry carries one: `conftest.py` inserting
+  `src/` onto `sys.path` (`sys.path.insert(0, str(pathlib.Path(__file__).parent /
+  "src"))`) — the same mechanism `mutmut`'s own `setup_source_paths()` uses internally,
+  applied at the subject-clone root so it resolves identically pristine and inside the
+  sandbox. `SubjectEnv.preflight` (`src/crucible/env.py`) writes each `extra_files` entry
+  into the clone root — only when its content actually differs from what's already there,
+  so a repeat preflight against an already-shimmed clone is a true no-op — **before** the
+  `[tool.mutmut]` scope write, so both land in the **same** commit; the commit message
+  becomes `"crucible: scope mutmut to <module> (+shims)"` when `extra_files` is present
+  (unchanged, no suffix, for every subject without it). A receipt's `head_sha` therefore
+  covers the shim, not just the scope.
+- **Fix: per-subject `import_hint` — one mandatory prompt rule, in the hashed user text.**
+  Subjects may also carry an optional `import_hint` string. `crucible.roles
+  .build_tester_prompt`/`build_critic_prompt` gained an `import_hint` parameter; when set,
+  it is appended as one more "mandatory rule" line in the **user** message, never the
+  shared **system** template — hash discipline: the hint varies per subject (it names that
+  subject's own module-import convention), so it must live in the part of the prompt that
+  is hashed per-call, not the part shared and hashed identically across every subject.
+  `SubjectEnv.call_tester`/`call_critic` thread `scope.get("import_hint")` through
+  automatically; omitting the field (or passing `None`) reproduces the prompt v6 hash
+  exactly (verified: `tests/test_roles.py
+  ::test_tester_prompt_hash_identical_for_omitted_and_explicit_none_hint`).
+  `attrition-risk-ml`'s hint: "Import the module under test as `import train` /
+  `from train import ...` (the src/ directory is on sys.path via conftest; do NOT import
+  src.train)." No other subject carries `import_hint` or `extra_files` — none of the
+  other four hit this failure class.
+- **`load_protocol` validates both new fields when present, tolerates their absence.**
+  `crucible.experiment.load_protocol` now checks, per subject: `extra_files`, if present,
+  must be a dict of `str -> str`; `import_hint`, if present, must be a `str`. Neither field
+  is required — a v6-shaped subject entry with neither key still loads unchanged
+  (`tests/test_experiment.py::test_load_protocol_v7_subject_without_new_fields_still_works`).
+- **`attrition-risk-ml`'s canary rewritten to the same import style the hint mandates.**
+  The v6 canary's manual `sys.path.insert(0, str(Path(__file__).resolve().parents[1] /
+  "src"))` (duplicated by hand in the test file itself) is dropped; the v7 canary now
+  reads simply `from train import _candidates`, relying on the same `conftest.py` shim
+  `extra_files` writes into every real generated test's clone. This is not a cosmetic
+  change: it proves the shim actually does the job the manual hack used to do, under the
+  identical mechanism a real Tester/Critic-generated file will use.
+- **Verified: `experiments/validate_scopes.py`, all 5 subjects, real local `mutmut run`s,
+  $0, no model ever called.** Count-match and canary-must-kill both re-run clean under the
+  v7 protocol (which now writes the shim as part of every `attrition-risk-ml` preflight):
+
+  | Subject | Count-match | Canary (baseline → post-canary killed) |
+  |---|---|---|
+  | attrition-risk-ml | MATCH (255m 0k 255s) | KILLS (0k → 9k) |
+  | graph-guard | MATCH (80m 58k 22s) | KILLS (58k → 63k) |
+  | rag-guard | MATCH, widened-scope note (71m 46k 25s vs. smoke 45k/26s) | KILLS (46k → 47k) |
+  | packaging | MATCH, stripped-suite 0k by design (69m 0k 69s) | KILLS (0k → 24k) |
+  | idna | MATCH, stripped-suite 0k by design (187m 0k 187s) | KILLS (0k → 7k) |
+
+  Identical figures to the v6 table — this amendment changes *how* the canary imports
+  `train.py` (and, going forward, how a real generated test will), not the measured
+  scope or kill counts for any subject. `~/crucible-subjects/attrition-risk-ml`'s HEAD
+  now carries `conftest.py` committed alongside `[tool.mutmut]` (commit `aa4bae1
+  crucible: scope mutmut to src/train.py (+shims)`), confirmed via `git show
+  HEAD:conftest.py` after the validator's own reset-to-HEAD.
+- **Suites green.** `tests/` fast suite (excludes `slow`/`integration`): 171 passed. `-m
+  slow` suite (real mutmut, seconds on the tiny fixture): 2 passed.
+
+This closes the standing limitation the v6 amendment's canary section named but did not
+fix ("flagged, not fixed, as a standing limitation for any future real generated test
+against `attrition-risk-ml`") — the instrument-repair work this protocol's amendment
+sequence (v2 through v7) has been performing is now complete for all five subjects: every
+subject's count-match and canary-must-kill checks pass, and the one subject with a
+library-level import-crash limitation now carries a shim + hint pair that fixes it before
+any real Tester/Critic call, rather than only in the free validator's own canary.
+
+v7 approved by Jeff Otterson 2026-07-10 (interactive gate) — continuation of the same
+instrument-repair approval standing established for v5 and v6.
+
 ## 4. Metrics
 
 - **Primary statistic — per-mutant paired kill outcomes, exact McNemar, two-sided.** Implemented

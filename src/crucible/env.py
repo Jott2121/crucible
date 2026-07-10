@@ -94,6 +94,18 @@ class SubjectEnv:
                 "subject clone is dirty; commit or clean it (receipts must bind to a commit)"
             )
         if module_path:
+            # v7: import shims (e.g. a src-layout conftest.py that puts src/ on
+            # sys.path) are written BEFORE the scope-change commit below, so the
+            # same commit captures both — a receipt's head_sha then covers the
+            # shim too, not just the [tool.mutmut] table. Written only when
+            # content actually differs, so a no-op preflight (scope already
+            # written, shim already committed identically) stays a true no-op.
+            extra_files = (self.scope or {}).get("extra_files") or {}
+            for rel_path, content in extra_files.items():
+                target = self.subject_dir / rel_path
+                if not target.exists() or target.read_text() != content:
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_text(content)
             if self.scope is not None:
                 write_scope(self.subject_dir / "pyproject.toml", [module_path],
                            also_copy=self.scope.get("also_copy"),
@@ -103,9 +115,12 @@ class SubjectEnv:
                 write_scope(self.subject_dir / "pyproject.toml", [module_path],
                            create_if_missing=True)
             if self._git("status", "--porcelain", "-uall").strip():
-                self._git("add", "pyproject.toml")
+                self._git("add", "pyproject.toml", *extra_files.keys())
+                commit_msg = f"crucible: scope mutmut to {module_path}"
+                if extra_files:
+                    commit_msg += " (+shims)"
                 self._git("-c", "user.email=crucible@local", "-c", "user.name=crucible",
-                          "commit", "-qm", f"crucible: scope mutmut to {module_path}")
+                          "commit", "-qm", commit_msg)
         pristine = run_tests(self.subject_dir, run=self.run)
         # pytest exit 5 = "no tests collected": a stripped subject is a valid
         # pristine state (crucible's job is to create the tests). Anything else
@@ -141,11 +156,14 @@ class SubjectEnv:
         raise RuntimeError(f"model call failed after {RETRIES} attempts: {last}")
 
     def call_tester(self) -> RoundReply:
-        prompt = build_tester_prompt(self.module_path, self._module_source())
+        import_hint = (self.scope or {}).get("import_hint")
+        prompt = build_tester_prompt(self.module_path, self._module_source(), import_hint=import_hint)
         return self._call(self.tester_provider, self.tester_model, prompt)
 
     def call_critic(self, survivor_diffs) -> RoundReply:
-        prompt = build_critic_prompt(self.module_path, self._module_source(), survivor_diffs)
+        import_hint = (self.scope or {}).get("import_hint")
+        prompt = build_critic_prompt(self.module_path, self._module_source(), survivor_diffs,
+                                     import_hint=import_hint)
         return self._call(self.critic_provider, self.critic_model, prompt)
 
     # --- files / guardrails ---

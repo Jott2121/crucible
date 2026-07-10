@@ -136,6 +136,148 @@ def test_preflight_writes_also_copy_when_scope_given(tmp_path):
     assert 'pytest_add_cli_args_test_selection = ["tests/test_calc.py"]' in text
 
 
+def test_preflight_writes_extra_files_and_commits_them_with_the_scope(tmp_path):
+    # v7: import shims (e.g. a src-layout conftest.py) are written into the
+    # clone root and committed in the SAME commit as the [tool.mutmut] scope
+    # write, so a receipt's head_sha covers the shim too.
+    import shutil, subprocess
+    from pathlib import Path
+
+    subject = tmp_path / "subject"
+    shutil.copytree(Path(__file__).parent / "fixtures" / "subject", subject)
+    subprocess.run(["git", "init", "-q"], cwd=subject, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=subject, check=True)
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "seed"],
+        cwd=subject, check=True,
+    )
+    conftest_body = "import sys, pathlib\nsys.path.insert(0, str(pathlib.Path(__file__).parent / \"src\"))\n"
+    p = FakeProvider([])
+    env = SubjectEnv(
+        subject_dir=subject, tester_provider=p, tester_model="fake-model",
+        critic_provider=p, critic_model="fake-model", module_path="subject_pkg/calc.py",
+        scope={"extra_files": {"conftest.py": conftest_body}},
+    )
+    env.preflight(module_path="subject_pkg/calc.py")
+
+    conftest = env.subject_dir / "conftest.py"
+    assert conftest.read_text() == conftest_body
+    # committed, not just written -- the tree must end clean
+    assert env._filtered_status().strip() == ""
+    committed = subprocess.run(
+        ["git", "show", "HEAD:conftest.py"], cwd=subject, capture_output=True, text=True, check=True
+    ).stdout
+    assert committed == conftest_body
+    # pyproject.toml (the scope write) is in the SAME commit as conftest.py
+    changed_files = subprocess.run(
+        ["git", "show", "--name-only", "--format=", "HEAD"],
+        cwd=subject, capture_output=True, text=True, check=True,
+    ).stdout.split()
+    assert set(changed_files) == {"pyproject.toml", "conftest.py"}
+    subject_line = subprocess.run(
+        ["git", "log", "-1", "--format=%s"], cwd=subject, capture_output=True, text=True, check=True
+    ).stdout.strip()
+    assert subject_line == "crucible: scope mutmut to subject_pkg/calc.py (+shims)"
+
+
+def test_preflight_commit_message_has_no_shims_suffix_without_extra_files(tmp_path):
+    env = _env(tmp_path, [])
+    env.preflight(module_path="subject_pkg/calc.py")
+    subject_line = subprocess_log_subject(env.subject_dir)
+    assert subject_line == "crucible: scope mutmut to subject_pkg/calc.py"
+
+
+def subprocess_log_subject(cwd):
+    import subprocess
+
+    return subprocess.run(
+        ["git", "log", "-1", "--format=%s"], cwd=cwd, capture_output=True, text=True, check=True
+    ).stdout.strip()
+
+
+def test_preflight_skips_rewriting_extra_file_when_content_is_unchanged(tmp_path):
+    # a second preflight call against an already-scoped, already-shimmed clone
+    # (the real cell-isolation flow: reset_clone + preflight per cell) must be
+    # a true no-op -- no new commit, since neither the scope nor the shim body
+    # actually changed.
+    import shutil, subprocess
+    from pathlib import Path
+
+    subject = tmp_path / "subject"
+    shutil.copytree(Path(__file__).parent / "fixtures" / "subject", subject)
+    subprocess.run(["git", "init", "-q"], cwd=subject, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=subject, check=True)
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "seed"],
+        cwd=subject, check=True,
+    )
+    conftest_body = "import sys\n"
+    p = FakeProvider([])
+    env = SubjectEnv(
+        subject_dir=subject, tester_provider=p, tester_model="fake-model",
+        critic_provider=p, critic_model="fake-model", module_path="subject_pkg/calc.py",
+        scope={"extra_files": {"conftest.py": conftest_body}},
+    )
+    first_sha = env.preflight(module_path="subject_pkg/calc.py")
+    env.reset_clone()
+    second_sha = env.preflight(module_path="subject_pkg/calc.py")
+    assert first_sha == second_sha  # nothing new to commit
+    assert (env.subject_dir / "conftest.py").read_text() == conftest_body
+
+
+def test_call_tester_threads_import_hint_from_scope(tmp_path, monkeypatch):
+    from crucible import env as env_module
+    from crucible.roles import RolePrompt
+
+    captured = {}
+
+    def fake_build_tester_prompt(module_path, module_source, import_hint=None):
+        captured["import_hint"] = import_hint
+        return RolePrompt(system="S", user="U", prompt_sha256="a" * 64)
+
+    monkeypatch.setattr(env_module, "build_tester_prompt", fake_build_tester_prompt)
+
+    env = _env(tmp_path, ["reply"])
+    env.scope = {"import_hint": "Import as `import calc`."}
+    env.call_tester()
+    assert captured["import_hint"] == "Import as `import calc`."
+
+
+def test_call_tester_passes_none_hint_when_scope_has_none(tmp_path, monkeypatch):
+    from crucible import env as env_module
+    from crucible.roles import RolePrompt
+
+    captured = {}
+
+    def fake_build_tester_prompt(module_path, module_source, import_hint=None):
+        captured["import_hint"] = import_hint
+        return RolePrompt(system="S", user="U", prompt_sha256="a" * 64)
+
+    monkeypatch.setattr(env_module, "build_tester_prompt", fake_build_tester_prompt)
+
+    env = _env(tmp_path, ["reply"])  # no scope at all
+    env.call_tester()
+    assert captured["import_hint"] is None
+
+
+def test_call_critic_threads_import_hint_from_scope(tmp_path, monkeypatch):
+    from crucible import env as env_module
+    from crucible.roles import RolePrompt
+
+    captured = {}
+
+    def fake_build_critic_prompt(module_path, module_source, survivor_diffs, import_hint=None):
+        captured["import_hint"] = import_hint
+        return RolePrompt(system="S", user="U", prompt_sha256="a" * 64)
+
+    monkeypatch.setattr(env_module, "build_critic_prompt", fake_build_critic_prompt)
+
+    env = _env(tmp_path, ["reply"])
+    env.scope = {"import_hint": "Import as `import calc`."}
+    env.call_critic({})
+    assert captured["import_hint"] == "Import as `import calc`."
+
+
 def test_assert_clean_tolerates_engine_artifacts_and_generated_tests_only(tmp_path):
     import pytest
 

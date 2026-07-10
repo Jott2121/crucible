@@ -33,6 +33,23 @@ def load_protocol(path) -> dict:
         for subj_name, scope in subjects.items():
             if "module" not in scope:
                 raise ProtocolError(f"subject {subj_name!r} scope missing required key 'module'")
+            # v7: optional per-subject import-shim fields (instrument repair for
+            # src-layout modules whose tests naturally import `src.<name>`, which
+            # crashes mutmut's own trampoline). Both are optional and tolerated
+            # when absent; when present their shape is validated so a malformed
+            # protocol.json fails loud here rather than deep inside preflight.
+            extra_files = scope.get("extra_files")
+            if extra_files is not None:
+                if not isinstance(extra_files, dict) or not all(
+                    isinstance(k, str) and isinstance(v, str) for k, v in extra_files.items()
+                ):
+                    raise ProtocolError(
+                        f"subject {subj_name!r} extra_files must be a dict of "
+                        "filename -> file content (both strings)"
+                    )
+            import_hint = scope.get("import_hint")
+            if import_hint is not None and not isinstance(import_hint, str):
+                raise ProtocolError(f"subject {subj_name!r} import_hint must be a string")
     return data
 
 
