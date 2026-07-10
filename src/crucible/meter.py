@@ -13,7 +13,8 @@ from oracle_gate.providers import Usage
 # $ per 1M tokens (input, output). Verify against the provider's live pricing page
 # when a rate is first used in a paid run; update here with the verification date.
 RATES_EXTRA = {
-    "gpt-5.6": (1.75, 14.0),  # placeholder — MUST be verified before first paid GPT run
+    # verified 2026-07-10 against openai.com announcement (+2 independents)
+    "gpt-5.6-terra": (2.50, 15.0),
 }
 
 

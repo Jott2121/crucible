@@ -649,6 +649,26 @@ any real Tester/Critic call, rather than only in the free validator's own canary
 v7 approved by Jeff Otterson 2026-07-10 (interactive gate) — continuation of the same
 instrument-repair approval standing established for v5 and v6.
 
+**Amendment (protocol_version 8 — H2 critic pinned to a real variant id, rate verified live;
+PRE-DATA, zero loop-cross cells have run):** OpenAI's GPT-5.6 ships as three variants (Sol,
+Terra, Luna); the bare id `gpt-5.6` this protocol and `crucible.meter.RATES_EXTRA` carried
+since §1/§9 does not exist and would never have resolved against a real API. `experiments
+/protocol.json`'s `loop-cross` critic is now pinned to `gpt-5.6-terra`, and `RATES_EXTRA`
+carries its verified per-1M-token rate, $2.50 in / $15 out (verified 2026-07-10 against the
+openai.com announcement plus two independents) — the old `("gpt-5.6", (1.75, 14.0))`
+placeholder is removed outright, so the never-existed bare id now fails closed
+(`UnpricedModel`) rather than silently pricing at a wrong rate. Terra was chosen over Sol
+(flagship, $5/$30) because it is the tier- and price-matched sibling to the same-lineage
+Tester/loop-same Critic, `claude-sonnet-5` ($3/$15) — pinning the price/capability tier this
+way isolates the lineage variable H2 measures; Sol would confound lineage with capability
+tier, weakening the comparison. This is pre-data for H2 (zero `loop-cross` cells have run
+under any protocol version); approved under Jeff's standing GPT-arm gate (credentials +
+verified rate) — credential ping receipt: 16 in / 4 out tokens, 2026-07-10, confirming both
+auth and live credits against `gpt-5.6-terra` before this pin.
+
+v8 approved by Jeff Otterson 2026-07-10 (interactive gate) — closes §9's "MUST be verified
+before the first `loop-cross` (H2) call" requirement.
+
 ## 4. Metrics
 
 - **Primary statistic — per-mutant paired kill outcomes, exact McNemar, two-sided.** Implemented

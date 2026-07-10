@@ -14,14 +14,26 @@ def test_fable_tier():
 
 
 def test_gpt_priced_from_extra_table():
-    # RATES_EXTRA carries what the meter doesn't: gpt-5.6 at ($1.75, $14) per MTok
-    assert cost_usd("gpt-5.6", Usage(1_000_000, 1_000_000)) == pytest.approx(15.75)
+    # RATES_EXTRA carries what the meter doesn't: gpt-5.6-terra at ($2.50, $15) per MTok,
+    # verified 2026-07-10 against the openai.com announcement (+2 independents)
+    assert cost_usd("gpt-5.6-terra", Usage(1_000_000, 1_000_000)) == pytest.approx(17.50)
+
+
+def test_bare_gpt_5_6_id_fails_closed():
+    # the bare "gpt-5.6" id never existed (three variants shipped: sol/terra/luna) -- the
+    # old placeholder rate is gone, so this must fail closed like any other unpriced model
+    with pytest.raises(UnpricedModel):
+        cost_usd("gpt-5.6", Usage(10, 10))
 
 
 def test_gpt_variant_is_not_silently_priced_at_base_rate():
-    # exact match only: a distinct-priced future variant must fail closed
+    # exact match only: a distinct-priced sibling variant must fail closed
     with pytest.raises(UnpricedModel):
         cost_usd("gpt-5.6-preview", Usage(10, 10))
+    with pytest.raises(UnpricedModel):
+        cost_usd("gpt-5.6-sol", Usage(10, 10))
+    with pytest.raises(UnpricedModel):
+        cost_usd("gpt-5.6-luna", Usage(10, 10))
 
 
 def test_unknown_model_fails_closed():

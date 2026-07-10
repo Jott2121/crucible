@@ -1,5 +1,5 @@
 {
-  "protocol_version": 7,
+  "protocol_version": 8,
   "tester": {
     "provider": "anthropic",
     "model": "claude-sonnet-5"
@@ -23,7 +23,7 @@
       "mode": "harden",
       "critic": {
         "provider": "openai",
-        "model": "gpt-5.6"
+        "model": "gpt-5.6-terra"
       }
     }
   },
