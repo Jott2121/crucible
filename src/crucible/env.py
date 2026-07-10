@@ -19,6 +19,10 @@ from crucible.runner import run_tests
 RETRIES = 3
 BACKOFFS = (2, 8)
 
+# Untracked artifacts crucible's own engine leaves in the subject clone; never
+# a model escape route, so the add-only check must not trip on them.
+ENGINE_ARTIFACTS = ("mutants/", "mutants", "coverage.json", ".mutmut-cache")
+
 
 class SubjectEnv:
     def __init__(self, subject_dir, tester_provider, tester_model, critic_provider,
@@ -70,6 +74,12 @@ class SubjectEnv:
         try:
             status = self.run(["git", "status", "--porcelain"], cwd=str(self.subject_dir),
                               capture_output=True, text=True).stdout
+            status = "\n".join(
+                line for line in status.splitlines()
+                if not (line[:2] == "??" and line[3:].strip().rstrip("/") in
+                        {a.rstrip("/") for a in ENGINE_ARTIFACTS}
+                        or line[:2] == "??" and line[3:].strip().startswith("mutants/"))
+            )
             assert_add_only(status, [str(rel)] + self._known_generated())
         except GuardrailViolation:
             (self.subject_dir / rel).unlink(missing_ok=True)

@@ -27,8 +27,6 @@ def _cmd_run(args, mode):
     subject = Path(args.subject).resolve()
     tester = _provider(args.tester, args.fake_replies)
     critic = tester if args.critic == args.tester else _provider(args.critic, args.fake_replies)
-    if isinstance(tester, FakeProvider) and isinstance(critic, FakeProvider) and critic is not tester:
-        critic = tester  # one scripted reply stream for the whole fake run
 
     env = SubjectEnv(subject_dir=subject, tester_provider=tester, tester_model=args.tester_model,
                      critic_provider=critic, critic_model=args.critic_model,

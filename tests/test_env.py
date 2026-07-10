@@ -47,6 +47,15 @@ def test_write_and_remove_test_file_respects_add_only(tmp_path):
     assert not (env.subject_dir / path).exists()
 
 
+def test_engine_artifacts_do_not_trip_add_only(tmp_path):
+    env = _env(tmp_path, [])
+    (env.subject_dir / "mutants").mkdir()
+    (env.subject_dir / "mutants" / "junk.json").write_text("{}")
+    (env.subject_dir / "coverage.json").write_text("{}")
+    path = env.write_test_file(1, "loop", "def test_x():\n    assert True\n")
+    assert (env.subject_dir / path).exists()
+
+
 def test_retry_then_raise(tmp_path):
     class DyingProvider(FakeProvider):
         def __init__(self):
