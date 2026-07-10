@@ -56,6 +56,48 @@ def test_engine_artifacts_do_not_trip_add_only(tmp_path):
     assert (env.subject_dir / path).exists()
 
 
+def test_preflight_raises_on_non_git_dir(tmp_path):
+    import pytest
+
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    env = SubjectEnv(subject_dir=plain, tester_provider=None, tester_model="m",
+                     critic_provider=None, critic_model="m", module_path="x.py")
+    with pytest.raises(RuntimeError):
+        env.preflight()
+
+
+def test_preflight_raises_on_dirty_clone(tmp_path):
+    import pytest
+
+    env = _env(tmp_path, [])
+    (env.subject_dir / "stray.txt").write_text("uncommitted")
+    with pytest.raises(RuntimeError, match="dirty"):
+        env.preflight()
+
+
+def test_preflight_raises_on_red_pristine_suite(tmp_path):
+    import pytest, subprocess
+
+    env = _env(tmp_path, [])
+    (env.subject_dir / "tests" / "test_red.py").write_text(
+        "def test_always_fails():\n    assert False\n"
+    )
+    subprocess.run(["git", "add", "-A"], cwd=env.subject_dir, check=True)
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "red"],
+        cwd=env.subject_dir, check=True,
+    )
+    with pytest.raises(RuntimeError, match="red on pristine"):
+        env.preflight()
+
+
+def test_preflight_green_returns_head_sha(tmp_path):
+    env = _env(tmp_path, [])
+    sha = env.preflight()
+    assert len(sha) == 40 and all(c in "0123456789abcdef" for c in sha)
+
+
 def test_retry_then_raise(tmp_path):
     class DyingProvider(FakeProvider):
         def __init__(self):

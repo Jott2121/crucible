@@ -35,6 +35,41 @@ class SubjectEnv:
         self.engine = MutmutEngine(self.subject_dir, run=run)
         self._sleep = time.sleep
 
+    # --- git (fail loud: a swallowed git error corrupts provenance) ---
+    def _git(self, *args) -> str:
+        proc = self.run(["git", *args], cwd=str(self.subject_dir),
+                        capture_output=True, text=True)
+        if proc.returncode != 0:
+            raise RuntimeError(f"git {' '.join(args)} failed in {self.subject_dir}: "
+                               f"{(proc.stderr or '').strip()}")
+        return proc.stdout
+
+    def _filtered_status(self) -> str:
+        """git status --porcelain minus crucible's own engine artifacts."""
+        status = self._git("status", "--porcelain")
+        return "\n".join(
+            line for line in status.splitlines()
+            if not (line[:2] == "??" and line[3:].strip().rstrip("/") in
+                    {a.rstrip("/") for a in ENGINE_ARTIFACTS}
+                    or line[:2] == "??" and line[3:].strip().startswith("mutants/"))
+        )
+
+    def preflight(self) -> str:
+        """Hard stop before any model is called: the clone must be a git work tree,
+        clean, and green on pristine code. Returns the HEAD sha receipts bind to."""
+        self._git("rev-parse", "--is-inside-work-tree")
+        if self._filtered_status().strip():
+            raise RuntimeError(
+                "subject clone is dirty; commit or clean it (receipts must bind to a commit)"
+            )
+        pristine = run_tests(self.subject_dir, run=self.run)
+        if not pristine.passed:
+            raise RuntimeError(
+                "subject suite is red on pristine code; hard stop before any model "
+                f"is called\n{pristine.output[-2000:]}"
+            )
+        return self.head_sha()
+
     # --- mutation ---
     def measure(self):
         return self.engine.measure()
@@ -72,15 +107,7 @@ class SubjectEnv:
         rel = Path("tests") / test_filename(round_no, arm)
         (self.subject_dir / rel).write_text(body + "\n")
         try:
-            status = self.run(["git", "status", "--porcelain"], cwd=str(self.subject_dir),
-                              capture_output=True, text=True).stdout
-            status = "\n".join(
-                line for line in status.splitlines()
-                if not (line[:2] == "??" and line[3:].strip().rstrip("/") in
-                        {a.rstrip("/") for a in ENGINE_ARTIFACTS}
-                        or line[:2] == "??" and line[3:].strip().startswith("mutants/"))
-            )
-            assert_add_only(status, [str(rel)] + self._known_generated())
+            assert_add_only(self._filtered_status(), [str(rel)] + self._known_generated())
         except GuardrailViolation:
             (self.subject_dir / rel).unlink(missing_ok=True)
             raise
@@ -103,5 +130,4 @@ class SubjectEnv:
         return cost_usd(model, usage)
 
     def head_sha(self) -> str:
-        return self.run(["git", "rev-parse", "HEAD"], cwd=str(self.subject_dir),
-                        capture_output=True, text=True).stdout.strip()
+        return self._git("rev-parse", "HEAD").strip()
