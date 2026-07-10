@@ -56,8 +56,17 @@ class SubjectEnv:
         return proc.stdout
 
     def _filtered_status(self) -> str:
-        """git status --porcelain minus crucible's own engine artifacts."""
-        status = self._git("status", "--porcelain")
+        """git status --porcelain -uall minus crucible's own engine artifacts.
+
+        -uall (vs. porcelain's default -unormal) makes untracked directories
+        enumerate their contents as individual `?? tests/foo_test.py` lines
+        instead of collapsing to a single `?? tests/` line. A stripped subject
+        has no tracked `tests/` dir, so the first generated test file makes it
+        untracked-new; without -uall the collapsed line never matches the
+        add-only allowlist (which lists file paths), and a legitimately
+        written file gets rejected as tampering. The two-char status codes and
+        everything else about the output are unchanged."""
+        status = self._git("status", "--porcelain", "-uall")
         return "\n".join(
             line for line in status.splitlines()
             if not (line[:2] == "??" and line[3:].strip().rstrip("/") in
@@ -93,7 +102,7 @@ class SubjectEnv:
             else:
                 write_scope(self.subject_dir / "pyproject.toml", [module_path],
                            create_if_missing=True)
-            if self._git("status", "--porcelain").strip():
+            if self._git("status", "--porcelain", "-uall").strip():
                 self._git("add", "pyproject.toml")
                 self._git("-c", "user.email=crucible@local", "-c", "user.name=crucible",
                           "commit", "-qm", f"crucible: scope mutmut to {module_path}")
@@ -143,6 +152,9 @@ class SubjectEnv:
     def write_test_file(self, round_no, arm, content) -> str:
         body = extract_test_file(content) if content.strip().startswith("```") or "```python" in content else content
         rel = Path("tests") / test_filename(round_no, arm)
+        # a stripped subject (tests/ removed by git rm) has no tests dir at all;
+        # create the parent before writing so this doesn't crash FileNotFoundError
+        (self.subject_dir / rel).parent.mkdir(parents=True, exist_ok=True)
         (self.subject_dir / rel).write_text(body + "\n")
         try:
             assert_add_only(self._filtered_status(), [str(rel)] + self._known_generated())

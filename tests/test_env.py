@@ -289,6 +289,45 @@ def test_validate_writes_no_salvaged_copy_when_nothing_was_dropped(tmp_path):
     assert not (artifact_dir / "salvaged").exists()
 
 
+def test_write_test_file_succeeds_when_clone_has_no_tests_dir(tmp_path):
+    # a stripped subject (tests/ removed by git rm) has no tests dir at all;
+    # write_test_file must create it rather than crash FileNotFoundError
+    import shutil
+
+    env = _env(tmp_path, [])
+    shutil.rmtree(env.subject_dir / "tests")
+    import subprocess
+
+    subprocess.run(["git", "add", "-A"], cwd=env.subject_dir, check=True)
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "strip tests"],
+        cwd=env.subject_dir, check=True,
+    )
+    path = env.write_test_file(1, "loop", "def test_x():\n    assert True\n")
+    assert (env.subject_dir / path).exists()
+
+
+def test_write_test_file_add_only_accepts_file_in_previously_nonexistent_tests_dir(tmp_path):
+    # regression: git status --porcelain (default -unormal) collapses a wholly
+    # new untracked dir to `?? tests/`, which the add-only allowlist (file
+    # paths) rejects as unexpected -- -uall must enumerate the file itself
+    import shutil, subprocess
+
+    env = _env(tmp_path, [])
+    shutil.rmtree(env.subject_dir / "tests")
+    subprocess.run(["git", "add", "-A"], cwd=env.subject_dir, check=True)
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "strip tests"],
+        cwd=env.subject_dir, check=True,
+    )
+    # write_test_file itself calls assert_add_only internally; if the dir-collapse
+    # bug were present this would raise GuardrailViolation instead of returning
+    path = env.write_test_file(1, "loop", "def test_x():\n    assert True\n")
+    assert (env.subject_dir / path).exists()
+    # and the post-round integrity check (assert_clean) must also pass clean
+    env.assert_clean()
+
+
 def test_reset_clone_removes_stray_artifacts_and_reverts_tracked_files(tmp_path):
     env = _env(tmp_path, [])
     # a prior cell's accepted generated test, left untracked in the clone
