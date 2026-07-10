@@ -20,6 +20,7 @@ from crucible.guardrails import (
 )
 from crucible.loop import RoundReply
 from crucible.meter import cost_usd
+from crucible.providers_ext import TruncatedOutput
 from crucible.roles import build_critic_prompt, build_tester_prompt
 from crucible.runner import run_tests
 
@@ -148,11 +149,18 @@ class SubjectEnv:
         for attempt in range(RETRIES):
             try:
                 text, usage = provider.complete_with_usage(prompt.system, prompt.user, model=model)
-                return RoundReply(text, prompt.prompt_sha256, model, usage)
             except Exception as exc:
                 last = exc
                 if attempt < RETRIES - 1:
                     self._sleep(BACKOFFS[min(attempt, len(BACKOFFS) - 1)])
+                continue
+            # a mechanical cap hit is billed already; retrying would bill it again
+            # and likely truncate again, so it escapes immediately, uncounted
+            # against RETRIES and never wrapped in the generic failure below.
+            cap = getattr(provider, "output_cap", None)
+            if cap is not None and usage.output_tokens >= cap:
+                raise TruncatedOutput(text, usage, model, prompt.prompt_sha256, cap)
+            return RoundReply(text, prompt.prompt_sha256, model, usage)
         raise RuntimeError(f"model call failed after {RETRIES} attempts: {last}")
 
     def call_tester(self) -> RoundReply:
@@ -231,6 +239,17 @@ class SubjectEnv:
                 full.replace(rejected_dir / f"{label}-{Path(path).name}")
             return
         full.unlink(missing_ok=True)
+
+    def archive_rejected_text(self, round_no, arm, text, label="truncated") -> None:
+        """A truncated (or otherwise text-only rejected) model reply is evidence,
+        never silently discarded -- mirrors remove_test_file's preservation, but
+        for a reply that was never written to the subject clone at all (there is
+        no test file to move). No-op when no artifact dir is set (unit tests)."""
+        if self._artifact_dir is None:
+            return
+        rejected_dir = self._artifact_dir / "rejected"
+        rejected_dir.mkdir(parents=True, exist_ok=True)
+        (rejected_dir / f"{label}-r{round_no}-{arm}.txt").write_text(text)
 
     def assert_clean(self, allowed_new=None) -> None:
         """Post-round integrity attestation: after tests execute, the tree must show

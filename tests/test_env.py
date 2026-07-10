@@ -492,6 +492,77 @@ def test_reset_clone_removes_stray_artifacts_and_reverts_tracked_files(tmp_path)
     assert env._filtered_status().strip() == ""
 
 
+def test_call_raises_truncated_output_when_usage_hits_cap_no_retry(tmp_path):
+    import pytest
+
+    from crucible.providers_ext import TruncatedOutput
+
+    class CappedProvider(FakeProvider):
+        output_cap = 10
+
+        def __init__(self):
+            super().__init__([])
+            self.calls = 0
+
+        def complete_with_usage(self, system, user, model=None):
+            self.calls += 1
+            return "truncated reply", Usage(5, 10)
+
+    env = _env(tmp_path, [])
+    env.tester_provider = provider = CappedProvider()
+    env._sleep = lambda s: None
+    with pytest.raises(TruncatedOutput) as excinfo:
+        env.call_tester()
+    exc = excinfo.value
+    assert exc.text == "truncated reply"
+    assert exc.usage == Usage(5, 10)
+    assert exc.model == "fake-model"
+    assert exc.cap == 10
+    assert len(exc.prompt_sha256) == 64
+    # a truncated call is billed once; retrying would bill it again
+    assert provider.calls == 1
+
+
+def test_call_does_not_raise_when_usage_under_cap(tmp_path):
+    class CappedProvider(FakeProvider):
+        output_cap = 10
+
+        def __init__(self):
+            super().__init__([])
+
+        def complete_with_usage(self, system, user, model=None):
+            return "fine reply", Usage(5, 9)
+
+    env = _env(tmp_path, [])
+    env.tester_provider = CappedProvider()
+    reply = env.call_tester()
+    assert reply.text == "fine reply"
+
+
+def test_call_does_not_raise_when_provider_has_no_output_cap(tmp_path):
+    # FakeProvider (like OpenAIProvider) carries no output_cap: never checked
+    env = _env(tmp_path, [GOOD_TESTS])
+    reply = env.call_tester()
+    assert reply.text == GOOD_TESTS
+
+
+def test_archive_rejected_text_writes_under_rejected_when_artifact_dir_set(tmp_path):
+    env = _env(tmp_path, [])
+    artifact_dir = tmp_path / "run-dir"
+    artifact_dir.mkdir()
+    env.set_artifact_dir(artifact_dir)
+    env.archive_rejected_text(1, "loop", "truncated model text")
+    written = artifact_dir / "rejected" / "truncated-r1-loop.txt"
+    assert written.exists()
+    assert written.read_text() == "truncated model text"
+
+
+def test_archive_rejected_text_noop_when_no_artifact_dir(tmp_path):
+    env = _env(tmp_path, [])
+    env.archive_rejected_text(1, "loop", "some text")  # must not raise
+    assert not (env.subject_dir / "rejected").exists()
+
+
 def test_retry_then_raise(tmp_path):
     class DyingProvider(FakeProvider):
         def __init__(self):

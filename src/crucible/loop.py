@@ -14,6 +14,8 @@ The `env` duck-type (implemented for real in Task 11's CLI, faked in tests):
   env.validate(test_path) -> list[str]  (raises GuardrailViolation; returns names of any
     pristine-failing tests salvaged/dropped from the file -- v3 per-test salvage)
   env.remove_test_file(path) -> None  (a rejected round leaves no trace)
+  env.archive_rejected_text(round_no, arm, text) -> None  (preserve a truncated reply
+    as evidence; never touches the subject clone)
   env.assert_clean() -> None  (post-round integrity attestation; raises GuardrailViolation)
   env.cost_usd(model, usage) -> float
 """
@@ -25,6 +27,7 @@ from oracle_gate.providers import Usage
 
 from crucible.engine import SandboxStatsFailure
 from crucible.guardrails import GuardrailViolation
+from crucible.providers_ext import TruncatedOutput
 
 
 @dataclass(frozen=True)
@@ -80,6 +83,17 @@ def _round(env, cfg, round_no, role, survivors_before) -> RoundRecord:
         else:
             diffs = {mid: env.survivor_diff(mid) for mid in survivors_before}
             reply = env.call_critic(diffs)
+    except TruncatedOutput as exc:
+        # billed but unusable: record the round honestly (the tokens WERE spent)
+        # and archive the reply as evidence, rather than let it read as a silent
+        # model/network failure. Never retried upstream -- see env._call.
+        rec.model, rec.prompt_sha256 = exc.model, exc.prompt_sha256
+        rec.usage_in, rec.usage_out = exc.usage.input_tokens, exc.usage.output_tokens
+        rec.cost_usd = env.cost_usd(exc.model, exc.usage)
+        env.archive_rejected_text(round_no, cfg.arm, exc.text)
+        rec.status, rec.note, rec.test_file = "rejected", str(exc), None
+        rec.survivors_after = list(survivors_before)  # zero kills credited
+        return rec
     except Exception as exc:  # model/network failure after env-level retries
         rec.status, rec.note = "aborted", f"model call failed: {type(exc).__name__}: {exc}"
         # an aborted round killed nothing: keep the survivor context rather than

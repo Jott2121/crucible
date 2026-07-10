@@ -4,6 +4,7 @@ from oracle_gate.providers import Usage
 from crucible.engine import MutationOutcome, SandboxStatsFailure
 from crucible.guardrails import GuardrailViolation
 from crucible.loop import LoopConfig, LoopResult, RoundReply, harden, oneshot
+from crucible.providers_ext import TruncatedOutput
 
 
 def outcome(survivors):
@@ -22,6 +23,7 @@ class FakeEnv:
         reject_on_write=False,
         fail_from_call=None,
         dropped_by_round=None,
+        truncate_on_call=None,
     ):
         self.measurements = list(measurements)
         self.reject_rounds = set(reject_rounds)
@@ -30,11 +32,18 @@ class FakeEnv:
         # 0-indexed count of model calls (tester+critic combined, in call order);
         # once the running count reaches fail_from_call, that call and all later ones fail.
         self.fail_from_call = fail_from_call
+        # 0-indexed call count at which the reply raises TruncatedOutput instead
+        # of a normal RoundReply (once; later calls behave normally).
+        self.truncate_on_call = truncate_on_call
         self.reject_on_write = reject_on_write
         self.written, self.removed = [], []
         self.calls = []  # records "tester"/"critic" in the order env was asked to speak
+        self.archived = []  # (round_no, arm, text, label) recorded by archive_rejected_text
         self._round = 0
         self._call_count = 0
+
+    def archive_rejected_text(self, round_no, arm, text, label="truncated"):
+        self.archived.append((round_no, arm, text, label))
 
     def measure(self):
         return self.measurements.pop(0)
@@ -44,10 +53,16 @@ class FakeEnv:
 
     def _reply(self, role):
         self.calls.append(role)
+        should_truncate = self.truncate_on_call is not None and self._call_count == self.truncate_on_call
         should_fail = self.fail_calls or (
             self.fail_from_call is not None and self._call_count >= self.fail_from_call
         )
         self._call_count += 1
+        if should_truncate:
+            raise TruncatedOutput(
+                text="truncated model output", usage=Usage(20, 32000),
+                model="claude-sonnet-5", prompt_sha256="b" * 64, cap=32000,
+            )
         if should_fail:
             raise RuntimeError("model down")
         return RoundReply("```python\nassert True\n```", "a" * 64, "claude-sonnet-5", Usage(10, 5))
@@ -324,3 +339,38 @@ def test_clean_verdict_when_last_round_exhausts_the_budget():
     result = harden(env, LoopConfig(max_rounds=1, dry_rounds=99))
     assert result.verdict == "clean"
     assert len(result.rounds) == 2
+
+
+def test_critic_round_truncation_is_rejected_with_billed_receipt_and_archived_text():
+    # v9 instrument fix: a truncated critic reply is billed (the tokens WERE spent)
+    # and archived as evidence, but never retried and never credited with a kill.
+    # call 0 = tester (ok), call 1 = critic (truncates), call 2 = critic (ok, zero-kill)
+    env = FakeEnv(
+        [outcome(["m1"]), outcome(["m1"]), outcome(["m1"])],
+        truncate_on_call=1,
+    )
+    result = harden(env, LoopConfig(dry_rounds=2, arm="loop"))
+    rejected = result.rounds[1]
+    assert rejected.status == "rejected"
+    assert rejected.note.startswith("truncated: output hit max_tokens cap")
+    assert rejected.model == "claude-sonnet-5"
+    assert rejected.prompt_sha256 == "b" * 64
+    assert rejected.usage_in == 20 and rejected.usage_out == 32000
+    assert rejected.cost_usd > 0
+    assert rejected.test_file is None
+    assert rejected.survivors_after == ["m1"]  # zero kills credited
+    assert env.archived == [(1, "loop", "truncated model output", "truncated")]
+    # the loop continues past the rejected round to a normal dry verdict
+    assert result.verdict == "dry"
+    assert len(result.rounds) == 3
+
+
+def test_tester_round_truncation_makes_the_run_verdict_rejected():
+    env = FakeEnv([outcome(["m1"])], truncate_on_call=0)
+    result = oneshot(env, LoopConfig(arm="oneshot"))
+    assert result.verdict == "rejected"
+    assert result.rounds[0].status == "rejected"
+    assert result.rounds[0].note.startswith("truncated: output hit max_tokens cap")
+    assert result.rounds[0].usage_in == 20 and result.rounds[0].usage_out == 32000
+    assert result.rounds[0].cost_usd > 0
+    assert env.archived == [(0, "oneshot", "truncated model output", "truncated")]
