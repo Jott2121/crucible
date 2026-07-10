@@ -1,0 +1,204 @@
+import pytest
+
+from rag_guard.guard import should_refuse, groundedness, redact_pii
+
+
+# ---------------------------------------------------------------------------
+# should_refuse
+# ---------------------------------------------------------------------------
+
+def test_should_refuse_empty_hits():
+    assert should_refuse([]) is True
+
+
+def test_should_refuse_below_default_threshold():
+    hits = [{"score": 0.01}, {"score": 0.02}]
+    assert should_refuse(hits) is True
+
+
+def test_should_refuse_at_default_threshold_boundary_not_refused():
+    # max score equal to min_score should NOT trigger refusal (strict <)
+    hits = [{"score": 0.05}]
+    assert should_refuse(hits) is False
+
+
+def test_should_refuse_above_default_threshold():
+    hits = [{"score": 0.9}]
+    assert should_refuse(hits) is False
+
+
+def test_should_refuse_uses_max_score_among_hits():
+    hits = [{"score": 0.01}, {"score": 0.5}, {"score": 0.02}]
+    assert should_refuse(hits) is False
+
+
+def test_should_refuse_missing_score_key_defaults_to_zero():
+    hits = [{"foo": "bar"}]
+    assert should_refuse(hits) is True
+
+
+def test_should_refuse_custom_min_score():
+    hits = [{"score": 0.2}]
+    assert should_refuse(hits, min_score=0.3) is True
+    assert should_refuse(hits, min_score=0.1) is False
+
+
+def test_should_refuse_custom_min_score_boundary():
+    hits = [{"score": 0.3}]
+    # equal to min_score -> not refused (strict less-than)
+    assert should_refuse(hits, min_score=0.3) is False
+
+
+# ---------------------------------------------------------------------------
+# groundedness
+# ---------------------------------------------------------------------------
+
+def test_groundedness_empty_answer():
+    result = groundedness("", ["some context here"])
+    assert result["grounded"] is False
+    assert result["support"] == pytest.approx(0.0)
+
+
+def test_groundedness_answer_only_stopwords():
+    # "the" "and" "for" "are" are all stopwords -> no content tokens
+    result = groundedness("the and for are", ["anything at all"])
+    assert result["grounded"] is False
+    assert result["support"] == pytest.approx(0.0)
+
+
+def test_groundedness_fully_supported():
+    result = groundedness("apple banana cherry", ["apple banana cherry smoothie"])
+    assert result["support"] == pytest.approx(1.0)
+    assert result["grounded"] is True
+
+
+def test_groundedness_partial_support_above_threshold():
+    # content tokens: apple, banana, cherry (3 tokens); context has apple, banana -> 2/3
+    result = groundedness("apple banana cherry", ["apple banana"])
+    assert result["support"] == pytest.approx(2 / 3, rel=1e-6)
+    assert result["grounded"] is True  # 0.667 >= 0.5 default threshold
+
+
+def test_groundedness_partial_support_below_custom_threshold():
+    result = groundedness("apple banana cherry", ["apple banana"], threshold=0.7)
+    assert result["support"] == pytest.approx(2 / 3, rel=1e-6)
+    assert result["grounded"] is False  # 0.667 < 0.7
+
+
+def test_groundedness_exact_half_boundary_is_grounded():
+    # content tokens: apple, banana (2 tokens); context supports only apple -> 0.5
+    result = groundedness("apple banana", ["apple"])
+    assert result["support"] == pytest.approx(0.5)
+    assert result["grounded"] is True  # >= threshold means grounded
+
+
+def test_groundedness_no_support_at_all():
+    result = groundedness("apple banana", ["zebra octopus"])
+    assert result["support"] == pytest.approx(0.0)
+    assert result["grounded"] is False
+
+
+def test_groundedness_multiple_contexts_union():
+    # apple in context1, banana in context2 -> full support
+    result = groundedness("apple banana", ["apple only", "banana only"])
+    assert result["support"] == pytest.approx(1.0)
+    assert result["grounded"] is True
+
+
+def test_groundedness_case_insensitive_matching():
+    result = groundedness("APPLE Banana", ["apple banana"])
+    assert result["support"] == pytest.approx(1.0)
+    assert result["grounded"] is True
+
+
+# ---------------------------------------------------------------------------
+# redact_pii
+# ---------------------------------------------------------------------------
+
+def test_redact_pii_no_pii_unchanged():
+    text = "This is a plain sentence with no sensitive data."
+    assert redact_pii(text) == text
+
+
+def test_redact_pii_email():
+    text = "Contact me at foo.bar@example.com for details."
+    result = redact_pii(text)
+    assert "foo.bar@example.com" not in result
+    assert "[redacted-email]" in result
+    assert result == "Contact me at [redacted-email] for details."
+
+
+def test_redact_pii_multiple_emails():
+    text = "email1@test.com and email2@test.org"
+    result = redact_pii(text)
+    assert result == "[redacted-email] and [redacted-email]"
+
+
+def test_redact_pii_ssn():
+    text = "SSN: 123-45-6789 on file."
+    result = redact_pii(text)
+    assert result == "SSN: [redacted-ssn] on file."
+
+
+def test_redact_pii_phone_with_dashes():
+    text = "Call 123-456-7890 now."
+    result = redact_pii(text)
+    assert result == "Call [redacted-phone] now."
+
+
+def test_redact_pii_phone_with_dots():
+    text = "Call 123.456.7890 now."
+    result = redact_pii(text)
+    assert result == "Call [redacted-phone] now."
+
+
+def test_redact_pii_phone_with_spaces():
+    text = "Call 123 456 7890 now."
+    result = redact_pii(text)
+    assert result == "Call [redacted-phone] now."
+
+
+def test_redact_pii_card_number_no_separators():
+    text = "Card 4111111111111111 expires soon."
+    result = redact_pii(text)
+    assert "4111111111111111" not in result
+    assert "[redacted-card]" in result
+
+
+def test_redact_pii_card_number_with_dashes():
+    text = "Card 4111-1111-1111-1111 expires soon."
+    result = redact_pii(text)
+    assert "[redacted-card]" in result
+    assert "4111-1111-1111-1111" not in result
+
+
+def test_redact_pii_short_digit_run_not_redacted_as_card():
+    # 12 digits, below the 13-digit minimum for card matching, and no
+    # separators to trigger phone/ssn patterns -> left unchanged.
+    text = "Ref number 411111111111 done."
+    result = redact_pii(text)
+    assert result == text
+
+
+def test_redact_pii_seventeen_digit_run_not_matched_as_card():
+    # 17 contiguous digits cannot end on a word boundary within 13-16 reps,
+    # so the whole run should remain unredacted.
+    text = "Ref number 41111111111111111 done."
+    result = redact_pii(text)
+    assert result == text
+
+
+def test_redact_pii_combined_types_in_one_text():
+    text = (
+        "Email: a@b.com, SSN: 123-45-6789, "
+        "Phone: 123-456-7890, Card: 4111111111111111."
+    )
+    result = redact_pii(text)
+    assert "a@b.com" not in result
+    assert "123-45-6789" not in result
+    assert "123-456-7890" not in result
+    assert "4111111111111111" not in result
+    assert "[redacted-email]" in result
+    assert "[redacted-ssn]" in result
+    assert "[redacted-phone]" in result
+    assert "[redacted-card]" in result

@@ -1,0 +1,93 @@
+import pytest
+from rag_guard.guard import should_refuse, groundedness, redact_pii, _content_tokens
+
+def test_content_tokens_empty_string_is_empty_set():
+    assert _content_tokens('') == set()
+
+def test_content_tokens_none_is_empty_set():
+    assert _content_tokens(None) == set()
+
+def test_content_tokens_filters_stopwords_only():
+    assert _content_tokens('the and for') == set()
+
+def test_content_tokens_keeps_content_words_removes_stopwords():
+    result = _content_tokens('the cat sat on a mat')
+    assert result == {'cat', 'sat', 'mat'}
+
+def test_groundedness_empty_answer_returns_zero_support_and_not_grounded():
+    result = groundedness('', ['some context here'])
+    assert result['grounded'] is False
+    assert result['support'] == pytest.approx(0.0)
+
+def test_groundedness_uses_union_of_all_contexts():
+    answer = 'apple banana'
+    contexts = ['apple fruit', 'banana fruit']
+    result = groundedness(answer, contexts)
+    assert result['support'] == pytest.approx(1.0)
+    assert result['grounded'] is True
+
+def test_groundedness_support_is_division_not_multiplication():
+    answer = 'apple banana'
+    contexts = ['apple fruit', 'banana fruit']
+    result = groundedness(answer, contexts)
+    assert result['support'] == pytest.approx(1.0)
+    assert result['support'] <= 1.0
+
+def test_groundedness_threshold_boundary_is_inclusive():
+    answer = 'apple banana'
+    contexts = ['apple xyz']
+    result = groundedness(answer, contexts, threshold=0.5)
+    assert result['support'] == pytest.approx(0.5)
+    assert result['grounded'] is True
+
+def test_groundedness_support_rounded_to_four_decimals():
+    answer = 'apple banana cherry'
+    contexts = ['apple banana']
+    result = groundedness(answer, contexts)
+    expected = round(2 / 3, 4)
+    assert result['support'] == pytest.approx(expected, rel=1e-06)
+    assert isinstance(result['support'], float)
+
+def test_groundedness_return_dict_has_expected_keys_for_empty_answer():
+    result = groundedness('', ['context words here'])
+    assert set(result.keys()) == {'grounded', 'support'}
+    assert result['grounded'] is False
+    assert result['support'] == pytest.approx(0.0)
+
+def test_redact_pii_email():
+    text = 'Contact me at foo@bar.com for details'
+    result = redact_pii(text)
+    assert result == 'Contact me at [redacted-email] for details'
+
+def test_redact_pii_ssn():
+    text = 'SSN: 123-45-6789 is sensitive'
+    result = redact_pii(text)
+    assert result == 'SSN: [redacted-ssn] is sensitive'
+
+def test_redact_pii_phone():
+    text = 'Call 123-456-7890 now'
+    result = redact_pii(text)
+    assert result == 'Call [redacted-phone] now'
+
+def test_redact_pii_all_combined():
+    text = 'Email a@b.com, ssn 111-22-3333'
+    result = redact_pii(text)
+    assert '[redacted-email]' in result
+    assert '[redacted-ssn]' in result
+    assert 'a@b.com' not in result
+    assert '111-22-3333' not in result
+
+def test_should_refuse_default_min_score_is_low_enough():
+    assert should_refuse([{'score': 0.5}]) is False
+
+def test_should_refuse_missing_score_defaults_to_zero():
+    assert should_refuse([{}]) is True
+
+def test_should_refuse_boundary_score_equal_min_score_does_not_refuse():
+    assert should_refuse([{'score': 0.05}], min_score=0.05) is False
+
+def test_should_refuse_score_below_min_score_refuses():
+    assert should_refuse([{'score': 0.01}], min_score=0.05) is True
+
+def test_should_refuse_no_hits_refuses():
+    assert should_refuse([]) is True
