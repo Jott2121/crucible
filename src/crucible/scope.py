@@ -84,6 +84,7 @@ class CanaryVerdict:
     kills_after: int
     mutants: int
     passed: bool
+    waived: bool = False
 
 
 def _public_top_level_names(path: Path) -> list[str]:
@@ -115,17 +116,31 @@ def _public_top_level_names(path: Path) -> list[str]:
 
 
 # Bounded, safe smoke-call arg tuples across the common small arities (0-3
-# positional params); TypeError from an arity mismatch is skipped, any OTHER
-# exception (e.g. a boundary condition mutated into a ZeroDivisionError) is
-# left to propagate as a genuine, mechanically real kill.
+# positional params) plus a few common container shapes (empty list/dict/str,
+# a list-of-dict, and their 2-arity pairings) -- TypeError from an arity
+# mismatch is skipped; any OTHER exception (e.g. a boundary condition mutated
+# into a ZeroDivisionError) is left to propagate as a genuine, mechanically
+# real kill WHEN a real mutant is under test, and tolerated otherwise (see
+# _UNDER_MUTANT in _CANARY below).
 _CANARY_PROBES = [(), (0,), (1,), (0, 0), (1, 0), (0, 1), (1, 1), (-1, 1),
-                   (0, 0, 0), (5, 0, 10), (-1, 0, 10), (11, 0, 10)]
+                   (0, 0, 0), (5, 0, 10), (-1, 0, 10), (11, 0, 10),
+                   ([],), ({},), ("",), ([{}],), ([], 0), (0, [])]
 
 _CANARY = (
     "import importlib\n"
+    "import os\n"
     "mod = importlib.import_module({modname!r})\n"
     "_NAMES = {names!r}\n"
     "_PROBES = {probes!r}\n"
+    # mutmut's trampoline (mutmut/mutation/trampoline.py) sets MUTANT_UNDER_TEST
+    # to "{module}.{mutant_name}" while a specific mutant is active, to "stats"
+    # during its own pre-mutation baseline/coverage pass, and leaves it unset
+    # for any direct pytest invocation (our own pristine check). Only the first
+    # case is "a real mutant is running right now" -- "stats" and unset both
+    # execute the ORIGINAL function, so a probe exception there is a genuine
+    # domain-validation exception on unmutated code, not a mutation-induced
+    # crash, and must never be allowed to fail the run.
+    "_UNDER_MUTANT = os.environ.get('MUTANT_UNDER_TEST', '') not in ('', 'stats', 'fail')\n"
     "def test_crucible_canary():\n"
     "    assert _NAMES, 'module exports nothing public'\n"
     "    for name in _NAMES:\n"
@@ -138,38 +153,74 @@ _CANARY = (
     "                obj(*args)\n"
     "            except TypeError:\n"
     "                continue\n"
+    "            except Exception:\n"
+    "                if _UNDER_MUTANT:\n"
+    "                    raise\n"
+    "                continue\n"
     "            else:\n"
     "                break\n"
 )
 
 
 def canary_probe(subject_dir: Path, module: str, run=subprocess.run) -> CanaryVerdict:
-    """Must-kill collection proof before any model spend (v6 lesson): write a
-    canary test, prove it passes pristine BEFORE spending a single full
-    mutmut measure, measure the pre-canary baseline, restore the canary, and
-    require the killed count to STRICTLY increase. Proves mutmut actually
-    collects a freshly written test file under this scope; the smoke-call
-    over the target's public symbols (bounded, safe argument tuples; only an
-    arity TypeError is swallowed) gives it a real, if narrow, chance of
-    actually killing a mutant -- it does not claim deep behavioral coverage,
-    the loop's generated tests supply that.
+    """Must-kill collection proof before any model spend (v6 lesson) -- TWO-BRANCH
+    policy (amended 2026-07-11, owner-approved): a fresh canary test is only
+    written and measured when there is no cheaper mechanical proof already
+    available.
 
-    Deliberately checks pristine validity first (a single `run` call) rather
-    than measuring "before" first: a broken `run` seam must fail loud on the
-    canary check itself, not three calls deep inside a full mutmut measure.
-    The canary file is parked outside tests/ while "before" is measured (a
-    true pre-canary baseline) and restored for "after"; both paths are
-    removed in a finally, pass or fail."""
+    Policy and justification: first measure the EXISTING suite's baseline
+    kill count under this scope, before writing anything. If that baseline
+    already kills at least one mutant (before.killed > 0), that fact alone IS
+    mechanical proof that mutmut collects and executes tests here -- the
+    exact v6 failure class this gate exists to catch (a scope so broken that
+    no test file, however written, is ever collected) cannot be true if an
+    existing test is already registering kills under it. The marginal "can a
+    BRAND NEW file also get collected" canary is redundant in that case, so
+    it is skipped entirely -- no canary is written, no pristine check runs,
+    and no second (expensive) mutmut measure happens; the verdict is
+    WAIVED-passed on the strength of the existing suite alone.
+
+    Only when the baseline is a genuine zero (an empty or too-weak-to-kill
+    suite -- exactly the original v6 disaster case, where a scope defect can
+    silently swallow every test including freshly generated ones, and no
+    existing test offers any counter-proof) does the strict must-kill canary
+    run: write a canary test, prove it passes on pristine code (so a broken
+    PROBE, not the subject, is what's ever blamed), measure again, and
+    require the kill count to strictly increase.
+
+    Residual/dependency: a WAIVED verdict proves collection of the EXISTING
+    test files only, for the module as scoped right now. It does NOT
+    independently re-prove that a brand-new crucible_*_test.py written later
+    in the loop will also be collected -- that ongoing guarantee still rests
+    entirely on scope.detect()/apply() always writing
+    pytest_add_cli_args_test_selection in EXCLUDE form (never an
+    include-list; the v6 lesson) so newly generated test files are never
+    accidentally filtered out. The waiver and the exclude-only scope-writer
+    are companion guarantees, not substitutes for each other.
+
+    The "before" measure happens first and unconditionally, so a waived scope
+    never pays for writing or pristine-checking a canary at all; only the
+    strict branch writes one, and it is always removed in a finally, pass or
+    fail."""
     subject_dir = Path(subject_dir)
     modname = module[:-3].replace("/", ".")
     if modname.startswith("src."):
         modname = modname[len("src."):]          # v7: bare name, never src.-qualified
-    names = _public_top_level_names(subject_dir / module)
     engine = MutmutEngine(subject_dir, run=run)
+    before = engine.measure()
+    before_killed = int(before.counts.get("killed", 0))
+    if before_killed > 0:
+        return CanaryVerdict(
+            kills_before=before_killed,
+            kills_after=before_killed,
+            mutants=before.all_mutants,
+            passed=True,
+            waived=True,
+        )
+    names = _public_top_level_names(subject_dir / module)
     tests_dir = subject_dir / "tests"
     tests_dir.mkdir(exist_ok=True)
     canary = tests_dir / "crucible_canary_test.py"
-    parked = subject_dir / ".crucible_canary_test.py.parked"
     try:
         canary.write_text(_CANARY.format(modname=modname, names=names, probes=_CANARY_PROBES))
         pristine = run([sys.executable, "-m", "pytest", "-q", str(canary), "--ignore=mutants"],
@@ -178,16 +229,14 @@ def canary_probe(subject_dir: Path, module: str, run=subprocess.run) -> CanaryVe
             raise RuntimeError(
                 "canary failed on pristine code -- the probe is wrong, not the subject: "
                 f"{(pristine.stdout or '')[-400:]}")
-        canary.rename(parked)             # true pre-canary baseline for "before"
-        before = engine.measure()
-        parked.rename(canary)             # restore for "after"
         after = engine.measure()
     finally:
         canary.unlink(missing_ok=True)
-        parked.unlink(missing_ok=True)
+    after_killed = int(after.counts.get("killed", 0))
     return CanaryVerdict(
-        kills_before=int(before.counts.get("killed", 0)),
-        kills_after=int(after.counts.get("killed", 0)),
+        kills_before=before_killed,
+        kills_after=after_killed,
         mutants=after.all_mutants,
-        passed=int(after.counts.get("killed", 0)) > int(before.counts.get("killed", 0)),
+        passed=after_killed > before_killed,
+        waived=False,
     )

@@ -1,8 +1,12 @@
 """crucible CLI. Subcommands: oneshot, harden, report, experiment, scope.
 
 Plain-ASCII output. Exit codes: 0 = clean/dry/cap/oneshot; 3 = aborted/rejected;
-4 = scope's canary probe found kills did not increase (unproven scope, refuse
-before spending any model tokens).
+4 = scope's canary probe refused -- either a RuntimeError from detect/apply/
+canary_probe (single refusal path, printed as "REFUSING: {exc}", no traceback
+leak) or a proven kills-did-not-increase verdict (unproven scope, refuse
+before spending any model tokens). A WAIVED verdict (the existing suite
+already kills under this scope -- 2026-07-11 owner-approved amendment) exits
+0, not 4.
 """
 from __future__ import annotations
 
@@ -128,14 +132,22 @@ def main(argv=None) -> int:
     if args.cmd == "scope":
         import crucible.scope as scope_mod
         subject = Path(args.subject).resolve()
-        plan = scope_mod.detect(subject, args.module)
-        scope_mod.apply(subject, plan)
-        for note in plan.notes:
-            print(f"note: {note}")
-        v = scope_mod.canary_probe(subject, args.module)
-        status = "KILLS" if v.passed else "NO-KILLS"
+        try:
+            plan = scope_mod.detect(subject, args.module)
+            scope_mod.apply(subject, plan)
+            for note in plan.notes:
+                print(f"note: {note}")
+            v = scope_mod.canary_probe(subject, args.module)
+        except RuntimeError as exc:
+            print(f"REFUSING: {exc}")
+            return 4
         print(f"scope written: also_copy={plan.also_copy} pytest_args={plan.pytest_args} "
               f"shim={plan.needs_src_shim}")
+        if v.waived:
+            print(f"canary: WAIVED (existing suite kills {v.kills_before} of {v.mutants} "
+                  "mutants; collection proven)")
+            return 0
+        status = "KILLS" if v.passed else "NO-KILLS"
         print(f"canary: {status} ({v.kills_before} -> {v.kills_after} of {v.mutants} mutants)")
         if not v.passed:
             print("REFUSING: a fresh test file is not being collected under this scope; "

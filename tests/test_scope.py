@@ -74,6 +74,8 @@ def test_apply_writes_scope_and_shim(tmp_path):
 
 
 def test_canary_probe_passes_when_kills_increase(tmp_path, monkeypatch):
+    """killed=0 baseline (empty/weak suite) -- exercises the STRICT branch:
+    write canary, pristine-check, measure again, require a strict increase."""
     import crucible.scope as scope_mod
 
     class FakeOutcome:
@@ -82,7 +84,7 @@ def test_canary_probe_passes_when_kills_increase(tmp_path, monkeypatch):
             self.all_mutants = 10
             self.survivors = []
 
-    measures = iter([FakeOutcome(3), FakeOutcome(5)])
+    measures = iter([FakeOutcome(0), FakeOutcome(2)])
 
     class FakeEngine:
         def __init__(self, cwd, run=None):
@@ -101,11 +103,13 @@ def test_canary_probe_passes_when_kills_increase(tmp_path, monkeypatch):
         return P()
 
     v = scope_mod.canary_probe(repo, "mypkg/mod.py", run=fake_run)
-    assert v.passed is True and (v.kills_before, v.kills_after) == (3, 5)
+    assert v.passed is True and (v.kills_before, v.kills_after) == (0, 2)
+    assert v.waived is False
     assert not (repo / "tests" / "crucible_canary_test.py").exists()  # cleaned up
 
 
 def test_canary_probe_fails_when_kills_flat(tmp_path, monkeypatch):
+    """killed=0 baseline, still 0 after -- STRICT branch, no increase -> refused."""
     import crucible.scope as scope_mod
 
     class FakeOutcome:
@@ -114,7 +118,7 @@ def test_canary_probe_fails_when_kills_flat(tmp_path, monkeypatch):
             self.all_mutants = 10
             self.survivors = []
 
-    measures = iter([FakeOutcome(3), FakeOutcome(3)])
+    measures = iter([FakeOutcome(0), FakeOutcome(0)])
 
     class FakeEngine:
         def __init__(self, cwd, run=None):
@@ -133,10 +137,67 @@ def test_canary_probe_fails_when_kills_flat(tmp_path, monkeypatch):
 
     v = scope_mod.canary_probe(repo, "mypkg/mod.py", run=fake_run)
     assert v.passed is False
+    assert v.waived is False
+
+
+def test_canary_probe_waived_when_existing_suite_already_kills(tmp_path, monkeypatch):
+    """before.killed > 0 (owner-approved two-branch amendment, 2026-07-11):
+    the existing suite already proves collection under this scope, so the
+    canary is never written/pristine-checked and the engine is measured
+    exactly once -- `run` raising on any invocation proves no subprocess
+    (the pristine pytest call) is ever made, which is only possible because
+    the canary file is never written in this branch."""
+    import crucible.scope as scope_mod
+
+    class FakeOutcome:
+        def __init__(self, killed):
+            self.counts = {"killed": killed}
+            self.all_mutants = 10
+            self.survivors = []
+
+    measure_calls = []
+
+    class FakeEngine:
+        def __init__(self, cwd, run=None):
+            pass
+
+        def measure(self):
+            measure_calls.append(1)
+            return FakeOutcome(3)
+
+    monkeypatch.setattr(scope_mod, "MutmutEngine", FakeEngine)
+    repo = _mk(tmp_path, {"mypkg/mod.py": "X = 1\n", "tests/test_mod.py": "def test_x(): pass\n"})
+
+    def fail_run(cmd, cwd=None, capture_output=True, text=True, timeout=None, **kw):
+        raise AssertionError("canary_probe must not shell out when the baseline already kills")
+
+    v = scope_mod.canary_probe(repo, "mypkg/mod.py", run=fail_run)
+    assert (v.kills_before, v.kills_after, v.mutants) == (3, 3, 10)
+    assert v.passed is True and v.waived is True
+    assert len(measure_calls) == 1
+    assert not (repo / "tests" / "crucible_canary_test.py").exists()
 
 
 def test_canary_probe_refuses_pristine_failing_canary(tmp_path, monkeypatch):
+    """killed=0 baseline (mocked, so we reach the strict branch) but the
+    freshly-written canary itself fails on pristine code -- refuse loudly
+    rather than blame the subject."""
     import crucible.scope as scope_mod
+
+    class FakeOutcome:
+        def __init__(self, killed):
+            self.counts = {"killed": killed}
+            self.all_mutants = 10
+            self.survivors = []
+
+    class FakeEngine:
+        def __init__(self, cwd, run=None):
+            pass
+
+        def measure(self):
+            return FakeOutcome(0)
+
+    monkeypatch.setattr(scope_mod, "MutmutEngine", FakeEngine)
     repo = _mk(tmp_path, {"mypkg/mod.py": "X = 1\n"})
 
     def fake_run(cmd, cwd=None, capture_output=True, text=True, timeout=None, **kw):

@@ -108,8 +108,10 @@ with the experiment) into a first-class module:
 - **Canary must-kill probe ($0, no model):** write a minimal hand-templated test asserting one
   fact read from the module (import succeeds + one public callable runs), confirm it passes
   pristine, run mutmut for real, and require the killed count to strictly increase — the v6
-  probe, generalized. A scope that fails the canary refuses to proceed; nothing model-billed
-  ever runs against an unproven scope.
+  probe, generalized (amended 2026-07-11, owner-approved: two-branch policy — strict must-kill
+  for zero-kill baselines; waived-with-note when the existing suite already kills under the
+  scope). A scope that fails the canary refuses to proceed; nothing model-billed ever runs
+  against an unproven scope.
 - Output: a plain summary (scope written, mutant count, canary delta) the skill can read.
 - Honest limitation, stated in `--help` and the skill: heuristics target well-formed Python
   repos with pytest; a repo the canary can't validate is a refusal, not a guess.
