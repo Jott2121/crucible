@@ -78,7 +78,10 @@ computed at the underlying model's public API rate, and a new `billing` field di
   rate entries — the fail-closed `UnpricedModel` posture is unchanged (an unknown CLI model
   string still refuses to price).
 - `billing` threads: provider declares it (`billing = "max-plan"` class attr; HTTP providers
-  default `"api"`), env stamps it into each round's record, receipts serialize it, and
+  default `"api"`), the run records it per role in `meta.json` (`tester_billing`/
+  `critic_billing` — a run's role-to-provider mapping is constant, and run-level recording
+  keeps `loop.py` untouched per this spec's own artifacts promise; amended 2026-07-11 at
+  plan-writing), and
   `report`/`summarize` surface it so a cost-per-kill readout can never silently mix real and
   shadow dollars without the flag being visible. One new field, defaulted to `"api"`
   everywhere legacy, so every existing receipt and test remains valid unmodified.
