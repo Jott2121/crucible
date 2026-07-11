@@ -17,7 +17,7 @@
       "oneshot": "oneshot-20260710T181053Z",
       "loop_same": "loop-same-20260710T225759Z",
       "loop_cross": "loop-cross-20260710T194516Z",
-      "justification": "oneshot-20260710T181053Z and loop-cross-20260710T194516Z stand from the v7/v8 grid (run after prep.py's drop_stale_testpaths fix and the zero-test-baseline engine fix, post-dating the earlier INFRA FAILURE cells, DEVIATIONS row). loop-same-20260710T225759Z is the v9 rerun (protocol_version 9, verdict cap, 68/69) replacing loop-same-20260710T181157Z, whose two critic rounds were both truncation-rejected (INSTRUMENT-INVALID, PROTOCOL.md v9 amendment)."
+      "justification": "oneshot-20260710T181053Z (protocol_version 4 per meta.json -- run immediately after the v4 fixes that unblocked packaging: prep.py's drop_stale_testpaths and the zero-test-baseline engine fix, post-dating the earlier INFRA FAILURE cells, DEVIATIONS row; it pre-dates v5-v8, none of whose changes touch this cell's path -- v5 adds a detector for a failure this cell did not have [it recorded real kills], v6 rescopes rag-guard/graph-guard only, v7 shims attrition only, v8 pins the loop-cross critic only) and loop-cross-20260710T194516Z (protocol_version 8) stand as counted. loop-same-20260710T225759Z is the v9 rerun (protocol_version 9, verdict cap, 68/69) replacing loop-same-20260710T181157Z, whose two critic rounds were both truncation-rejected (INSTRUMENT-INVALID, PROTOCOL.md v9 amendment)."
     },
     "idna": {
       "oneshot": "oneshot-20260710T181906Z",

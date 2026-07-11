@@ -32,9 +32,12 @@ v11 stopping rule, after its original run was reclassified INSTRUMENT-INVALID (t
 four rerun attempts each failed on a nested-parallelism deadlock that survived three targeted,
 individually-verified instrument fixes (the full forensic trail — loky pools, then warm OpenMP
 pools, then a residual mechanism three fixes could not reach — is in `experiments/DEVIATIONS.md`
-and the v9-v11 amendment notes). Every other directory under `experiments/runs/` (17 of the 31
-receipted, plus pre-receipt crash dirs) is shakeout, instrument-invalid, or a documented failed
-attempt — preserved as evidence, excluded from every metric below.
+and the v9-v11 amendment notes). Every other directory under `experiments/runs/` — 43 dirs in
+total: 15 counted (14 verdict-backed + the missing cell's receipt-rows-only dir), 17
+`result.json`-backed shakeout/invalid runs, 4 receipt-rows-only failed attempts with no
+verdict, and 7 pre-receipt crash dirs — is shakeout, instrument-invalid, or a documented failed
+attempt, preserved as evidence and excluded from every metric below (full accounting in Total
+spend).
 
 | Subject | oneshot | loop-same | loop-cross |
 |---|---|---|---|
@@ -176,8 +179,13 @@ all of it:
   truncation-rejected (billed exactly 16,000 output tokens each, recorded under misleading
   notes). Rerun with truncation detection and the 32k cap, the same-lineage critic's rounds were
   accepted and killed 32 more survivors — landing at 68/69, identical to `loop-cross`. The
-  "cross-lineage critic demolishes same-lineage" gap on this subject was, in its entirety, the
-  cap deleting the verbose model's rounds.
+  receipts support attributing this subject's gap to the cap deleting the verbose model's rounds:
+  the rerun's tester round killed exactly 36, matching the old cell, and the entire +32 came from
+  the recovered critic rounds (+23/+6/+3), with both loop arms ending at 68/69 missing the same
+  single mutant. One caveat stated honestly: this is a single rerun of a cell class this document
+  elsewhere shows carrying real run-to-run variance, so tester-round variance as a partial
+  contributor cannot be excluded by receipt — "the cap explains the gap" is the strongly
+  supported reading, not a mechanical decomposition.
 - **attrition-risk-ml: b = 185 → excluded.** Its old `loop-same` cell was likewise
   truncation-invalidated; the subject then could not produce a valid replacement cell within the
   pre-committed attempt budget (the §6 missing-cell rule applies). Note the superseded analysis
@@ -205,7 +213,7 @@ nor kills here; its receipted spend appears in Total spend below):
 | Arm | Total cost ($) | Total killed | Aggregate $/kill |
 |---|---:|---:|---:|
 | oneshot | 0.4844 | 254 | 0.0019 |
-| loop-same | 2.4171 | 297 | 0.0081 |
+| loop-same | 2.4170 | 297 | 0.0081 |
 | loop-cross | 1.3293 | 556 | 0.0024 |
 
 The `loop-cross` arm remains cheaper per kill than `loop-same` (~3.4×), but the mechanism
@@ -214,7 +222,8 @@ changed with the instrument correction: in the superseded analysis the gap was l
 truncation fixed, the residual gap reflects real output-length economics — the same-lineage
 critic (claude-sonnet-5) writes long replies (up to 30k output tokens per accepted round, billed
 at $15/MTok out), while the cross-lineage critic (gpt-5.6-terra) produces terse replies
-(431-3,687 output tokens per accepted round) at a similar rate card. Cost-per-kill is also
+(431-4,566 output tokens per accepted round across the current counted cells) at a similar rate
+card. Cost-per-kill is also
 inflated for `loop-same` by graph-guard's expensive dry tail (two zero-kill rounds at ~$0.15-0.3
 each). Per `docs/RELATED-WORK.md` Claim 2, this per-outcome cost accounting remains, to our
 knowledge, the first in this literature (AdverTest reports $0.270/method-run, TestForge
@@ -239,8 +248,9 @@ composition changed with the reruns):
 | attrition-risk-ml | loop-cross | `test_run_builds_expected_pipelines_selects_best_and_persists_outputs`, `test_evaluate_uses_five_explicit_stratified_folds_and_computes_metrics` |
 
 (The per-cell `dropped` column in the full cell table is the receipt-derived source of truth;
-this table names the tests. idna `loop-same`'s 9-drop round remains the largest single salvage
-event, unchanged from the superseded analysis — that cell was not rerun.)
+this table names the tests. idna `loop-same`'s 9 drops — 7 in round 0 and 2 in round 1, the
+7-drop round being the largest single-round salvage event in the counted set — are unchanged
+from the superseded analysis; that cell was not rerun.)
 
 ## Instrument-repair narrative
 
@@ -256,7 +266,8 @@ and a failure cascade behind the reruns:
    one fenced python block, found 0"; "invalid: fails on pristine code"). 8 rejected rounds sat
    in the counted cells; 7 of them billed exactly 16,000 output tokens. The verbose same-lineage
    critic hit the cap routinely; the terse cross-lineage critic never did (accepted-round range
-   431-3,687 output tokens) — a lineage-correlated artifact that manufactured most of H2's
+   431-3,687 output tokens in the pre-rerun counted set; the reruns extend it to 4,566, still
+   nowhere near any cap) — a lineage-correlated artifact that manufactured most of H2's
    apparent signal and conservatively suppressed H1's. Caught not by a runtime gate but by the
    final adversarial review reading the completed analysis. **Fail-closed gate now:**
    `output_cap` is a mechanical ceiling — `env._call` compares every reply's `usage.output_tokens`
@@ -318,15 +329,22 @@ spend accounted separately:
 | | Total | Receipts |
 |---|---:|---:|
 | **Counted cells with valid verdicts** | **$4.2307** | 14 |
-| Missing cell's receipted spend (in counted.json, no verdict) | $0.0650 | (receipt rows only) |
-| All receipted runs (counted + shakeout + invalid) | $9.9078 | 31 |
-| Shakeout/invalid/failed-attempt receipted spend | $5.6771 | 17 |
+| Runs with a `result.json`, not counted (shakeout/invalid) | $5.6771 | 17 |
+| Subtotal, all `result.json`-backed runs | $9.9078 | 31 |
+| Receipt-rows-only dirs (no `result.json` — the missing cell $0.0650 + 4 failed attempts $1.0731) | $1.1381 | 5 |
+| **All receipted spend** | **$11.0459** | 36 |
+
+(`analyze.py::total_spend` sums only `result.json`-backed runs — the $9.9078 line; the five
+receipt-rows-only dirs are runs that died before a verdict, their per-round spend receipted in
+`receipt.jsonl` and summed here directly. 43 run dirs exist in total: 15 counted + 17
+`result.json`-backed non-counted + 5 receipt-rows-only + 7 pre-receipt crash dirs with
+`meta.json` at most.)
 
 Known unreceipted spend (bounded estimates, DEVIATIONS.md): ~$0.21 from the packaging
 `write_test_file` crash pair (pre-v5, unchanged from the superseded analysis) and ~$0.42 from
 two attrition rerun attempts whose round-1 critic calls were billed but whose receipt rows never
 landed (the measure they awaited deadlocked). True all-in total across every model call ever
-made for this experiment: **~$10.5**, of which ~$0.63 is bounded estimate rather than
+made for this experiment: **~$11.7**, of which ~$0.63 is bounded estimate rather than
 receipt-derived.
 
 ## Summary
