@@ -1,11 +1,11 @@
 {
-  "_comment": "Task 8 controller-verified counted cells. Every other directory under experiments/runs/ is shakeout or instrument-invalid per DEVIATIONS.md and PROTOCOL.md's amendment sequence (protocol_version 2-8) and is excluded from all analysis. One justification line per entry below.",
+  "_comment": "Controller-verified counted cells, v11 final. Every other directory under experiments/runs/ is shakeout, instrument-invalid, or a documented failed attempt per DEVIATIONS.md and PROTOCOL.md's amendment sequence (protocol_version 2-11), preserved as evidence and excluded from all analysis. One justification line per entry below.",
   "subjects": {
     "graph-guard": {
       "oneshot": "oneshot-20260710T191723Z",
-      "loop_same": "loop-same-20260710T191858Z",
-      "loop_cross": "loop-cross-20260710T194101Z",
-      "justification": "Corrected 2026-07-10 (protocol_version 9 documentation pass): the prior justification claimed 'First three cells run after protocol_version 8' -- verified false against meta.json: oneshot-20260710T191723Z and loop-same-20260710T191858Z both record protocol_version 7; only loop-cross-20260710T194101Z records protocol_version 8. v8's only content change was the loop-cross critic model pin (gpt-5.6-terra, PROTOCOL.md Sec.3.2 v8 amendment); it touched no arm, subject, scope, or metric definition relevant to H1, so the two v7-run cells are config-identical to v8 for H1 purposes -- the same equivalence already asserted for the H1-rerun cells in DEVIATIONS.md row 31. All three cells post-date the v6 instrument fix (exclude-form pytest_args) that reclassified graph-guard's earlier oneshot/loop-same cells INSTRUMENT-INVALID (DEVIATIONS.md rows 26/28). loop_cross (loop-cross-20260710T194101Z) verdict is 'rejected': round 0 (tester) failed pristine validation ('invalid: fails on pristine code' -- later identified, under protocol_version 9, as a truncated reply laundered into this note, not a genuine content failure; see PROTOCOL.md Sec.3.2 v9 amendment), so it is a legitimate rejected-round outcome under PROTOCOL.md Sec.6, not a discarded run -- but it means graph-guard has NO valid loop-cross kill data. Per controller instruction, this cell counts as present (preserves the H1 loop-same/oneshot comparison and the arm's cost) but is treated as a MISSING H2 comparison for graph-guard: excluded from graph-guard's H2 per-subject table and from both pooled H2 views. PROTOCOL.md Sec.6 states (paraphrased, not a direct quote): a round that aborts leaves its cell 'a missing cell... treated as missing data, not as a zero... never silently backfilled or estimated.' Sec.6's text names aborted rounds explicitly; extending that same missing-data treatment to a rejected-verdict cell is a rule extension, not a restatement, and is logged as such in DEVIATIONS.md (the 2026-07-10 rule-extension row, filed alongside the protocol_version-9 truncation reclassification)."
+      "loop_same": "loop-same-20260711T004651Z",
+      "loop_cross": "loop-cross-20260710T225355Z",
+      "justification": "oneshot-20260710T191723Z stands from the v7/v8 grid (protocol_version 7 per meta.json; v8's only change was the loop-cross critic pin, H1-irrelevant -- see the corrected 2026-07-10 entry history). loop_same and loop_cross are v9-era reruns after the truncation reclassification (PROTOCOL.md v9 amendment; DEVIATIONS rows): loop-same-20260711T004651Z (protocol_version 9, verdict dry, third attempt -- attempt 1 killed externally, attempt 2 aborted on 300s read timeouts, both ledgered) and loop-cross-20260710T225355Z (protocol_version 9, verdict clean -- recovers the H2 cell whose original run was truncation-rejected at the tester round). All three cells post-date the v6 exclude-form scope fix."
     },
     "rag-guard": {
       "oneshot": "oneshot-20260710T192857Z",
@@ -15,9 +15,9 @@
     },
     "packaging": {
       "oneshot": "oneshot-20260710T181053Z",
-      "loop_same": "loop-same-20260710T181157Z",
+      "loop_same": "loop-same-20260710T225759Z",
       "loop_cross": "loop-cross-20260710T194516Z",
-      "justification": "Run after prep.py's drop_stale_testpaths fix and the zero-test-baseline engine fix (protocol_version 4), post-dating the earlier INFRA FAILURE cells (DEVIATIONS.md row 23). All three cells verdict oneshot/dry/dry; counted in full for both H1 and H2."
+      "justification": "oneshot-20260710T181053Z and loop-cross-20260710T194516Z stand from the v7/v8 grid (run after prep.py's drop_stale_testpaths fix and the zero-test-baseline engine fix, post-dating the earlier INFRA FAILURE cells, DEVIATIONS row). loop-same-20260710T225759Z is the v9 rerun (protocol_version 9, verdict cap, 68/69) replacing loop-same-20260710T181157Z, whose two critic rounds were both truncation-rejected (INSTRUMENT-INVALID, PROTOCOL.md v9 amendment)."
     },
     "idna": {
       "oneshot": "oneshot-20260710T181906Z",
@@ -27,9 +27,9 @@
     },
     "attrition-risk-ml": {
       "oneshot": "oneshot-20260710T193041Z",
-      "loop_same": "loop-same-20260710T193123Z",
+      "loop_same": "loop-same-20260711T040046Z",
       "loop_cross": "loop-cross-20260710T195033Z",
-      "justification": "Run after the SandboxStatsFailure detector (protocol_version 5) and the src-layout import shim + import_hint (protocol_version 7) that resolved the earlier laundered-crash false-zero cells (DEVIATIONS.md row 24/29). All three cells verdict oneshot/dry/cap; counted in full for both H1 and H2. Per PROTOCOL.md Sec.3.1/Sec.4, attrition-risk-ml's 0-kill pristine baseline means it is NEVER used in any relative-improvement ratio and is reported separately in the pooled-without-attrition McNemar view."
+      "justification": "oneshot-20260710T193041Z and loop-cross-20260710T195033Z stand from the v7/v8 grid (run after the SandboxStatsFailure detector v5 and the src-layout shim v7). loop_same is a MISSING CELL per PROTOCOL.md Sec.6 and the v11 pre-committed stopping rule: the original loop-same-20260710T193123Z was reclassified INSTRUMENT-INVALID (both critic rounds truncation-rejected, v9 amendment), and all four rerun attempts failed on a nested-parallelism deadlock that survived three targeted fixes (joblib threading v10, native thread-pool pins v11 -- full forensic trail in DEVIATIONS.md). The dir recorded here, loop-same-20260711T040046Z (protocol_version 11, no result.json), is the final attempt, pointed at deliberately so analyze.py's Sec.6 guard renders the cell MISSING and its receipted spend appears in the cell table; its receipted rounds are evidence, never counted kills. Consequence: attrition-risk-ml contributes NO paired data to H1 or H2 (per-subject and both pooled views); its oneshot/loop-cross absolute figures still appear in the cell table. The pooled-with-attrition views therefore span 4 subjects for H1 and H2 -- the confirmatory-view label is retained with this composition stated explicitly wherever it appears."
     }
   }
 }

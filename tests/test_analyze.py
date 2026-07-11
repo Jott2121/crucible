@@ -203,14 +203,36 @@ def test_dropped_tests_flattens_across_rounds():
     assert analyze.dropped_tests(run) == ["test_a", "test_b", "test_c"]
 
 
-def test_arm_table_cost_per_kill_none_safe_on_zero_kills(counted_fixture):
+def test_arm_table_missing_cell_never_renders_receipted_kills(counted_fixture):
+    """A Sec.6-missing cell (rejected/aborted verdict, or no result.json) must
+    render killed=None and a MISSING verdict in the cell table -- its receipted
+    per-round kill data is preserved evidence, never a counted measurement.
+    Billed spend still appears, summed from the receipt rows."""
     counted_path, runs_root = counted_fixture
     runs = analyze.load_counted_runs(analyze.load_counted(counted_path), runs_root)
     rows = analyze.arm_table(runs)
     beta_loop_cross = next(r for r in rows if r["subject"] == "beta" and r["arm"] == "loop_cross")
-    assert beta_loop_cross["killed"] == 0
+    assert beta_loop_cross["killed"] is None
     assert beta_loop_cross["cost_per_kill"] is None
-    assert beta_loop_cross["verdict"] == "rejected"
+    assert beta_loop_cross["verdict"] == "MISSING (rejected)"
+    assert beta_loop_cross["cost_usd"] == pytest.approx(
+        sum(r.get("cost_usd", 0.0) for r in runs["beta"]["loop_cross"]["rounds"]))
+
+
+def test_arm_table_cost_per_kill_none_safe_on_valid_zero_kill_cell():
+    """The original divide-by-zero guard, on a VALID cell: verdict ok, zero
+    kills -> killed=0 and cost_per_kill None (never a ZeroDivisionError)."""
+    run = {
+        "meta": {"arm": "oneshot"},
+        "rounds": [{"round": 0, "role": "tester", "status": "ok",
+                    "survivors_before": ["m1", "m2"], "survivors_after": ["m1", "m2"],
+                    "kills": [], "cost_usd": 0.05}],
+        "result": {"verdict": "oneshot", "total_cost_usd": 0.05,
+                   "baseline_survivors": ["m1", "m2"]},
+    }
+    rows = analyze.arm_table({"solo": {"oneshot": run,
+                                        "loop_same": run, "loop_cross": run}})
+    assert all(r["killed"] == 0 and r["cost_per_kill"] is None for r in rows)
 
 
 def test_arm_table_mutation_score_full_denominator(counted_fixture):

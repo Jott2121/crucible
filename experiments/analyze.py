@@ -18,11 +18,14 @@ attrition-risk-ml is never used in a relative-improvement ratio (PROTOCOL.md Sec
 is dropped from the pooled-without-attrition view only; its per-subject table and the
 pooled-with-attrition view still include it.
 
-graph-guard's counted loop-cross cell (loop-cross-20260710T194101Z) has verdict "rejected"
-(round 0, the tester round, failed pristine validation before any test was ever accepted) --
-PROTOCOL.md Sec.6 treats a rejected/aborted cell as MISSING data for any metric that needs it,
-never as a zero. graph-guard is therefore excluded from H2's per-subject table and from both
-pooled H2 views; its H1 cells (oneshot, loop-same) are unaffected and fully counted.
+Missing-cell rule (PROTOCOL.md Sec.6, extended to rejected verdicts per the DEVIATIONS
+rule-extension row): a counted cell whose verdict is "rejected"/"aborted", or which has no
+result.json at all, is MISSING data for any metric that needs it -- never a zero.
+cell_is_valid() applies this mechanically to whatever counted.json points at: an H2 row is
+excluded when its loop-cross cell is invalid, and both pooled H2 views report exactly which
+subjects they span. (Under the original pre-v9 counted set this excluded graph-guard, whose
+loop-cross tester round was truncation-rejected; the v9 rerun recovered that cell, and the
+mechanism stays in place for any future missing cell.)
 """
 from __future__ import annotations
 
@@ -75,9 +78,25 @@ def cell_is_valid(run: dict) -> bool:
     return result is not None and result.get("verdict") not in ("rejected", "aborted")
 
 
+def _missing(arms: dict, *needed: str) -> str | None:
+    """Sec.6 guard for a paired comparison: name the first arm whose cell is
+    missing (rejected/aborted verdict, or no result.json), else None. A pair
+    with either side missing carries no paired information -- excluded, never
+    scored as a zero."""
+    for arm in needed:
+        if not cell_is_valid(arms[arm]):
+            verdict = (arms[arm].get("result") or {}).get("verdict", "incomplete")
+            return f"{arm} verdict={verdict}: missing cell, PROTOCOL.md Sec.6"
+    return None
+
+
 def per_subject_h1(runs: dict) -> dict:
     out = {}
     for subject, arms in runs.items():
+        missing = _missing(arms, "loop_same", "oneshot")
+        if missing:
+            out[subject] = {"excluded": missing}
+            continue
         both, b, c, neither = paired_kills(arms["loop_same"], arms["oneshot"])
         out[subject] = {"both": both, "b_loop_same_only": b, "c_oneshot_only": c,
                          "neither": neither, "p": mcnemar_exact(b, c), "favors_loop_same": b > c}
@@ -87,9 +106,9 @@ def per_subject_h1(runs: dict) -> dict:
 def per_subject_h2(runs: dict) -> dict:
     out = {}
     for subject, arms in runs.items():
-        if not cell_is_valid(arms["loop_cross"]):
-            verdict = (arms["loop_cross"].get("result") or {}).get("verdict", "missing")
-            out[subject] = {"excluded": f"loop-cross verdict={verdict}: missing H2 cell, PROTOCOL.md Sec.6"}
+        missing = _missing(arms, "loop_cross", "loop_same")
+        if missing:
+            out[subject] = {"excluded": missing}
             continue
         both, b, c, neither = paired_kills(arms["loop_cross"], arms["loop_same"])
         out[subject] = {"both": both, "b_loop_cross_only": b, "c_loop_same_only": c,
@@ -117,6 +136,21 @@ def arm_table(runs: dict) -> list[dict]:
         for arm in ARMS:
             run = arms[arm]
             s = summarize(run)
+            if not cell_is_valid(run):
+                # a missing cell's receipted rounds are evidence, never kills:
+                # rendering its per-round kill count here would smuggle a
+                # Sec.6-excluded measurement into the cell table. Billed spend
+                # is summed from the receipt rows (result.json may not exist).
+                rows.append({
+                    "subject": subject, "arm": arm,
+                    "verdict": f"MISSING ({s['verdict']})",
+                    "baseline_survivors": s["baseline_survivors"], "killed": None,
+                    "kill_rate_pct_of_survivors": None, "baseline_all_mutants": None,
+                    "mutation_score_full_denom_pct": None,
+                    "cost_usd": round(sum(r.get("cost_usd", 0.0) for r in run["rounds"]), 6),
+                    "cost_per_kill": None, "dropped_tests": dropped_tests(run),
+                })
+                continue
             result = run.get("result") or {}
             baseline_all = result.get("baseline_all_mutants")
             baseline_counts = result.get("baseline_counts") or {}
@@ -167,6 +201,9 @@ def print_report(h1: dict, h2: dict,
     print("=" * 78)
     print("H1 per-subject (loop-same vs oneshot): both b(loop-same-only) c(oneshot-only) neither  p")
     for subject, cell in h1.items():
+        if "excluded" in cell:
+            print(f"  {subject:20s} EXCLUDED: {cell['excluded']}")
+            continue
         print(f"  {subject:20s} both={cell['both']:4d} b={cell['b_loop_same_only']:4d} "
               f"c={cell['c_oneshot_only']:4d} neither={cell['neither']:5d}  p={_fmt_p(cell['p'])}  "
               f"favors_loop_same={cell['favors_loop_same']}")
@@ -188,8 +225,9 @@ def print_report(h1: dict, h2: dict,
     for r in arms:
         cpk = f"{r['cost_per_kill']:.4f}" if r["cost_per_kill"] is not None else "n/a"
         rate = f"{r['kill_rate_pct_of_survivors']:.1f}" if r["kill_rate_pct_of_survivors"] is not None else "n/a"
+        killed = f"{r['killed']:5d}" if r["killed"] is not None else "    -"
         print(f"{r['subject']:20s} {r['arm']:10s} {r['verdict']:8s} {r['baseline_survivors']:5d} "
-              f"{r['killed']:5d} {rate:>6s} {r['cost_usd']:9.4f} {cpk:>8s} {len(r['dropped_tests']):7d}")
+              f"{killed} {rate:>6s} {r['cost_usd']:9.4f} {cpk:>8s} {len(r['dropped_tests']):7d}")
     print("-" * 78)
     print(f"spend: counted=${spend['counted_total_usd']:.4f} ({spend['counted_n_receipts']} receipts)  "
           f"all-receipted=${spend['all_receipted_total_usd']:.4f} ({spend['all_n_receipts']} receipts)  "
