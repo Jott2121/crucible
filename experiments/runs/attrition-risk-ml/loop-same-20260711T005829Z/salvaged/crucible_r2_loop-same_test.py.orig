@@ -1,0 +1,252 @@
+import numpy as np
+import pandas as pd
+import pytest
+from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.metrics import (
+    average_precision_score,
+    brier_score_loss,
+    confusion_matrix,
+    f1_score,
+    precision_score,
+    recall_score,
+    roc_auc_score,
+)
+from sklearn.model_selection import StratifiedKFold, cross_val_score
+
+import train
+
+
+class DeterministicClassifier(BaseEstimator, ClassifierMixin):
+    """A fake classifier whose predicted probability is simply the 'p' column.
+
+    Ignores training data entirely, so its output is fully deterministic and
+    independent of which fold/split it is fit on.
+    """
+
+    def fit(self, X, y):
+        self.classes_ = np.array([0, 1])
+        return self
+
+    def predict_proba(self, X):
+        p = np.asarray(X["p"], dtype=float)
+        return np.column_stack([1 - p, p])
+
+    def predict(self, X):
+        proba = self.predict_proba(X)[:, 1]
+        return (proba >= 0.5).astype(int)
+
+
+class GoodClassifier(BaseEstimator, ClassifierMixin):
+    """Perfectly separates classes using the 'p' feature."""
+
+    def fit(self, X, y):
+        self.classes_ = np.array([0, 1])
+        return self
+
+    def predict_proba(self, X):
+        p = np.asarray(X["p"], dtype=float)
+        return np.column_stack([1 - p, p])
+
+    def predict(self, X):
+        proba = self.predict_proba(X)[:, 1]
+        return (proba >= 0.5).astype(int)
+
+
+class BadClassifier(BaseEstimator, ClassifierMixin):
+    """Always predicts a constant probability -> ROC-AUC of exactly 0.5."""
+
+    def fit(self, X, y):
+        self.classes_ = np.array([0, 1])
+        return self
+
+    def predict_proba(self, X):
+        n = len(X)
+        return np.column_stack([np.full(n, 0.5), np.full(n, 0.5)])
+
+    def predict(self, X):
+        return np.zeros(len(X), dtype=int)
+
+
+def _build_test_split():
+    y_test_vals = [0, 0, 0, 1, 1, 1, 0, 1, 0, 1]
+    p_test_vals = [0.10, 0.20, 0.50, 0.50, 0.60, 0.90, 0.30, 0.40, 0.05, 0.95]
+    X_test = pd.DataFrame({"p": p_test_vals})
+    y_test = pd.Series(y_test_vals)
+    return X_test, y_test, p_test_vals, y_test_vals
+
+
+def _build_train_split():
+    rng = np.random.RandomState(123)
+    p_train0 = rng.uniform(0, 0.5, 15)
+    p_train1 = rng.uniform(0.5, 1.0, 15)
+    p_train = np.concatenate([p_train0, p_train1])
+    y_train_vals = [0] * 15 + [1] * 15
+    X_train = pd.DataFrame({"p": p_train})
+    y_train = pd.Series(y_train_vals)
+    return X_train, y_train
+
+
+def test_evaluate_metrics_and_threshold_and_report():
+    X_test, y_test, p_test_vals, y_test_vals = _build_test_split()
+    X_train, y_train = _build_train_split()
+
+    result = train.evaluate(
+        "TestModel", DeterministicClassifier(), X_train, X_test, y_train, y_test
+    )
+
+    proba_expected = np.array(p_test_vals, dtype=float)
+    # threshold must be >= 0.5 (ties classified positive)
+    pred_expected = (proba_expected >= 0.5).astype(int)
+
+    expected_roc_auc = roc_auc_score(y_test_vals, proba_expected)
+    expected_pr_auc = average_precision_score(y_test_vals, proba_expected)
+    expected_precision = precision_score(y_test_vals, pred_expected, zero_division=0)
+    expected_recall = recall_score(y_test_vals, pred_expected)
+    expected_f1 = f1_score(y_test_vals, pred_expected)
+    expected_brier = brier_score_loss(y_test_vals, proba_expected)
+    expected_confusion = confusion_matrix(y_test_vals, pred_expected)
+
+    assert result.roc_auc == pytest.approx(expected_roc_auc, rel=1e-6)
+    assert result.pr_auc == pytest.approx(expected_pr_auc, rel=1e-6)
+    assert result.precision == pytest.approx(expected_precision, rel=1e-6)
+    assert result.recall == pytest.approx(expected_recall, rel=1e-6)
+    assert result.f1 == pytest.approx(expected_f1, rel=1e-6)
+    assert result.brier == pytest.approx(expected_brier, rel=1e-6)
+    assert result.brier == pytest.approx(0.1175, rel=1e-6)
+
+    assert np.array_equal(result.confusion, expected_confusion)
+    # hand-verified confusion matrix for this deterministic dataset
+    assert np.array_equal(result.confusion, np.array([[4, 1], [1, 4]]))
+
+    # precision/recall/f1 are all exactly 0.8 for this dataset -> digits=3 report
+    assert "0.800" in result.classification_report_str
+    assert "0.8000" not in result.classification_report_str
+
+
+def test_evaluate_cv_roc_auc_matches_expected_stratified_5fold():
+    X_test, y_test, _, _ = _build_test_split()
+    X_train, y_train = _build_train_split()
+
+    result = train.evaluate(
+        "TestModel", DeterministicClassifier(), X_train, X_test, y_train, y_test
+    )
+
+    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=train.RANDOM_STATE)
+    expected_scores = cross_val_score(
+        DeterministicClassifier(),
+        X_train,
+        y_train,
+        scoring="roc_auc",
+        cv=cv,
+        n_jobs=-1,
+    )
+    expected_mean = float(expected_scores.mean())
+    expected_std = float(expected_scores.std())
+
+    assert result.cv_roc_auc_mean == pytest.approx(expected_mean, rel=1e-6)
+    assert result.cv_roc_auc_std == pytest.approx(expected_std, rel=1e-6)
+
+
+def test_evaluate_fits_on_provided_training_data_not_none():
+    # A classifier that raises if fit() ever receives None for X or y.
+    class StrictClassifier(BaseEstimator, ClassifierMixin):
+        def fit(self, X, y):
+            assert X is not None
+            assert y is not None
+            self.classes_ = np.array([0, 1])
+            return self
+
+        def predict_proba(self, X):
+            assert X is not None
+            n = len(X)
+            return np.column_stack([np.full(n, 0.5), np.full(n, 0.5)])
+
+        def predict(self, X):
+            return np.zeros(len(X), dtype=int)
+
+    X_test, y_test, _, _ = _build_test_split()
+    X_train, y_train = _build_train_split()
+
+    # Should not raise.
+    result = train.evaluate(
+        "Strict", StrictClassifier(), X_train, X_test, y_train, y_test
+    )
+    assert result.name == "Strict"
+
+
+def test_run_end_to_end_split_ratio_and_best_model_selection(monkeypatch, capsys):
+    rng = np.random.RandomState(0)
+    n = 100
+    p = np.concatenate([rng.uniform(0, 0.4, 50), rng.uniform(0.6, 1.0, 50)])
+    X = pd.DataFrame({"p": p})
+    y = pd.Series((p >= 0.5).astype(int))
+
+    def fake_load_and_prepare():
+        return X, y, None
+
+    def fake_build_preprocessor(X_train):
+        return "passthrough"
+
+    def fake_candidates():
+        return {"Good": GoodClassifier(), "Bad": BadClassifier()}
+
+    dumps = []
+
+    def fake_dump(obj, path):
+        dumps.append((obj, str(path).replace("\\", "/").split("/")[-1]))
+
+    def fake_json_dump(data, fh, indent=2):
+        return None
+
+    monkeypatch.setattr(train, "load_and_prepare", fake_load_and_prepare)
+    monkeypatch.setattr(train, "build_preprocessor", fake_build_preprocessor)
+    monkeypatch.setattr(train, "_candidates", fake_candidates)
+    monkeypatch.setattr(train.joblib, "dump", fake_dump)
+    monkeypatch.setattr(train.json, "dump", fake_json_dump)
+
+    results = train.run()
+
+    assert set(results.keys()) == {"Good", "Bad"}
+
+    # test_size=0.2 of 100 rows -> exactly 20 test rows, stratified 10/10.
+    good_conf = results["Good"].confusion
+    assert int(good_conf.sum()) == 20
+    row_sums = good_conf.sum(axis=1)
+    assert list(row_sums) == [10, 10]
+
+    # Good perfectly separates classes -> ROC-AUC 1.0; Bad is constant -> 0.5.
+    assert results["Good"].roc_auc == pytest.approx(1.0, rel=1e-6)
+    assert results["Bad"].roc_auc == pytest.approx(0.5, rel=1e-6)
+
+    best_name_dumped = next(
+        obj for obj, fname in dumps if fname == "best_model_name.joblib"
+    )
+    assert best_name_dumped == "Good"
+
+    best_pipeline_dumped = next(
+        obj for obj, fname in dumps if fname == "best_model.joblib"
+    )
+    assert isinstance(best_pipeline_dumped, GoodClassifier)
+
+    captured = capsys.readouterr()
+    assert "Train: 80 rows (50.0% positive) | Test: 20 rows (50.0% positive)" in captured.out
+    assert "Best model: Good (ROC-AUC = 1.000)" in captured.out
+
+
+def test_candidates_random_forest_and_logistic_defaults():
+    cands = train._candidates()
+    assert set(cands.keys()) == {"LogisticRegression", "RandomForest", "XGBoost"}
+
+    rf = cands["RandomForest"]
+    assert rf.max_depth is None
+    assert rf.n_estimators == 400
+    assert rf.min_samples_leaf == 2
+    assert rf.class_weight == "balanced"
+
+    lr = cands["LogisticRegression"]
+    assert lr.max_iter == 2000
+    assert lr.class_weight == "balanced"
+
+    xgb = cands["XGBoost"]
+    assert xgb.get_params()["scale_pos_weight"] == pytest.approx(5.0)
+    assert xgb.get_params()["eval_metric"] == "logloss"
