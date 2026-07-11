@@ -832,6 +832,40 @@ the dice are loaded against it.
 v10 approved by Jeff Otterson 2026-07-11 (interactive gate; approval asked and given as
 "go with v10" after the two-deadlock evidence and time cost were presented).
 
+**Amendment (protocol_version 11 — v10's joblib fix was verified active yet the deadlock
+recurred; native thread pools (OpenMP/BLAS) pinned to 1 thread in the same conftest; one
+final attempt, with the missing-cell outcome pre-committed):**
+
+The v10 rerun (`experiments/runs/attrition-risk-ml/loop-same-20260711T022036Z/`) hung at round
+2's measure and was killed by the `MUTMUT_RUN_TIMEOUT_S` bound exactly as designed — with the
+v10 conftest **confirmed present in the clone** (`parallel_config` line verified on disk at
+kill time) and its effect visible: the two completed measures ran in roughly 3-4 minutes each
+versus ~30 minutes under loky. joblib was therefore only one of the fork-unsafe parallelism
+layers. The remaining suspect is native thread pools that joblib configuration cannot reach:
+`train.py` imports `XGBClassifier` (`n_jobs=-1`), whose OpenMP runtime (`libomp`) is a known
+fork hazard on macOS once its thread pool has been warmed in a parent process — exactly what
+mutmut's stats phase does before forking its workers — plus the BLAS/Accelerate pools under
+numpy/scipy/sklearn.
+
+- **Fix.** The same committed conftest now sets, before any heavy import:
+  `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`, `MKL_NUM_THREADS`, `VECLIB_MAXIMUM_THREADS`,
+  `NUMEXPR_NUM_THREADS` — all to `"1"` via `os.environ.setdefault`. A single-threaded native
+  runtime maintains no worker-thread pool, so a fork cannot inherit one mid-lock. The v10
+  `joblib.parallel_config(backend="threading")` line stays. conftest.py is imported at pytest
+  collection start, before any test module imports `xgboost`/`sklearn`, in every process that
+  runs tests — so the pins land before `libomp` initializes.
+- **Pre-committed stopping rule (approved with this amendment).** This is the FOURTH attempt at
+  this cell (~$0.64 receipted across the three failures, every attempt preserved as evidence).
+  If this attempt also fails to produce a verdict, attrition-risk-ml's `loop-same` cell is
+  scored as a MISSING cell per §6 with no further attempts and no further gate — fixed now so
+  the stopping decision cannot drift under sunk-cost pressure.
+- Same disclosed cross-arm asymmetry posture as v10 (this subject's `oneshot`/`loop-cross`
+  cells ran without these pins; deterministic kill oracle gives the config no channel into any
+  verdict; RESULTS.md limitation entry required).
+
+v11 approved by Jeff Otterson 2026-07-11 (interactive gate; option "v11: pin native pools"
+selected, including the no-further-attempts pre-commitment).
+
 ## 4. Metrics
 
 - **Primary statistic — per-mutant paired kill outcomes, exact McNemar, two-sided.** Implemented
