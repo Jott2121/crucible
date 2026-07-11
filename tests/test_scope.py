@@ -10,19 +10,30 @@ from crucible.scope import ScopePlan, apply, detect
 SHIM = 'import sys, pathlib\nsys.path.insert(0, str(pathlib.Path(__file__).parent / "src"))\n'
 
 
+def _clone_subject(tmp_path, strip_tests=False):
+    """Copy tests/fixtures/subject to a fresh tmp_path, optionally stripping
+    its tests/ dir entirely (used to build a subject where NO existing test
+    touches the scoped module at all -- the true zero-coverage case, distinct
+    from merely zero-KILLS), git-init/commit it, and pip install -e it into
+    this venv."""
+    subject = tmp_path / "subject"
+    shutil.copytree(Path(__file__).parent / "fixtures" / "subject", subject)
+    if strip_tests:
+        shutil.rmtree(subject / "tests")
+    for cmd in (["git", "init", "-q"], ["git", "add", "-A"],
+                ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "seed"]):
+        subprocess.run(cmd, cwd=subject, check=True)
+    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-e", str(subject)], check=True)
+    return subject
+
+
 @pytest.fixture
 def subject_clone(tmp_path):
     """Committed git clone of tests/fixtures/subject, installed editable into
     this venv -- mirrors the inline-clone pattern in tests/test_cli_e2e.py
     (no shared `subject_clone` fixture exists elsewhere in the repo; this is
     the first one, scoped locally to this test module)."""
-    subject = tmp_path / "subject"
-    shutil.copytree(Path(__file__).parent / "fixtures" / "subject", subject)
-    for cmd in (["git", "init", "-q"], ["git", "add", "-A"],
-                ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "seed"]):
-        subprocess.run(cmd, cwd=subject, check=True)
-    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-e", str(subject)], check=True)
-    return subject
+    return _clone_subject(tmp_path)
 
 
 def _mk(tmp_path, files):
@@ -140,6 +151,106 @@ def test_canary_probe_fails_when_kills_flat(tmp_path, monkeypatch):
     assert v.waived is False
 
 
+def _waived_setup(monkeypatch, tmp_path, extra_files):
+    """Shared rig for the waived-branch discovery-config tests: a fake engine
+    whose baseline already kills (killed=3, so canary_probe reaches the WAIVED
+    branch), a `run` stub that raises if any subprocess is ever attempted
+    (the config scan must be pure file reading), and a repo built from
+    `extra_files` on top of the minimal module."""
+    import crucible.scope as scope_mod
+
+    class FakeOutcome:
+        counts = {"killed": 3}
+        all_mutants = 10
+        survivors = []
+
+    class FakeEngine:
+        def __init__(self, cwd, run=None):
+            pass
+
+        def measure(self):
+            return FakeOutcome()
+
+    monkeypatch.setattr(scope_mod, "MutmutEngine", FakeEngine)
+    repo = _mk(tmp_path, {"mypkg/mod.py": "X = 1\n", **extra_files})
+
+    def fail_run(cmd, cwd=None, capture_output=True, text=True, timeout=None, **kw):
+        raise AssertionError("canary_probe must not shell out in the waived branch")
+
+    return scope_mod, repo, fail_run
+
+
+def test_waiver_refused_when_python_files_cannot_match_fresh_tests(tmp_path, monkeypatch):
+    """python_files that no crucible_*_test.py name can ever match -- the v6
+    failure class through the side door: the existing suite kills (waiver
+    would be granted) while fresh generated files would never be collected.
+    Refuse before waiving."""
+    scope_mod, repo, fail_run = _waived_setup(monkeypatch, tmp_path, {
+        "pyproject.toml": '[tool.pytest.ini_options]\npython_files = ["check_*.py"]\n',
+    })
+    with pytest.raises(RuntimeError, match=r"python_files in pyproject\.toml"):
+        scope_mod.canary_probe(repo, "mypkg/mod.py", run=fail_run)
+
+
+def test_waiver_ok_when_python_files_matches_test_suffix(tmp_path, monkeypatch):
+    """python_files that includes *_test.py -- a fresh crucible_x_test.py IS
+    collectable, so the waiver proceeds."""
+    scope_mod, repo, fail_run = _waived_setup(monkeypatch, tmp_path, {
+        "pyproject.toml":
+            '[tool.pytest.ini_options]\npython_files = ["test_*.py", "*_test.py"]\n',
+    })
+    v = scope_mod.canary_probe(repo, "mypkg/mod.py", run=fail_run)
+    assert v.passed is True and v.waived is True
+
+
+def test_waiver_refused_when_testpaths_present(tmp_path, monkeypatch):
+    """testpaths defined at all -> refuse: it steers discovery into fixed
+    dirs and crucible cannot mechanically prove fresh files land inside."""
+    scope_mod, repo, fail_run = _waived_setup(monkeypatch, tmp_path, {
+        "pytest.ini": "[pytest]\ntestpaths = tests\n",
+    })
+    with pytest.raises(RuntimeError, match=r"testpaths in pytest\.ini"):
+        scope_mod.canary_probe(repo, "mypkg/mod.py", run=fail_run)
+
+
+def test_waiver_refused_setup_cfg_python_files_mismatch(tmp_path, monkeypatch):
+    """Same python_files rule read via setup.cfg's [tool:pytest] section."""
+    scope_mod, repo, fail_run = _waived_setup(monkeypatch, tmp_path, {
+        "setup.cfg": "[tool:pytest]\npython_files = check_*.py\n",
+    })
+    with pytest.raises(RuntimeError, match=r"python_files in setup\.cfg"):
+        scope_mod.canary_probe(repo, "mypkg/mod.py", run=fail_run)
+
+
+def test_waiver_refused_addopts_with_positional_path(tmp_path, monkeypatch):
+    """addopts carrying a bare positional path token pins discovery to that
+    path -- refuse (fail-safe heuristic; see _assert_fresh_file_collectable)."""
+    scope_mod, repo, fail_run = _waived_setup(monkeypatch, tmp_path, {
+        "pyproject.toml": '[tool.pytest.ini_options]\naddopts = "-q tests/unit"\n',
+    })
+    with pytest.raises(RuntimeError, match=r"addopts in pyproject\.toml"):
+        scope_mod.canary_probe(repo, "mypkg/mod.py", run=fail_run)
+
+
+def test_waiver_ok_addopts_flags_only(tmp_path, monkeypatch):
+    """addopts of pure option flags does not touch discovery -> waiver OK."""
+    scope_mod, repo, fail_run = _waived_setup(monkeypatch, tmp_path, {
+        "pyproject.toml": '[tool.pytest.ini_options]\naddopts = "-q --tb=short"\n',
+    })
+    v = scope_mod.canary_probe(repo, "mypkg/mod.py", run=fail_run)
+    assert v.passed is True and v.waived is True
+
+
+def test_waiver_ok_clean_pytest_section(tmp_path, monkeypatch):
+    """A pytest config section defining none of the discovery keys is clean
+    -> waiver OK (absent keys, like absent files, steer nothing)."""
+    scope_mod, repo, fail_run = _waived_setup(monkeypatch, tmp_path, {
+        "pyproject.toml": '[tool.pytest.ini_options]\nmarkers = ["slow: slow tests"]\n',
+    })
+    v = scope_mod.canary_probe(repo, "mypkg/mod.py", run=fail_run)
+    assert v.passed is True and v.waived is True
+
+
 def test_canary_probe_waived_when_existing_suite_already_kills(tmp_path, monkeypatch):
     """before.killed > 0 (owner-approved two-branch amendment, 2026-07-11):
     the existing suite already proves collection under this scope, so the
@@ -219,3 +330,23 @@ def test_canary_probe_real_mutmut_on_fixture_subject(subject_clone):
     apply(subject_clone, detect(subject_clone, "subject_pkg/calc.py"))
     v = canary_probe(subject_clone, "subject_pkg/calc.py")
     assert v.passed is True
+
+
+@pytest.mark.slow
+def test_canary_probe_strict_branch_when_no_existing_test_touches_module(tmp_path):
+    """Regression for the 2026-07-11 re-review CRITICAL: with the subject's
+    tests/ dir stripped, NO existing test touches the scoped module -- the
+    zero-kill baseline that is the strict branch's core case. mutmut's
+    forced-fail phase (MUTANT_UNDER_TEST='fail') then relies on the CANARY
+    ALONE to fail at least one test; when the canary's tolerate set swallowed
+    the trampoline's MutmutProgrammaticFailException ('fail' in the tuple),
+    mutmut aborted 'Unable to force test failures', every mutant landed
+    not-checked, and the scope was falsely refused. The canary must let that
+    exception propagate and the strict branch must clear end-to-end."""
+    from crucible.scope import apply, canary_probe, detect
+    subject = _clone_subject(tmp_path, strip_tests=True)
+    apply(subject, detect(subject, "subject_pkg/calc.py"))
+    v = canary_probe(subject, "subject_pkg/calc.py")
+    assert v.passed is True
+    assert v.waived is False
+    assert v.kills_after > v.kills_before

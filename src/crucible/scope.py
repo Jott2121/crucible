@@ -8,9 +8,12 @@ scope's second half) is the mechanical gate before any model spend."""
 from __future__ import annotations
 
 import ast
+import configparser
+import fnmatch
 import importlib.util
 import subprocess
 import sys
+import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -120,8 +123,9 @@ def _public_top_level_names(path: Path) -> list[str]:
 # a list-of-dict, and their 2-arity pairings) -- TypeError from an arity
 # mismatch is skipped; any OTHER exception (e.g. a boundary condition mutated
 # into a ZeroDivisionError) is left to propagate as a genuine, mechanically
-# real kill WHEN a real mutant is under test, and tolerated otherwise (see
-# _UNDER_MUTANT in _CANARY below).
+# real kill WHEN a real mutant is under test (or mutmut's forced-fail phase
+# is demanding a failure), and tolerated otherwise (see the call-time
+# `under_mutant` read in _CANARY below).
 _CANARY_PROBES = [(), (0,), (1,), (0, 0), (1, 0), (0, 1), (1, 1), (-1, 1),
                    (0, 0, 0), (5, 0, 10), (-1, 0, 10), (11, 0, 10),
                    ([],), ({},), ("",), ([{}],), ([], 0), (0, [])]
@@ -134,14 +138,31 @@ _CANARY = (
     "_PROBES = {probes!r}\n"
     # mutmut's trampoline (mutmut/mutation/trampoline.py) sets MUTANT_UNDER_TEST
     # to "{module}.{mutant_name}" while a specific mutant is active, to "stats"
-    # during its own pre-mutation baseline/coverage pass, and leaves it unset
-    # for any direct pytest invocation (our own pristine check). Only the first
-    # case is "a real mutant is running right now" -- "stats" and unset both
+    # during its own pre-mutation baseline/coverage pass, to "fail" during its
+    # forced-fail setup-verification phase, and leaves it unset for any direct
+    # pytest invocation (our own pristine check). "stats" and unset both
     # execute the ORIGINAL function, so a probe exception there is a genuine
     # domain-validation exception on unmutated code, not a mutation-induced
-    # crash, and must never be allowed to fail the run.
-    "_UNDER_MUTANT = os.environ.get('MUTANT_UNDER_TEST', '') not in ('', 'stats', 'fail')\n"
+    # crash, and must never be allowed to fail the run -- ONLY those two are
+    # tolerated. "fail" is deliberately NOT tolerated (2026-07-11 re-review
+    # Critical): under MUTANT_UNDER_TEST='fail' the trampoline raises
+    # MutmutProgrammaticFailException from every wrapped call and mutmut
+    # REQUIRES at least one test to fail; on a subject whose existing tests
+    # never touch the scoped module (every zero-kill baseline -- the strict
+    # branch's core case) the canary is the ONLY test that can fail, so
+    # swallowing the exception here made mutmut abort 'Unable to force test
+    # failures', land every mutant not-checked, and falsely refuse the scope.
+    #
+    # The env var MUST be read inside the test function, at call time, never
+    # at module level: mutmut's stats, clean-tests, and forced-fail phases all
+    # run pytest IN-PROCESS (PytestRunner.execute_pytest), sharing one
+    # sys.modules -- a module-level read is evaluated once during the first
+    # phase (env '' or 'stats') and then stays stale-False through the
+    # forced-fail phase, silently re-introducing the exact swallow this
+    # comment's Critical removed (observed live: forced-fail '1 passed in
+    # 0.00s' with a module-level read, 'failed' with a call-time read).
     "def test_crucible_canary():\n"
+    "    under_mutant = os.environ.get('MUTANT_UNDER_TEST', '') not in ('', 'stats')\n"
     "    assert _NAMES, 'module exports nothing public'\n"
     "    for name in _NAMES:\n"
     "        obj = getattr(mod, name, None)\n"
@@ -154,12 +175,95 @@ _CANARY = (
     "            except TypeError:\n"
     "                continue\n"
     "            except Exception:\n"
-    "                if _UNDER_MUTANT:\n"
+    "                if under_mutant:\n"
     "                    raise\n"
     "                continue\n"
     "            else:\n"
     "                break\n"
 )
+
+
+# Representative fresh-file name: every test file crucible generates is named
+# crucible_<something>_test.py, so one fnmatch against this proves (or fails
+# to prove) collectability for the whole family.
+_FRESH_TEST_BASENAME = "crucible_x_test.py"
+
+_DISCOVERY_REFUSAL = (
+    "subject overrides pytest discovery ({key} in {file}); cannot mechanically "
+    "prove fresh-file collection -- the strict canary cannot clear a >0-kill "
+    "baseline either, so this subject needs manual scope validation"
+)
+
+
+def _pytest_config_sections(subject_dir: Path):
+    """Yield (filename, mapping) for each pytest config section present in the
+    subject: pyproject.toml [tool.pytest.ini_options] (tomllib), pytest.ini
+    [pytest] and setup.cfg [tool:pytest] (configparser) -- stdlib only. A file
+    that exists but cannot be parsed raises RuntimeError (fail-safe: an
+    unparseable config cannot prove anything about discovery)."""
+    pyproject = subject_dir / "pyproject.toml"
+    if pyproject.is_file():
+        try:
+            data = tomllib.loads(pyproject.read_text())
+        except tomllib.TOMLDecodeError as exc:
+            raise RuntimeError(
+                f"cannot parse pyproject.toml while checking pytest discovery config: {exc}")
+        section = data.get("tool", {}).get("pytest", {}).get("ini_options")
+        if isinstance(section, dict):
+            yield "pyproject.toml", section
+    for fname, sect in (("pytest.ini", "pytest"), ("setup.cfg", "tool:pytest")):
+        path = subject_dir / fname
+        if path.is_file():
+            parser = configparser.ConfigParser()
+            try:
+                parser.read_string(path.read_text())
+            except configparser.Error as exc:
+                raise RuntimeError(
+                    f"cannot parse {fname} while checking pytest discovery config: {exc}")
+            if parser.has_section(sect):
+                yield fname, dict(parser.items(sect))
+
+
+def _tokens(value) -> list[str]:
+    """Normalize an ini-style value to a token list: toml lists pass through,
+    strings (both toml and configparser) whitespace-split -- pytest's own
+    treatment of python_files/testpaths/addopts string values."""
+    if isinstance(value, list):
+        return [str(v) for v in value]
+    return str(value).split()
+
+
+def _assert_fresh_file_collectable(subject_dir: Path) -> None:
+    """Refuse (RuntimeError -> CLI's REFUSING/exit 4) when the subject's own
+    pytest discovery config would stop a freshly written crucible_*_test.py
+    from ever being collected -- the v6 failure class through the side door:
+    an existing suite can kill mutants (earning the waiver) under discovery
+    settings that silently exclude every file crucible will generate later.
+    Scans pyproject.toml [tool.pytest.ini_options], pytest.ini [pytest], and
+    setup.cfg [tool:pytest]; absent files/sections/keys prove nothing is
+    steering discovery, so the waiver proceeds.
+
+    Rules, all in the fail-safe direction (over-refuse, never under):
+    - python_files defined and no pattern fnmatch-matches crucible_x_test.py
+      -> refuse (fresh files would never be collected).
+    - testpaths defined at all -> refuse (discovery is pinned to fixed dirs;
+      crucible cannot mechanically prove fresh files land inside them).
+    - addopts containing a bare positional token -> refuse. HEURISTIC BOUNDS:
+      tokens are naive whitespace-splits; a token not starting with '-' is
+      treated as a discovery-pinning path. This misreads the separate argument
+      of a value-taking option (e.g. `-k expr`, `-p plugin`) as a path and
+      refuses, and mishandles quoted paths containing spaces -- both errors
+      refuse a possibly-fine subject, never waive a broken one."""
+    for fname, section in _pytest_config_sections(subject_dir):
+        if "testpaths" in section:
+            raise RuntimeError(_DISCOVERY_REFUSAL.format(key="testpaths", file=fname))
+        if "python_files" in section:
+            patterns = _tokens(section["python_files"])
+            if not any(fnmatch.fnmatch(_FRESH_TEST_BASENAME, p) for p in patterns):
+                raise RuntimeError(_DISCOVERY_REFUSAL.format(key="python_files", file=fname))
+        if "addopts" in section:
+            if any(t and not t.startswith("-") for t in _tokens(section["addopts"])):
+                raise RuntimeError(_DISCOVERY_REFUSAL.format(key="addopts", file=fname))
 
 
 def canary_probe(subject_dir: Path, module: str, run=subprocess.run) -> CanaryVerdict:
@@ -191,12 +295,19 @@ def canary_probe(subject_dir: Path, module: str, run=subprocess.run) -> CanaryVe
     Residual/dependency: a WAIVED verdict proves collection of the EXISTING
     test files only, for the module as scoped right now. It does NOT
     independently re-prove that a brand-new crucible_*_test.py written later
-    in the loop will also be collected -- that ongoing guarantee still rests
-    entirely on scope.detect()/apply() always writing
-    pytest_add_cli_args_test_selection in EXCLUDE form (never an
-    include-list; the v6 lesson) so newly generated test files are never
-    accidentally filtered out. The waiver and the exclude-only scope-writer
-    are companion guarantees, not substitutes for each other.
+    in the loop will also be collected -- that ongoing guarantee rests on TWO
+    constraints, BOTH of which must hold: (1) scope.detect()/apply() MUST
+    always write pytest_add_cli_args_test_selection in EXCLUDE form (never an
+    include-list; the v6 lesson), so newly generated test files are never
+    filtered out by crucible's own scope; and (2) the subject's own pytest
+    discovery config MUST NOT steer collection away from fresh files -- this
+    is checked mechanically before any waiver is granted, by
+    _assert_fresh_file_collectable(), which refuses (RuntimeError -> the
+    CLI's REFUSING/exit-4 path) when python_files cannot match a
+    crucible_*_test.py name, when testpaths is defined at all, or when
+    addopts pins bare positional paths. Neither constraint substitutes for
+    the other: the exclude-form writer cannot see the subject's config, and
+    the config scan cannot see how crucible writes its own scope.
 
     The "before" measure happens first and unconditionally, so a waived scope
     never pays for writing or pristine-checking a canary at all; only the
@@ -210,6 +321,7 @@ def canary_probe(subject_dir: Path, module: str, run=subprocess.run) -> CanaryVe
     before = engine.measure()
     before_killed = int(before.counts.get("killed", 0))
     if before_killed > 0:
+        _assert_fresh_file_collectable(subject_dir)
         return CanaryVerdict(
             kills_before=before_killed,
             kills_after=before_killed,
