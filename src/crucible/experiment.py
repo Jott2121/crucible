@@ -123,6 +123,8 @@ def run_arm(protocol: dict, arm_name: str, subject_dir, runs_root, module_path: 
         "tester_provider": protocol["tester"]["provider"],
         "tester_model": protocol["tester"]["model"],
         "critic_provider": critic_cfg["provider"], "critic_model": critic_cfg["model"],
+        "tester_billing": getattr(tester, "billing", "api"),
+        "critic_billing": getattr(critic, "billing", "api"),
         "max_rounds": cfg.max_rounds, "dry_rounds": cfg.dry_rounds, "started_at": stamp,
     })
     # rejected-artifact preservation (v3): a rejected or salvaged-away test file lands

@@ -64,6 +64,7 @@ def test_summarize_full_shape_and_values():
         "killed": 2,
         "cost_usd": pytest.approx(6.0),
         "cost_per_kill": pytest.approx(3.0),
+        "billing": "api",
     }
 
 
@@ -77,3 +78,15 @@ def test_summarize_incomplete_run_has_default_cost_and_verdict():
 
 def test_summarize_zero_kills_has_no_cost_per_kill():
     assert summarize(run_dict(["m1"], [[]]))["cost_per_kill"] is None
+
+
+def test_summarize_billing_field_legacy_default_and_max_plan():
+    base = {"meta": {"arm": "harden"}, "rounds": [],
+            "result": {"verdict": "dry", "total_cost_usd": 0.0, "baseline_survivors": []}}
+    assert summarize(base)["billing"] == "api"          # legacy meta: absent keys
+    both = dict(base, meta={"arm": "harden", "tester_billing": "max-plan",
+                             "critic_billing": "max-plan"})
+    assert summarize(both)["billing"] == "max-plan"
+    mixed = dict(base, meta={"arm": "harden", "tester_billing": "api",
+                              "critic_billing": "max-plan"})
+    assert summarize(mixed)["billing"] == "mixed:api+max-plan"
