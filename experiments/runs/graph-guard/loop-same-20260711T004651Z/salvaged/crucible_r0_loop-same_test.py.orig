@@ -1,0 +1,156 @@
+import math
+
+import pytest
+
+from graph_guard.ppr import personalized_pagerank, node_specificity
+
+
+# ---------------------------------------------------------------------------
+# personalized_pagerank
+# ---------------------------------------------------------------------------
+
+def test_empty_graph_returns_empty_dict():
+    assert personalized_pagerank({}, []) == {}
+    assert personalized_pagerank({}, ["a"]) == {}
+
+
+def test_single_node_no_edges():
+    # a is the only node, and the only seed -> all mass stays on a.
+    result = personalized_pagerank({"a": {}}, ["a"])
+    assert result == pytest.approx({"a": 1.0}, abs=1e-9)
+
+
+def test_single_node_self_loop():
+    # Self-loop with full weight; a is the sole seed -> fixed point stays at 1.0.
+    result = personalized_pagerank({"a": {"a": 1.0}}, ["a"])
+    assert result == pytest.approx({"a": 1.0}, abs=1e-9)
+
+
+def test_two_disconnected_nodes_seed_gets_all_mass():
+    # No edges at all: everything is dangling, so all mass funnels to the seed.
+    result = personalized_pagerank({"a": {}, "b": {}}, ["a"])
+    assert result["a"] == pytest.approx(1.0, abs=1e-9)
+    assert result["b"] == pytest.approx(0.0, abs=1e-9)
+
+
+def test_alpha_zero_gives_pure_teleport_distribution():
+    # With alpha=0, propagation and dangling contributions vanish (multiplied by
+    # alpha), so the result is exactly the teleport (seed) distribution.
+    adj = {"a": {"b": 2.0}, "b": {"c": 1.0}, "c": {}}
+    result = personalized_pagerank(adj, ["a", "b"], alpha=0)
+    assert result["a"] == pytest.approx(0.5, abs=1e-9)
+    assert result["b"] == pytest.approx(0.5, abs=1e-9)
+    assert result["c"] == pytest.approx(0.0, abs=1e-9)
+
+
+def test_alpha_zero_no_valid_seeds_uniform_teleport():
+    # No seed is present among the nodes -> falls back to uniform teleport
+    # over ALL nodes; with alpha=0 that is exactly the returned distribution.
+    adj = {"a": {"b": 1.0}, "b": {}, "c": {}}
+    result = personalized_pagerank(adj, ["z"], alpha=0)
+    assert result["a"] == pytest.approx(1.0 / 3.0, abs=1e-9)
+    assert result["b"] == pytest.approx(1.0 / 3.0, abs=1e-9)
+    assert result["c"] == pytest.approx(1.0 / 3.0, abs=1e-9)
+
+
+def test_empty_seeds_falls_back_to_uniform_teleport():
+    adj = {"a": {"b": 1.0}, "b": {}, "c": {}}
+    result = personalized_pagerank(adj, [], alpha=0)
+    assert sum(result.values()) == pytest.approx(1.0, rel=1e-6)
+    assert result["a"] == pytest.approx(1.0 / 3.0, abs=1e-9)
+    assert result["b"] == pytest.approx(1.0 / 3.0, abs=1e-9)
+    assert result["c"] == pytest.approx(1.0 / 3.0, abs=1e-9)
+
+
+def test_node_referenced_only_as_neighbor_is_included():
+    # 'b' never appears as a key but must still be a node in the result.
+    adj = {"a": {"b": 5.0}}
+    result = personalized_pagerank(adj, ["a"], alpha=0)
+    assert set(result.keys()) == {"a", "b"}
+    assert result["a"] == pytest.approx(1.0, abs=1e-9)
+    assert result["b"] == pytest.approx(0.0, abs=1e-9)
+
+
+def test_isolated_non_seed_node_gets_zero_score():
+    # c has no edges in or out and is not a seed -> it can never receive mass.
+    adj = {"a": {"b": 1.0}, "b": {"a": 1.0}, "c": {}}
+    result = personalized_pagerank(adj, ["a"])
+    assert result["c"] == pytest.approx(0.0, abs=1e-9)
+
+
+def test_two_node_cycle_with_single_seed_analytic_fixed_point():
+    # Analytic stationary point (c always contributes 0 dangling mass once
+    # converged, since c's own score converges to 0):
+    #   b = alpha * a
+    #   a = alpha * b + (1 - alpha)
+    #   a + b = 1  =>  a = 1/1.85 = 20/37, b = 17/37
+    adj = {"a": {"b": 1.0}, "b": {"a": 1.0}, "c": {}}
+    result = personalized_pagerank(adj, ["a"], alpha=0.85)
+    assert result["a"] == pytest.approx(20.0 / 37.0, rel=1e-5)
+    assert result["b"] == pytest.approx(17.0 / 37.0, rel=1e-5)
+    assert result["c"] == pytest.approx(0.0, abs=1e-9)
+
+
+def test_scores_sum_to_one_and_are_nonnegative():
+    adj = {
+        "a": {"b": 1.0, "c": 2.0},
+        "b": {"c": 1.0},
+        "c": {"a": 0.5},
+        "d": {},
+    }
+    result = personalized_pagerank(adj, ["a", "d"])
+    assert sum(result.values()) == pytest.approx(1.0, rel=1e-6)
+    for v in result.values():
+        assert v >= 0.0
+
+
+def test_seed_node_outranks_unrelated_isolated_node():
+    adj = {"a": {"b": 1.0}, "b": {"a": 1.0}, "isolated": {}}
+    result = personalized_pagerank(adj, ["a"])
+    assert result["a"] > result["isolated"]
+    assert result["b"] > result["isolated"]
+
+
+# ---------------------------------------------------------------------------
+# node_specificity
+# ---------------------------------------------------------------------------
+
+def test_node_specificity_empty_graph():
+    assert node_specificity({}) == {}
+
+
+def test_node_specificity_degree_zero_is_one():
+    # 1 / (1 + log(1 + 0)) = 1 / (1 + log(1)) = 1 / (1 + 0) = 1.0
+    result = node_specificity({"a": {}})
+    assert result["a"] == pytest.approx(1.0, rel=1e-9)
+
+
+def test_node_specificity_formula_matches_manual_computation():
+    adj = {
+        "a": {},
+        "b": {"a": 1.0, "c": 1.0},
+    }
+    result = node_specificity(adj)
+    expected_a = 1.0 / (1.0 + math.log(1.0 + 0))
+    expected_b = 1.0 / (1.0 + math.log(1.0 + 2))
+    assert result["a"] == pytest.approx(expected_a, rel=1e-9)
+    assert result["b"] == pytest.approx(expected_b, rel=1e-9)
+
+
+def test_node_specificity_only_includes_adjacency_keys():
+    # 'z' only appears as a neighbor value, not as a top-level key, so it
+    # must NOT show up in node_specificity's output.
+    adj = {"a": {"z": 1.0}}
+    result = node_specificity(adj)
+    assert set(result.keys()) == {"a"}
+
+
+def test_node_specificity_higher_degree_means_lower_score():
+    adj = {
+        "hub": {"n1": 1.0, "n2": 1.0, "n3": 1.0, "n4": 1.0},
+        "leaf": {"n1": 1.0},
+    }
+    result = node_specificity(adj)
+    assert result["hub"] < result["leaf"]
+    assert 0.0 < result["hub"] <= 1.0
+    assert 0.0 < result["leaf"] <= 1.0
