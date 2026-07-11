@@ -107,6 +107,16 @@ def test_harden_end_to_end_survives_engine_artifacts(tmp_path):
     # the report command must consume the receipts this very run just wrote
     assert main(["report", str(runs[0])]) == 0
 
+    # the scope `crucible scope`'s canary would have validated (also_copy
+    # derived from scope.detect) must be what preflight actually commits --
+    # not a bare source_paths that silently drops it (Opus review, scope->harden
+    # handoff defect: cli.py's _cmd_run was building SubjectEnv with scope=None).
+    committed_pyproject = subprocess.run(
+        ["git", "show", "HEAD:pyproject.toml"], cwd=subject,
+        capture_output=True, text=True, check=True,
+    ).stdout
+    assert 'also_copy = ["subject_pkg"]' in committed_pyproject
+
 
 @pytest.mark.slow
 def test_cli_meta_records_billing(tmp_path):

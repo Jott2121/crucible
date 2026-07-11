@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import crucible
+from crucible import scope as scope_mod
 from crucible.env import SubjectEnv
 from crucible.loop import LoopConfig, harden, oneshot
 from crucible.providers_ext import FakeProvider, get_provider
@@ -36,9 +37,18 @@ def _cmd_run(args, mode):
     tester = _provider(args.tester, args.fake_replies)
     critic = tester if args.critic == args.tester else _provider(args.critic, args.fake_replies)
 
+    # Derive scope the SAME way `crucible scope` does, so harden's preflight
+    # writes the byte-identical [tool.mutmut] (+ conftest shim) that scope's
+    # canary just validated -- never a bare source_paths that silently drops
+    # also_copy/pytest_args/the src-shim (see env.py preflight's scope= handling).
+    plan = scope_mod.detect(subject, args.module)
+    run_scope = {"also_copy": plan.also_copy, "pytest_args": plan.pytest_args or None}
+    if plan.needs_src_shim:
+        run_scope["extra_files"] = {"conftest.py": scope_mod.SRC_SHIM}
+
     env = SubjectEnv(subject_dir=subject, tester_provider=tester, tester_model=args.tester_model,
                      critic_provider=critic, critic_model=args.critic_model,
-                     module_path=args.module)
+                     module_path=args.module, scope=run_scope)
     cfg = LoopConfig(max_rounds=args.rounds, dry_rounds=args.dry_rounds, arm=mode)
 
     # hard stop (dirty clone / red suite / non-git dir) before any token is spent;

@@ -25,10 +25,12 @@ receipts shadow-priced and flagged `billing: max-plan`.
 
 ## Procedure
 
-1. Preflight: confirm the target module path exists; `git status` clean
-   enough (crucible's own preflight enforces committed-clean and green
-   suite); confirm the subject's test deps are importable from crucible's
-   venv or the subject's own.
+1. Preflight: confirm the target module path exists; the subject repo must be
+   committed-clean (`git status --porcelain` empty) with a green suite on
+   pristine code -- this is a hard requirement, not a nice-to-have: crucible's
+   own preflight refuses (exit non-zero, no tokens spent) on anything less.
+   Also confirm the subject's test deps are importable from crucible's venv
+   or the subject's own.
 2. Branch: `git checkout -b crucible/harden-<module-stem>-<YYYYMMDD>` (never
    reuse an existing branch).
 3. Scope + collection gate (free, no model calls):
@@ -38,15 +40,25 @@ receipts shadow-priced and flagged `billing: max-plan`.
    zero-kill baselines) or `canary: WAIVED (existing suite kills K of N
    mutants; collection proven)` (well-tested modules; the waiver is itself
    gated by a pytest-discovery config scan).
-4. Run the loop on the Max plan:
+4. Commit the scope config: `crucible scope` writes `pyproject.toml`'s
+   `[tool.mutmut]` (and a `conftest.py` shim, for src-layout subjects)
+   straight to the working tree, uncommitted. Commit it now, before running
+   the loop:
+   `git add pyproject.toml conftest.py 2>/dev/null; git commit -m "crucible:
+   scope config for <M>"`. Skipping this step leaves the tree dirty, and
+   step 5's preflight hard-refuses a dirty tree outright -- receipts also
+   bind to a commit sha, so the validated scope needs one to bind to.
+5. Run the loop on the Max plan:
    `~/ai-agentic-code-testing/.venv/bin/crucible harden <repo> --module <M>
    --tester claude-cli --critic claude-cli --runs-dir <repo>/.crucible-runs`
-5. Commit the accepted `tests/crucible_*_test.py` files to the local branch
+6. Commit the accepted `tests/crucible_*_test.py` files to the local branch
    with a message naming kills and the receipt dir.
-6. Report, plain ASCII: verdict, kills/baseline survivors, rounds, dropped
+7. Report, plain ASCII: verdict, kills/baseline survivors, rounds, dropped
    wrong-oracle tests, token totals, shadow cost with the `max-plan` flag
-   stated in words ("plan-covered, no metered spend"), receipt path. Offer
-   -- do not open -- a PR.
+   stated in words ("plan-covered, no metered spend"), receipt path -- the
+   billing flag itself lives in the run dir's `meta.json`
+   (`tester_billing`/`critic_billing`); `crucible report` does not print it.
+   Offer -- do not open -- a PR.
 
 ## Refusals
 

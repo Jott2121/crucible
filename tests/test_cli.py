@@ -51,6 +51,84 @@ def test_cli_scope_subcommand_waived_exits_0(monkeypatch, tmp_path, capsys):
     assert "collection proven" in out.lower()
 
 
+def test_cmd_run_derives_scope_from_detect_and_passes_it_to_subjectenv(monkeypatch, tmp_path):
+    """`crucible harden`/`oneshot` must build SubjectEnv's scope= the SAME way
+    `crucible scope` does (scope.detect), not leave it None -- otherwise
+    harden's preflight rewrites [tool.mutmut] to a bare source_paths and
+    silently discards also_copy/pytest_args/the src-shim that scope's canary
+    already validated. Spy on SubjectEnv to capture exactly the scope kwarg
+    it receives; stop the run immediately after construction (no real
+    provider/mutmut work needed for this assertion)."""
+    from crucible import cli
+    import crucible.scope as scope_mod
+
+    captured = {}
+
+    class _StopEarly(Exception):
+        pass
+
+    class SpySubjectEnv:
+        def __init__(self, *args, **kwargs):
+            captured["scope"] = kwargs.get("scope")
+            raise _StopEarly("stop-before-any-real-work")
+
+    monkeypatch.setattr(
+        scope_mod, "detect",
+        lambda s, m: scope_mod.ScopePlan(
+            module=m, also_copy=["pkga", "pkgb"], pytest_args=["--ignore=tests/test_hazard.py"],
+            needs_src_shim=True, notes=[],
+        ),
+    )
+    monkeypatch.setattr(cli, "SubjectEnv", SpySubjectEnv)
+
+    import pytest
+    with pytest.raises(_StopEarly):
+        cli.main(["harden", str(tmp_path), "--module", "pkga/mod.py",
+                  "--tester", "fake", "--critic", "fake"])
+
+    assert captured["scope"] == {
+        "also_copy": ["pkga", "pkgb"],
+        "pytest_args": ["--ignore=tests/test_hazard.py"],
+        "extra_files": {"conftest.py": scope_mod.SRC_SHIM},
+    }
+
+
+def test_cmd_run_scope_omits_extra_files_and_uses_none_pytest_args_when_plan_is_plain(
+    monkeypatch, tmp_path,
+):
+    """The counterpart shape: no src-shim needed and no pytest_args -- the
+    scope dict must carry pytest_args=None (not []) and no extra_files key,
+    matching env.py preflight's `self.scope.get("pytest_args")` /
+    `.get("extra_files") or {}` handling."""
+    from crucible import cli
+    import crucible.scope as scope_mod
+
+    captured = {}
+
+    class _StopEarly(Exception):
+        pass
+
+    class SpySubjectEnv:
+        def __init__(self, *args, **kwargs):
+            captured["scope"] = kwargs.get("scope")
+            raise _StopEarly("stop-before-any-real-work")
+
+    monkeypatch.setattr(
+        scope_mod, "detect",
+        lambda s, m: scope_mod.ScopePlan(
+            module=m, also_copy=["pkga"], pytest_args=[], needs_src_shim=False, notes=[],
+        ),
+    )
+    monkeypatch.setattr(cli, "SubjectEnv", SpySubjectEnv)
+
+    import pytest
+    with pytest.raises(_StopEarly):
+        cli.main(["oneshot", str(tmp_path), "--module", "pkga/mod.py",
+                  "--tester", "fake", "--critic", "fake"])
+
+    assert captured["scope"] == {"also_copy": ["pkga"], "pytest_args": None}
+
+
 def test_cli_scope_subcommand_runtimeerror_exits_4_no_traceback(monkeypatch, tmp_path, capsys):
     """A RuntimeError anywhere in detect/apply/canary_probe is a single refusal
     path: plain "REFUSING: {exc}" line, exit 4, no traceback leaked to exit 1."""
