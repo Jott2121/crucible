@@ -1,6 +1,8 @@
-"""crucible CLI. Subcommands: oneshot, harden (report arrives in Task 12).
+"""crucible CLI. Subcommands: oneshot, harden, report, experiment, scope.
 
-Plain-ASCII output. Exit codes: 0 = clean/dry/cap/oneshot; 3 = aborted/rejected.
+Plain-ASCII output. Exit codes: 0 = clean/dry/cap/oneshot; 3 = aborted/rejected;
+4 = scope's canary probe found kills did not increase (unproven scope, refuse
+before spending any model tokens).
 """
 from __future__ import annotations
 
@@ -110,6 +112,9 @@ def main(argv=None) -> int:
     ep.add_argument("--subject", required=True)
     ep.add_argument("--module", required=True)
     ep.add_argument("--runs-dir", default="experiments/runs")
+    sp = sub.add_parser("scope")
+    sp.add_argument("subject")
+    sp.add_argument("--module", required=True)
     args = parser.parse_args(argv)
     if args.cmd == "report":
         return _cmd_report(args)
@@ -120,6 +125,23 @@ def main(argv=None) -> int:
         assert_protocol_committed(Path.cwd(), Path(args.protocol))
         protocol = load_protocol(args.protocol)
         return run_arm(protocol, args.arm, args.subject, args.runs_dir, args.module)
+    if args.cmd == "scope":
+        import crucible.scope as scope_mod
+        subject = Path(args.subject).resolve()
+        plan = scope_mod.detect(subject, args.module)
+        scope_mod.apply(subject, plan)
+        for note in plan.notes:
+            print(f"note: {note}")
+        v = scope_mod.canary_probe(subject, args.module)
+        status = "KILLS" if v.passed else "NO-KILLS"
+        print(f"scope written: also_copy={plan.also_copy} pytest_args={plan.pytest_args} "
+              f"shim={plan.needs_src_shim}")
+        print(f"canary: {status} ({v.kills_before} -> {v.kills_after} of {v.mutants} mutants)")
+        if not v.passed:
+            print("REFUSING: a fresh test file is not being collected under this scope; "
+                  "fix the scope before spending any model tokens")
+            return 4
+        return 0
     return _cmd_run(args, args.cmd)
 
 
