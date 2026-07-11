@@ -337,7 +337,8 @@ spend accounted separately:
 (`analyze.py::total_spend` sums only `result.json`-backed runs — the $9.9078 line; the five
 receipt-rows-only dirs are runs that died before a verdict, their per-round spend receipted in
 `receipt.jsonl` and summed here directly. 43 run dirs exist in total: 15 counted + 17
-`result.json`-backed non-counted + 5 receipt-rows-only + 7 pre-receipt crash dirs with
+`result.json`-backed non-counted + 4 receipt-rows-only failed attempts (the missing cell's
+receipt-rows-only dir is already inside the 15 counted) + 7 pre-receipt crash dirs with
 `meta.json` at most.)
 
 Known unreceipted spend (bounded estimates, DEVIATIONS.md): ~$0.21 from the packaging
