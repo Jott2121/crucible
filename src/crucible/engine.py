@@ -74,21 +74,55 @@ def _sandbox_stats_failure_tail(stdout: str, lines: int = 40) -> str | None:
     return None
 
 
+class MeasureTimeout(RuntimeError):
+    """`mutmut run` exceeded MUTMUT_RUN_TIMEOUT_S. Without this bound a
+    measure can hang forever with no receipt trace: a generated test that
+    spawns its own process pool (e.g. sklearn/joblib's loky workers) can
+    deadlock inside mutmut's already-forked workers -- observed live on
+    attrition-risk-ml 2026-07-10, all workers 0% CPU for 68+ minutes. The
+    bound converts an unbounded silent hang into the established loud
+    crashed-cell posture. subprocess kills only the direct child on timeout,
+    so deadlocked orphan workers may need manual cleanup (named here so the
+    operator knows to look)."""
+
+
+# Generous: the slowest legitimate measure observed (attrition-risk-ml, 255
+# mutants, sklearn-training tests) is ~30 minutes. A measure past this bound
+# has always meant a hang, never slow progress.
+MUTMUT_RUN_TIMEOUT_S = 3600
+
+
 class _RunTee:
     """Wraps a `run` callable, capturing the stdout+stderr of the `mutmut run`
     invocation specifically -- the one call in `oracle_gate.runner.run_mutation`
     whose output can show a sandbox stats-phase failure, which the cicd-stats
     JSON and `mutmut results` text (the only things run_mutation returns) do
     not otherwise surface: run_mutation checks `mutmut run`'s exit code is
-    non-fatal (survivors alone make it non-zero) and then discards its stdout."""
+    non-fatal (survivors alone make it non-zero) and then discards its stdout.
+
+    Also bounds that same invocation with MUTMUT_RUN_TIMEOUT_S (see
+    MeasureTimeout); every other command through this tee (mutmut show,
+    pytest) is left untouched -- run_tests carries its own timeout."""
 
     def __init__(self, run):
         self._run = run
         self.run_stdout = ""
 
     def __call__(self, cmd, *args, **kwargs):
-        proc = self._run(cmd, *args, **kwargs)
-        if list(cmd[-2:]) == ["mutmut", "run"]:
+        is_mutmut_run = list(cmd[-2:]) == ["mutmut", "run"]
+        if is_mutmut_run:
+            kwargs.setdefault("timeout", MUTMUT_RUN_TIMEOUT_S)
+        try:
+            proc = self._run(cmd, *args, **kwargs)
+        except subprocess.TimeoutExpired as exc:
+            raise MeasureTimeout(
+                f"`mutmut run` produced no result within {kwargs.get('timeout')}s "
+                "-- treated as a hang (a generated test spawning its own process "
+                "pool can deadlock inside mutmut's forked workers), never as a "
+                "measurement. Orphaned mutmut worker processes may remain and "
+                "need manual cleanup."
+            ) from exc
+        if is_mutmut_run:
             self.run_stdout = (getattr(proc, "stdout", "") or "") + (getattr(proc, "stderr", "") or "")
         return proc
 

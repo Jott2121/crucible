@@ -18,15 +18,19 @@ RESULTS = """\
 
 
 class FakeRun:
-    """Scripted subprocess.run: returns canned (returncode, stdout) by command."""
+    """Scripted subprocess.run: returns canned (returncode, stdout) by command.
+    Records kwargs per call (subprocess.run compatibility: the engine's tee
+    injects timeout= for the `mutmut run` invocation)."""
 
     def __init__(self, script):
         self.script = script
         self.calls = []
+        self.kwargs_by_key = {}
 
-    def __call__(self, cmd, cwd=None, capture_output=True, text=True):
+    def __call__(self, cmd, cwd=None, capture_output=True, text=True, **kwargs):
         self.calls.append(cmd)
         key = " ".join(cmd[2:])  # drop "python -m"
+        self.kwargs_by_key[key] = kwargs
         rc, out = self.script.get(key, (0, ""))
 
         class P:
@@ -53,6 +57,43 @@ def test_measure_returns_survivor_ids(tmp_path):
         "subject_pkg.calc.x_rate__mutmut_1",
     ]
     assert outcome.all_mutants == 3
+
+
+def test_measure_bounds_mutmut_run_with_timeout(tmp_path):
+    """Only the `mutmut run` invocation is bounded; a hang there (a generated
+    test's own process pool deadlocking inside mutmut's forked workers) must
+    become a loud failure, never an unbounded wait with no receipt trace."""
+    from crucible.engine import MUTMUT_RUN_TIMEOUT_S
+
+    (tmp_path / "mutants").mkdir()
+    (tmp_path / "mutants" / "mutmut-cicd-stats.json").write_text(
+        '{"killed": 1, "survived": 2, "no_coverage": 0, "timeout": 0}'
+    )
+    run = FakeRun({
+        "mutmut --version": (0, "mutmut, version 3.6.0"),
+        "mutmut run": (2, ""),
+        "mutmut export-cicd-stats": (0, ""),
+        "mutmut results --all true": (0, RESULTS),
+    })
+    MutmutEngine(tmp_path, run=run).measure()
+    assert run.kwargs_by_key["mutmut run"].get("timeout") == MUTMUT_RUN_TIMEOUT_S
+    assert "timeout" not in run.kwargs_by_key["mutmut results --all true"]
+
+
+def test_measure_raises_measure_timeout_when_mutmut_run_hangs(tmp_path):
+    import subprocess
+
+    from crucible.engine import MeasureTimeout
+
+    inner = FakeRun({"mutmut --version": (0, "mutmut, version 3.6.0")})
+
+    def run(cmd, **kwargs):
+        if list(cmd[-2:]) == ["mutmut", "run"]:
+            raise subprocess.TimeoutExpired(cmd, kwargs.get("timeout"))
+        return inner(cmd, **kwargs)
+
+    with pytest.raises(MeasureTimeout, match="hang"):
+        MutmutEngine(tmp_path, run=run).measure()
 
 
 def test_survivor_diff_shells_to_mutmut_show(tmp_path):
