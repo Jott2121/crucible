@@ -114,3 +114,15 @@ killed) or provably equivalent mutations (2, documented above) — no case where
 - `.venv/bin/python -m pytest -q -m "not slow"` -> `85 passed, 2 deselected` (0 warnings)
 - `.venv/bin/python -m mutmut run` (final pass) -> `375 mutants: 373 killed, 2 survived, 0 never reached`
 - `.venv/bin/python -m mutmut results` (final) -> only the two ids above listed as `survived`
+
+---
+
+# Exemption sign-off (2026-07-11)
+
+Both analytically-verified equivalent mutants documented in the Task 14a triage above —
+`crucible.guardrails.x_extract_test_file__mutmut_4` and
+`crucible.report.x_mcnemar_exact__mutmut_4` — are **approved as exemptions by Jeff
+Otterson, 2026-07-11** (interactive gate; approval given after the experiment merged to
+main at `687637e`). This is the repo owner's named sign-off the triage rule required;
+the analytical dispositions are unchanged. A future mutation run listing exactly these
+two ids as survivors is at the documented 99.5% score with zero untriaged survivors.
