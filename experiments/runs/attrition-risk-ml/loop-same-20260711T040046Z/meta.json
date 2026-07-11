@@ -1,0 +1,14 @@
+{
+  "subject": "/Users/jeffreyotterson/crucible-subjects/attrition-risk-ml",
+  "module": "src/train.py",
+  "head_sha": "5448458cc77f4c00325aa58bc0e0a859404a3f61",
+  "arm": "loop-same",
+  "protocol_version": 11,
+  "tester_provider": "anthropic",
+  "tester_model": "claude-sonnet-5",
+  "critic_provider": "anthropic",
+  "critic_model": "claude-sonnet-5",
+  "max_rounds": 4,
+  "dry_rounds": 2,
+  "started_at": "20260711T040046Z"
+}
