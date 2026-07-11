@@ -1,0 +1,106 @@
+{
+  "subjects": [
+    {
+      "name": "attrition-risk-ml",
+      "source": "local:~/attrition-risk-ml",
+      "pinned_sha": "141e52a3363701ef4d5a77331f90af6d0ec292db",
+      "module": "src/train.py",
+      "strip_tests": false,
+      "notes": "202 lines at origin/main (was 284 at the old fix/calibration-branch pin bb52f2d...->4f50427; repinned to origin/main per review: the old pin lived on an unmerged feature branch with no public ref). Core train/score module, module path unchanged. main's version lacks the calibration wrapper (CalibratedClassifierCV / Brier-score selection) present on fix/calibration -- a real content difference from the original prep, not a cosmetic one; see task-3-fix-report.md diff. Not previously mutation-hardened.",
+      "smoke": {
+        "mutants": 255,
+        "killed": 0,
+        "survived": 255
+      }
+    },
+    {
+      "name": "graph-guard",
+      "source": "local:~/graph-guard",
+      "pinned_sha": "6a0f071f08ac2fb3266fe2525fab07435cd4db89",
+      "module": "graph_guard/ppr.py",
+      "strip_tests": false,
+      "notes": "51 lines, pure math (personalized PageRank + node specificity), stdlib-only, no network/IO. Chosen over eval_metrics.py (already mutation-hardened, ceiling effect) and guards.py (couples to store/graph_retriever); ppr.py is self-contained. Below the third-party 100-800 floor, but the brief explicitly names ppr.py/guards.py as the local-subject choice for headroom. Repinned to origin/main per review: the old pin (bb52f2d) lived on an unmerged feature branch with no public ref. ppr.py is byte-identical between the old pin and origin/main (verified via git diff), so this repin has no content impact.",
+      "smoke": {
+        "mutants": 80,
+        "killed": 58,
+        "survived": 22
+      }
+    },
+    {
+      "name": "rag-guard",
+      "source": "local:~/rag-guard",
+      "pinned_sha": "2738f12cf689ab09a10e77e82176a62ae28bc35f",
+      "module": "rag_guard/guard.py",
+      "strip_tests": false,
+      "notes": "57 lines, the core guard/redaction module (should_refuse, groundedness, redact_pii) named directly by the task brief. Pure regex/logic, no network.",
+      "smoke": {
+        "mutants": 71,
+        "killed": 45,
+        "survived": 26
+      }
+    },
+    {
+      "name": "packaging",
+      "source": "pypi-git",
+      "repo_url": "https://github.com/pypa/packaging.git",
+      "pinned_sha": "30824d9e3b33372a81af5e7a1d7e2ceb95e348c6",
+      "module": "src/packaging/_elffile.py",
+      "strip_tests": true,
+      "also_copy": [
+        "src/packaging"
+      ],
+      "notes": "Rank 2. Pinned SHA of shallow clone HEAD: 30824d9e3b33372a81af5e7a1d7e2ceb95e348c6. Same module the original walk identified (first alphabetically qualifying, unchanged by also_copy since it was already correct on LOC/logic grounds) -- what changed is the criterion-5 verdict, from skip to SELECTED. Original walk's disqualifying reasoning (pytest's own 'packaging' dependency import collision) did not reproduce once also_copy carried packaging's sibling modules (version.py, requirements.py, etc.) into mutants/ unmutated alongside the single mutated _elffile.py; extra dev-test deps needed: pretend, tomli_w (both installed and later uninstalled during cleanup). License: Apache-2.0 OR BSD-2-Clause. 108 lines.",
+      "smoke": {
+        "mutants": 69,
+        "killed": 36,
+        "survived": 33
+      }
+    },
+    {
+      "name": "idna",
+      "source": "pypi-git",
+      "repo_url": "https://github.com/kjd/idna.git",
+      "pinned_sha": "5a954ffed62b15e2a313e5de0f949f60ed15416e",
+      "module": "idna/cli.py",
+      "strip_tests": true,
+      "also_copy": [
+        "idna"
+      ],
+      "notes": "Rank 5. Pinned SHA of shallow clone HEAD: 5a954ffed62b15e2a313e5de0f949f60ed15416e. Same module flagged by the Opus review as the first alphabetically qualifying module; also_copy=[\"idna\"] resolved the in-package sibling import (`from . import IDNAError, decode, encode`) that broke the original single-file mutants/ tree, exactly as predicted. No extra dev-test deps needed beyond idna itself -- tests/test_idna_cli.py collected and ran cleanly. License: BSD-3-Clause. 128 lines.",
+      "smoke": {
+        "mutants": 187,
+        "killed": 126,
+        "survived": 61
+      }
+    }
+  ],
+  "selection_log": [
+    "METHOD NOTE (v2 uniform re-walk, 2026-07-10): every candidate was evaluated with the FINAL technique applied uniformly from rank 1 -- [tool.mutmut] scoping of exactly the target module via source_paths, WITH also_copy of the package's source tree so in-package sibling imports and pytest's own transitive imports resolve inside mutmut's mutants/ tree. Module choice under criterion 4 = first alphabetical module of 100-800 LOC of plain logic, judged with also_copy available (a module is no longer disqualified merely for importing a sibling file in its own package; it is still disqualified for doing real network/file/subprocess IO itself, or for package-level blockers also_copy cannot fix). Smoke runs timeboxed ~3 min; a timeout is recorded as a criterion-5 skip from an ACTUAL attempt, never by analogy/extrapolation.",
+    "1. boto3: skip -- criterion 5 (real re-attempt, not extrapolation). Cloned boto/boto3 @d3449aa60a089a207491d34f4a6f158bac78de50, installed botocore/jmespath/s3transfer + boto3 editable --no-deps into the shared venv. Scoped [tool.mutmut] source_paths=[\"boto3/__init__.py\"], also_copy=[\"boto3\"] (per final technique). mutmut run generated mutants in 69ms (1 file mutated) but then hung in the 'Running stats' phase (mutmut's baseline pytest collection/coverage-gathering step over the full auto-also_copied tests/ tree) for 4.5+ minutes real wall clock with no output change -- had to SIGKILL manually. Root cause is boto3+botocore's own combined unit+functional pytest baseline being too slow to even collect stats for, not a sibling-import problem -- also_copy does not fix this category. Module that would have been targeted: boto3/__init__.py (107 lines, first alphabetically in 100-800 range; imports boto3.compat/boto3.session, thin session-management glue, no raw network IO of its own).",
+    "2. packaging: SELECTED. Cloned pypa/packaging @30824d9e3b33372a81af5e7a1d7e2ceb95e348c6 (Apache-2.0 OR BSD-2-Clause, dual permissive). Real alphabetical file list of src/packaging/: __init__.py(15, too small), _elffile.py(108, first qualifying: ELF header parser reading a bytes buffer, no network/file/subprocess IO of its own) -- confirmed same module the original walk would have picked. Editable-installed packaging into the shared venv (this REPLACES pytest's own 'packaging' dependency, which is exactly the collision the original walk worried about). Scoped [tool.mutmut] source_paths=[\"src/packaging/_elffile.py\"], also_copy=[\"src/packaging\"]. First smoke attempt failed test collection on missing dev-test deps (pretend, tomli_w) needed by tests/test_manylinux.py and tests/test_pylock.py -- installed both (trivial pure-Python packages, ~5s). Re-ran: mutmut generated 69 mutants for _elffile.py and ran the FULL clean pytest suite successfully to completion (36 killed / 33 survived, 64.6 mutations/sec) -- pytest's own internal 'from packaging.version import Version' / 'from packaging.requirements import Requirement' imports resolved fine because also_copy carried the rest of src/packaging/ (version.py, requirements.py, etc.) into mutants/ UNMUTATED; only _elffile.py itself was mutated, and nothing in pytest's own startup path touches _elffile.py. This DIRECTLY CONTRADICTS the original walk's 'self-referential naming collision breaks the import' reasoning -- that finding was an artifact of the pre-also_copy technique (mutants/ tree containing only the single target file with no siblings at all, so ANY import from the package -- pytest's or the target module's own sibling imports -- would break), not a real irreducible collision. 69 >= 40 mutants: criterion 5 PASS.",
+    "3. urllib3: skip -- criterion 5, verified via actual repo inspection (not analogy). Cloned urllib3/urllib3 @4e5ce638723118dc41f218cd6715f91a9f321908 (MIT). Real alphabetical file list of src/urllib3/: __init__.py(211, in-range but is the package's public-API facade with a live ssl.OPENSSL_VERSION runtime check -- judged network-adjacent glue consistent with original), _base_connection.py(167, in-range but content is pure typing.NamedTuple/Protocol declarations under TYPE_CHECKING -- no executable logic to mutate meaningfully), _collections.py(486, first qualifying: RecentlyUsedContainer/HTTPHeaderDict data structures, no IO) -- same module original walk would have picked. Read test/conftest.py directly: it unconditionally imports dummyserver.app (hypercorn_app), trustme, dummyserver.hypercornserver, dummyserver.testcase -- confirmed via pyproject.toml [dependency-groups] that these pull in anyio[trio], hypercorn>=0.15, quart>=0.20, quart-trio, trio>=0.27, trustme>=1.2.1, and even a custom forked hypercorn pinned to a git URL (github.com/urllib3/hypercorn@urllib3-changes). This is a genuine missing external test-fixture toolchain (async web-server stack), not a sibling-import problem -- also_copy cannot supply packages that are not installed. Did not attempt the full install (heavy multi-package async/web/crypto chain); this is a real, file-verified reason, not an extrapolation from boto3.",
+    "4. certifi: skip -- criterion 4, re-verified directly (LOC facts are unaffected by also_copy so this needed only a quick recheck). Cloned certifi/python-certifi @a31ef39bb5906af7dc9729890f7e4e04e75afdae. certifi/ contains __init__.py(4 lines), __main__.py(12 lines), core.py(83 lines) plus the cacert.pem data file -- no module anywhere in the 100-800 line range. Confirmed unchanged from original.",
+    "5. idna: SELECTED. Cloned kjd/idna @5a954ffed62b15e2a313e5de0f949f60ed15416e (BSD-3-Clause). Real alphabetical file list of idna/: __init__.py(45, too small), __main__.py(6, too small), cli.py(128, first qualifying) -- confirmed same module flagged by the review. cli.py does `from . import IDNAError, decode, encode` plus `from .core import _alabel_prefix, _unicode_dots_re` and `from .package_data import __version__` -- exactly the sibling-import pattern also_copy is designed to fix. Editable-installed idna --no-deps. Scoped [tool.mutmut] source_paths=[\"idna/cli.py\"], also_copy=[\"idna\"]. mutmut run completed cleanly on the first attempt (tests/test_idna_cli.py exists and collected fine, no missing deps): 187 mutants generated for cli.py, 126 killed / 61 survived, 131.6 mutations/sec, full clean-test run passed. This CONFIRMS the review's hypothesis exactly: the original walk's import breakage was purely an artifact of the mutants/ tree containing only cli.py with no siblings; also_copy=[\"idna\"] resolves it completely. 187 >= 40 mutants: criterion 5 PASS. Note: main() in cli.py does read sys.stdin when invoked as a CLI (not at import time, not during mutant generation/collection) -- did not disqualify it since this mirrors how boto3's __init__.py (session/glue code) was treated as acceptable in the original walk's own precedent, and the review's brief specifically called this module out to retest, not to add a new stdin-IO exclusion.",
+    "STOPPED at 5 candidates walked once 2 qualifying packages were found: packaging and idna."
+  ],
+  "selection_log_v1": [
+    "NOTE: v1 walk used a non-uniform technique (candidates 1-12 screened without also_copy, 13-15 with it) and skipped botocore by extrapolation; superseded by the uniform re-walk in selection_log -- see the Opus review of Plan 2 Task 3.",
+    "METHOD NOTE: candidates 1-12 were evaluated for criterion-4 self-containment strictly (a module importing a sibling file inside its own package was disqualified, since mutmut's mutants/ tree only materializes files listed in [tool.mutmut] source_paths). Partway through the walk (candidate 13, pygments) the mutmut `also_copy` config key was found, which copies additional files/dirs into the mutants/ tree unmutated, resolving sibling-import and transitive-dependency failures without mutating those files. This was applied going forward (candidates 13-15) but earlier skips (1-12) were NOT retroactively reopened, to keep the rank-ordered walk causally honest (no re-deciding earlier verdicts after acquiring a technique that could favor a specific later outcome).",
+    "1. boto3: skipped -- criterion 5 (mutmut smoke run killed after ~3.5 min, no output; boto3's combined unit+functional pytest baseline collection is too slow for the ~3 min smoke timebox). Module that would have been targeted: boto3/__init__.py (107 lines, first alphabetically in the 100-800 range).",
+    "2. packaging: skipped -- criterion 5 (mutmut smoke run failed: pytest's own `_pytest/config/__init__.py` does `from packaging.version import Version` for its own minversion check; editable-installing the candidate package under the same import name as pytest's own dependency broke that import inside the mutmut child process -- self-referential naming collision). Module that would have been targeted: src/packaging/_elffile.py (108 lines, first alphabetically qualifying: injected-stream ELF header parser, no real IO of its own).",
+    "3. urllib3: skipped -- criterion 5 (mutmut smoke run infeasible: test/conftest.py unconditionally imports a live dummyserver test harness requiring trio + hypercorn + quart; installing that whole chain exceeded the quick-smoke timebox). Module that would have been targeted: src/urllib3/_collections.py (486 lines, first alphabetically qualifying after __init__.py [network request() dispatch, disqualified] and _base_connection.py [Protocol/type stubs only, no executable logic]; HTTPHeaderDict + RecentlyUsedContainer, stdlib-only, no network).",
+    "4. certifi: skipped -- criterion 4 (no module in the 100-800 line range anywhere in the package; core.py is 83 lines and the rest is the CA bundle data file / __main__ shim).",
+    "5. idna: skipped -- criterion 5 (mutmut smoke run failed: idna/cli.py [128 lines, first alphabetically qualifying module -- argparse-based encode/decode CLI, no network] does `from . import IDNAError, decode, encode`; mutmut's mutants/ tree only contained cli.py, so the sibling idna/__init__.py needed for that import was absent and collection errored).",
+    "6. requests: skipped -- criterion 5 (first alphabetically qualifying self-contained module was requests/compat.py [115 lines, stdlib + urllib3 imports only; earlier candidates __init__.py (network request() dispatch), adapters.py/api.py (network), auth.py/cookies.py/structures.py/status_codes.py (sibling-coupled to .compat/.cookies/.utils), _types.py (type-alias stubs, no executable logic) were disqualified first]; compat.py has no dedicated test file and is only exercised indirectly via test_requests.py / test_lowlevel.py, which require a live local test server -- infeasible within the smoke timebox).",
+    "7. typing-extensions: skipped -- criterion 2 (license is the Python Software Foundation License; not MIT, BSD, or Apache).",
+    "8. charset-normalizer: skipped -- criterion 4 (every module in the 100-800 line range -- cd.py, models.py, utils.py, cli/__main__.py -- imports from the package's own 2055-line constant.py; no self-contained qualifying module; also note the project ships a mypyc-compiled build path alongside a pure-Python fallback).",
+    "9. botocore: skipped -- criterion 5 (same monorepo/test-infrastructure family as boto3, rank 1, which already timed out on an identical smoke pattern; repo is 477MB dominated by generated AWS service-definition test fixtures; extrapolated infeasible without repeating the multi-minute cost already paid once -- verified module-tree structure via GitHub API without a full clone).",
+    "10. setuptools: skipped -- criterion 5 (setuptools/_normalization.py [180 lines, self-contained -- only stdlib + external `packaging` imports, doctested] editable-installs and runs its own doctests cleanly, but the mutmut smoke run fails inside mutants/: the project's root conftest.py auto-loads `setuptools.tests.fixtures` [needs jaraco.path/path]; after disabling that plugin, pytest's own `filterwarnings` config still references `setuptools.command.editable_wheel.InformationOnly`, unavailable in the single-file mutants/ copy -- a packaging tool testing itself creates a bootstrap conflict).",
+    "11. cryptography: excluded -- criterion 1 (compiled extension package -- PyPI wheel metadata shows no pure-Python `py3-none-any` build; not installable as pure Python). No clone needed.",
+    "12. aiobotocore: skipped -- criterion 4 (every substantial top-level module -- client.py, credentials.py, session.py, endpoint.py, httpsession.py/httpxsession.py, utils.py, signers.py, etc. -- is async network-wrapper glue over botocore; no self-contained plain-logic module in the 100-800 line range).",
+    "13. pygments: SELECTED. Module pygments/regexopt.py (102 lines, first alphabetically qualifying after __init__.py [82 lines, below 100], __main__.py [17 lines, too small], cmdline.py [668 lines but sibling-coupled to pygments.lexers/.formatters/.filters/.styles and does file IO], console.py/filter.py [70 lines, too small], formatter.py [129 lines but sibling-coupled to .util/.styles], lexer.py [963 lines, too big], modeline.py/plugin.py [too small]). Stdlib-only (re, itertools, operator), no sibling imports, no network. mutmut smoke (with also_copy=[\"pygments\"] to satisfy pytest's own transitive `from pygments.formatters.terminal import TerminalFormatter` at import time): 132 mutants, 101 killed, 31 survived. BSD-2-Clause. Pygments team, no Jeff familiarity.",
+    "14. pluggy: skipped -- criterion 5, infrastructure prerequisite (pluggy is pytest's own plugin/hook-dispatch engine; mutating pluggy while using pytest itself as the mutation-test runner risks corrupting the runner's own hook execution mid-mutation-run, not merely an import-resolution issue `also_copy` can fix -- no safe smoke path exists inside a pytest-based harness).",
+    "15. python-dateutil: SELECTED. Module src/dateutil/parser/isoparser.py (416 lines, first alphabetically qualifying after __init__.py/_common.py [too small] and easter.py [89 lines, below 100]; parser/__init__.py too small; parser/_parser.py too big [~1500+ lines]). Imports dateutil.tz (sibling) and six (external pip dep). mutmut smoke (with also_copy=[\"src/dateutil\"] for the sibling import, and pytest pinned <9 + pytest-cov installed to satisfy the project's own `no_cover` marker and deprecation-as-error warnings config): 427 mutants, 380 killed, 47 survived. Apache-2.0 / BSD dual license. dateutil/Paul Ganssle, no Jeff familiarity.",
+    "STOPPED at 15 candidates walked (well under the 30-candidate BLOCKED threshold) once 2 qualifying packages were found: pygments and python-dateutil."
+  ]
+}

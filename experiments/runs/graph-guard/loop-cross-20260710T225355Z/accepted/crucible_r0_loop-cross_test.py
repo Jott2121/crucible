@@ -1,0 +1,118 @@
+import math
+import pytest
+from graph_guard.ppr import personalized_pagerank, node_specificity
+
+def test_ppr_empty_graph_returns_empty_dict():
+    assert personalized_pagerank({}, []) == {}
+
+def test_ppr_single_node_no_edges_seeded():
+    adj = {'a': {}}
+    result = personalized_pagerank(adj, ['a'])
+    assert set(result.keys()) == {'a'}
+    assert result['a'] == pytest.approx(1.0, rel=1e-06)
+
+def test_ppr_single_node_self_loop_seeded():
+    adj = {'a': {'a': 2.0}}
+    result = personalized_pagerank(adj, ['a'])
+    assert result['a'] == pytest.approx(1.0, rel=1e-06)
+
+def test_ppr_two_isolated_nodes_seed_one_is_absorbing():
+    adj = {'a': {}, 'b': {}}
+    result = personalized_pagerank(adj, ['a'])
+    assert result['a'] == pytest.approx(1.0, rel=1e-06)
+    assert result['b'] == pytest.approx(0.0, abs=1e-06)
+    assert sum(result.values()) == pytest.approx(1.0, rel=1e-06)
+
+def test_ppr_two_isolated_nodes_invalid_seed_falls_back_uniform():
+    adj = {'a': {}, 'b': {}}
+    result = personalized_pagerank(adj, ['nonexistent'])
+    assert result['a'] == pytest.approx(0.5, rel=1e-06)
+    assert result['b'] == pytest.approx(0.5, rel=1e-06)
+
+def test_ppr_symmetric_two_node_mutual_edge_no_seeds_uniform():
+    adj = {'a': {'b': 1.0}, 'b': {'a': 1.0}}
+    result = personalized_pagerank(adj, [])
+    assert result['a'] == pytest.approx(0.5, rel=1e-06)
+    assert result['b'] == pytest.approx(0.5, rel=1e-06)
+    assert sum(result.values()) == pytest.approx(1.0, rel=1e-06)
+
+def test_ppr_directed_edge_seed_on_target_node():
+    adj = {'a': {'b': 1.0}, 'b': {}}
+    result = personalized_pagerank(adj, ['b'])
+    assert result['a'] == pytest.approx(0.0, abs=1e-06)
+    assert result['b'] == pytest.approx(1.0, rel=1e-06)
+
+def test_ppr_triangle_complete_graph_seed_one_node():
+    adj = {'a': {'b': 1.0, 'c': 1.0}, 'b': {'a': 1.0, 'c': 1.0}, 'c': {'a': 1.0, 'b': 1.0}}
+    result = personalized_pagerank(adj, ['a'], alpha=0.85)
+    expected_a = 23.0 / 57.0
+    expected_bc = 17.0 / 57.0
+    assert result['a'] == pytest.approx(expected_a, rel=1e-06)
+    assert result['b'] == pytest.approx(expected_bc, rel=1e-06)
+    assert result['c'] == pytest.approx(expected_bc, rel=1e-06)
+    assert result['b'] == pytest.approx(result['c'], rel=1e-09)
+    assert result['a'] > result['b']
+    assert sum(result.values()) == pytest.approx(1.0, rel=1e-06)
+
+def test_ppr_triangle_invalid_seed_falls_back_to_uniform_symmetric():
+    adj = {'a': {'b': 1.0, 'c': 1.0}, 'b': {'a': 1.0, 'c': 1.0}, 'c': {'a': 1.0, 'b': 1.0}}
+    result = personalized_pagerank(adj, ['not_in_graph'])
+    for v in result.values():
+        assert v == pytest.approx(1.0 / 3.0, rel=1e-06)
+    assert sum(result.values()) == pytest.approx(1.0, rel=1e-06)
+
+def test_ppr_generic_graph_sums_to_one_and_nonnegative():
+    adj = {1: {2: 1.0, 3: 2.0}, 2: {3: 1.0}, 3: {1: 1.0}}
+    result = personalized_pagerank(adj, [2])
+    assert set(result.keys()) == {1, 2, 3}
+    assert sum(result.values()) == pytest.approx(1.0, rel=1e-06)
+    for v in result.values():
+        assert v >= 0.0
+
+def test_ppr_nodes_include_neighbors_not_present_as_top_level_keys():
+    adj = {'a': {'b': 1.0}, 'b': {'c': 1.0}}
+    result = personalized_pagerank(adj, ['a'])
+    assert set(result.keys()) == {'a', 'b', 'c'}
+    assert sum(result.values()) == pytest.approx(1.0, rel=1e-06)
+
+def test_node_specificity_empty_adj():
+    assert node_specificity({}) == {}
+
+def test_node_specificity_zero_degree_node():
+    adj = {'a': {}}
+    result = node_specificity(adj)
+    assert result['a'] == pytest.approx(1.0 / (1.0 + math.log(1.0)), rel=1e-09)
+    assert result['a'] == pytest.approx(1.0, rel=1e-09)
+
+def test_node_specificity_degree_one():
+    adj = {'a': {'b': 1.0}}
+    result = node_specificity(adj)
+    expected = 1.0 / (1.0 + math.log(2.0))
+    assert result['a'] == pytest.approx(expected, rel=1e-09)
+
+def test_node_specificity_degree_three():
+    adj = {'a': {'b': 1.0, 'c': 2.0, 'd': 3.0}}
+    result = node_specificity(adj)
+    expected = 1.0 / (1.0 + math.log(4.0))
+    assert result['a'] == pytest.approx(expected, rel=1e-09)
+
+def test_node_specificity_only_includes_top_level_keys():
+    adj = {'a': {}, 'b': {'a': 2.0, 'c': 1.0}}
+    result = node_specificity(adj)
+    assert set(result.keys()) == {'a', 'b'}
+    assert result['a'] == pytest.approx(1.0, rel=1e-09)
+    expected_b = 1.0 / (1.0 + math.log(3.0))
+    assert result['b'] == pytest.approx(expected_b, rel=1e-09)
+
+def test_node_specificity_monotonically_decreases_with_degree():
+    adj = {'low': {'x': 1.0}, 'high': {'x': 1.0, 'y': 1.0, 'z': 1.0, 'w': 1.0, 'v': 1.0}}
+    result = node_specificity(adj)
+    assert result['low'] > result['high']
+
+def test_node_specificity_multiple_nodes_exact_values():
+    adj = {'n0': {}, 'n2': {'x': 1.0, 'y': 1.0}}
+    result = node_specificity(adj)
+    expected_n0 = 1.0 / (1.0 + math.log(1.0))
+    expected_n2 = 1.0 / (1.0 + math.log(3.0))
+    assert result['n0'] == pytest.approx(expected_n0, rel=1e-09)
+    assert result['n2'] == pytest.approx(expected_n2, rel=1e-09)

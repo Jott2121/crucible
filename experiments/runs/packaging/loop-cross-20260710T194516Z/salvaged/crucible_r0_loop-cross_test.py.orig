@@ -1,0 +1,251 @@
+import io
+import struct
+
+import pytest
+
+from packaging._elffile import ELFFile, ELFInvalid, EIClass, EIData, EMachine
+
+
+# ---------------------------------------------------------------------------
+# Enum sanity checks (constants defined by the module)
+# ---------------------------------------------------------------------------
+
+def test_eiclass_values():
+    assert EIClass.C32 == 1
+    assert EIClass.C64 == 2
+
+
+def test_eidata_values():
+    assert EIData.Lsb == 1
+    assert EIData.Msb == 2
+
+
+def test_emachine_values():
+    assert EMachine.I386 == 3
+    assert EMachine.S390 == 22
+    assert EMachine.Arm == 40
+    assert EMachine.X8664 == 62
+    assert EMachine.AArch64 == 183
+
+
+# ---------------------------------------------------------------------------
+# Helpers to build minimal fake ELF binaries.
+# ---------------------------------------------------------------------------
+
+def make_ident(capacity: int, encoding: int) -> bytes:
+    return b"\x7fELF" + bytes([capacity, encoding]) + bytes(10)
+
+
+# ---------------------------------------------------------------------------
+# Invalid inputs
+# ---------------------------------------------------------------------------
+
+def test_invalid_magic_raises():
+    buf = b"\x7fBAD" + bytes(12)
+    with pytest.raises(ELFInvalid):
+        ELFFile(io.BytesIO(buf))
+
+
+def test_truncated_ident_raises():
+    buf = b"\x7fELF"  # only 4 bytes, not enough for full 16-byte ident
+    with pytest.raises(ELFInvalid):
+        ELFFile(io.BytesIO(buf))
+
+
+def test_unrecognized_capacity_encoding_raises():
+    # capacity=3 is not a recognized value (only 1 or 2 are valid).
+    buf = make_ident(3, 1)
+    with pytest.raises(ELFInvalid):
+        ELFFile(io.BytesIO(buf))
+
+
+def test_truncated_after_ident_raises():
+    # Valid ident (32-bit LSB) but nothing else follows.
+    buf = make_ident(1, 1)
+    with pytest.raises(ELFInvalid):
+        ELFFile(io.BytesIO(buf))
+
+
+# ---------------------------------------------------------------------------
+# 32-bit LSB with a PT_INTERP entry
+# ---------------------------------------------------------------------------
+
+def test_32bit_lsb_with_interpreter():
+    ident = make_ident(1, 1)
+    e_header = struct.pack(
+        "<HHIIIIIHHH",
+        2,          # e_type
+        3,          # e_machine -> EM_386
+        1,          # e_version
+        0x1000,     # e_entry
+        50,         # e_phoff
+        0,          # e_shoff
+        5,          # e_flags
+        50,         # e_ehsize
+        32,         # e_phentsize
+        1,          # e_phnum
+    )
+    ph_entry = struct.pack(
+        "<IIIIIIII",
+        3,    # p_type = PT_INTERP
+        82,   # p_offset
+        0,    # p_vaddr
+        0,    # p_paddr
+        19,   # p_filesz
+        0,    # p_memsz
+        0,    # p_flags
+        0,    # p_align
+    )
+    interp_data = b"/lib/ld-linux.so.2\0"
+    assert len(interp_data) == 19
+
+    buf = ident + e_header + ph_entry + interp_data
+    elf = ELFFile(io.BytesIO(buf))
+
+    assert elf.capacity == 1
+    assert elf.encoding == 1
+    assert elf.machine == 3
+    assert elf.flags == 5
+    assert elf.interpreter == "/lib/ld-linux.so.2"
+
+
+def test_32bit_lsb_without_matching_interp_entry():
+    ident = make_ident(1, 1)
+    e_header = struct.pack(
+        "<HHIIIIIHHH",
+        2, 3, 1, 0x1000, 50, 0, 0, 50, 32, 1,
+    )
+    # p_type = 1 (PT_LOAD), not PT_INTERP (3), so interpreter should be None.
+    ph_entry = struct.pack(
+        "<IIIIIIII",
+        1, 0, 0, 0, 0, 0, 0, 0,
+    )
+    buf = ident + e_header + ph_entry
+    elf = ELFFile(io.BytesIO(buf))
+    assert elf.interpreter is None
+
+
+# ---------------------------------------------------------------------------
+# 64-bit MSB, no program headers -> interpreter is None
+# ---------------------------------------------------------------------------
+
+def test_64bit_msb_no_phnum():
+    ident = make_ident(2, 2)
+    e_header = struct.pack(
+        ">HHIQQQIHHH",
+        2,          # e_type
+        183,        # e_machine -> AArch64
+        1,          # e_version
+        0x400000,   # e_entry
+        58,         # e_phoff
+        0,          # e_shoff
+        0,          # e_flags
+        58,         # e_ehsize
+        56,         # e_phentsize
+        0,          # e_phnum
+    )
+    buf = ident + e_header
+    elf = ELFFile(io.BytesIO(buf))
+
+    assert elf.capacity == 2
+    assert elf.encoding == 2
+    assert elf.machine == 183
+    assert elf.flags == 0
+    assert elf.interpreter is None
+
+
+# ---------------------------------------------------------------------------
+# 32-bit MSB, no program headers -> interpreter is None
+# ---------------------------------------------------------------------------
+
+def test_32bit_msb_no_phnum():
+    ident = make_ident(1, 2)
+    e_header = struct.pack(
+        ">HHIIIIIHHH",
+        2,       # e_type
+        40,      # e_machine -> Arm
+        1,       # e_version
+        0x8000,  # e_entry
+        50,      # e_phoff
+        0,       # e_shoff
+        0,       # e_flags
+        50,      # e_ehsize
+        32,      # e_phentsize
+        0,       # e_phnum
+    )
+    buf = ident + e_header
+    elf = ELFFile(io.BytesIO(buf))
+
+    assert elf.capacity == 1
+    assert elf.encoding == 2
+    assert elf.machine == 40
+    assert elf.flags == 0
+    assert elf.interpreter is None
+
+
+# ---------------------------------------------------------------------------
+# 64-bit LSB, no program headers -> interpreter is None
+# ---------------------------------------------------------------------------
+
+def test_64bit_lsb_no_phnum():
+    ident = make_ident(2, 1)
+    e_header = struct.pack(
+        "<HHIQQQIHHH",
+        2,          # e_type
+        62,         # e_machine -> X86_64
+        1,          # e_version
+        0x400000,   # e_entry
+        58,         # e_phoff
+        0,          # e_shoff
+        0,          # e_flags
+        58,         # e_ehsize
+        56,         # e_phentsize
+        0,          # e_phnum
+    )
+    buf = ident + e_header
+    elf = ELFFile(io.BytesIO(buf))
+
+    assert elf.capacity == 2
+    assert elf.encoding == 1
+    assert elf.machine == 62
+    assert elf.flags == 0
+    assert elf.interpreter is None
+
+
+# ---------------------------------------------------------------------------
+# 64-bit LSB with a PT_INTERP entry
+# ---------------------------------------------------------------------------
+
+def test_64bit_lsb_with_interpreter():
+    ident = make_ident(2, 1)
+    e_header = struct.pack(
+        "<HHIQQQIHHH",
+        2,          # e_type
+        62,         # e_machine -> X86_64
+        1,          # e_version
+        0x400000,   # e_entry
+        58,         # e_phoff
+        0,          # e_shoff
+        7,          # e_flags
+        58,         # e_ehsize
+        56,         # e_phentsize
+        1,          # e_phnum
+    )
+    interp_path = b"/lib64/ld-linux-x86-64.so.2\0"
+    p_offset = 58 + 56  # right after the program header entry
+    ph_entry = struct.pack(
+        "<IIQQQQQQ",
+        3,                  # p_type = PT_INTERP
+        0,                  # p_flags
+        p_offset,           # p_offset
+        0,                  # p_vaddr
+        0,                  # p_paddr
+        len(interp_path),   # p_filesz
+        0,                  # p_memsz
+        0,                  # p_align
+    )
+    buf = ident + e_header + ph_entry + interp_path
+    elf = ELFFile(io.BytesIO(buf))
+
+    assert elf.flags == 7
+    assert elf.interpreter == "/lib64/ld-linux-x86-64.so.2"

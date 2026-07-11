@@ -1,0 +1,119 @@
+import pytest
+from rag_guard.guard import should_refuse, groundedness, redact_pii
+
+def test_should_refuse_empty_hits():
+    assert should_refuse([]) is True
+
+def test_should_refuse_all_scores_below_default_threshold():
+    hits = [{'score': 0.01}, {'score': 0.02}]
+    assert should_refuse(hits) is True
+
+def test_should_refuse_false_when_score_meets_threshold_exactly():
+    hits = [{'score': 0.05}]
+    assert should_refuse(hits, min_score=0.05) is False
+
+def test_should_refuse_false_when_score_above_threshold():
+    hits = [{'score': 0.1}, {'score': 0.2}]
+    assert should_refuse(hits) is False
+
+def test_should_refuse_missing_score_defaults_to_zero():
+    hits = [{'foo': 'bar'}]
+    assert should_refuse(hits) is True
+
+def test_should_refuse_custom_min_score_true():
+    hits = [{'score': 0.4}]
+    assert should_refuse(hits, min_score=0.5) is True
+
+def test_should_refuse_custom_min_score_false():
+    hits = [{'score': 0.6}]
+    assert should_refuse(hits, min_score=0.5) is False
+
+def test_should_refuse_uses_max_of_multiple_hits():
+    hits = [{'score': 0.01}, {'score': 0.9}]
+    assert should_refuse(hits, min_score=0.05) is False
+
+def test_groundedness_empty_answer_content():
+    result = groundedness('', ['some context here'])
+    assert result['grounded'] is False
+    assert result['support'] == pytest.approx(0.0)
+
+def test_groundedness_answer_only_stopwords():
+    result = groundedness('the and for', ['anything at all'])
+    assert result['grounded'] is False
+    assert result['support'] == pytest.approx(0.0)
+
+def test_groundedness_full_support():
+    result = groundedness('apple banana', ['apple banana orange'])
+    assert result['support'] == pytest.approx(1.0)
+    assert result['grounded'] is True
+
+def test_groundedness_zero_support():
+    result = groundedness('xylophone', ['completely different words'])
+    assert result['support'] == pytest.approx(0.0)
+    assert result['grounded'] is False
+
+def test_groundedness_partial_support_two_thirds():
+    result = groundedness('The cat sat on the mat', ['mat and cat are here'])
+    assert result['support'] == pytest.approx(2 / 3, rel=0.0001)
+    assert result['grounded'] is True
+
+def test_groundedness_exact_half_boundary_grounded_true():
+    result = groundedness('apple banana', ['apple orange'], threshold=0.5)
+    assert result['support'] == pytest.approx(0.5)
+    assert result['grounded'] is True
+
+def test_groundedness_threshold_above_support_grounded_false():
+    result = groundedness('apple banana', ['apple orange'], threshold=0.6)
+    assert result['support'] == pytest.approx(0.5)
+    assert result['grounded'] is False
+
+def test_groundedness_rounding_one_third():
+    result = groundedness('apple banana cherry', ['apple'])
+    assert result['support'] == pytest.approx(1 / 3, rel=0.0001)
+    assert result['grounded'] is False
+
+def test_groundedness_empty_contexts_list():
+    result = groundedness('apple banana', [])
+    assert result['support'] == pytest.approx(0.0)
+    assert result['grounded'] is False
+
+def test_redact_pii_email():
+    text = 'Contact me at jane.doe@example.com please'
+    assert redact_pii(text) == 'Contact me at [redacted-email] please'
+
+def test_redact_pii_multiple_emails():
+    text = 'Reach us at a@b.com or c@d.com.'
+    assert redact_pii(text) == 'Reach us at [redacted-email] or [redacted-email].'
+
+def test_redact_pii_ssn():
+    text = 'SSN: 123-45-6789 done'
+    assert redact_pii(text) == 'SSN: [redacted-ssn] done'
+
+def test_redact_pii_phone_dash():
+    text = 'Call 555-123-4567 today'
+    assert redact_pii(text) == 'Call [redacted-phone] today'
+
+def test_redact_pii_phone_dot():
+    text = 'Call 555.123.4567 today'
+    assert redact_pii(text) == 'Call [redacted-phone] today'
+
+def test_redact_pii_phone_space():
+    text = 'Call 555 123 4567 today'
+    assert redact_pii(text) == 'Call [redacted-phone] today'
+
+def test_redact_pii_card_plain_13_digits():
+    text = '1234567890123'
+    assert redact_pii(text) == '[redacted-card]'
+
+def test_redact_pii_below_card_minimum_length_unchanged():
+    text = '123456789012'
+    assert redact_pii(text) == text
+
+def test_redact_pii_no_pii_unchanged():
+    text = 'Hello world, how are you today?'
+    assert redact_pii(text) == text
+
+def test_redact_pii_combined_types():
+    text = 'Email test@test.com or call 555-123-4567. SSN 123-45-6789. Card 1234567890123456.'
+    expected = 'Email [redacted-email] or call [redacted-phone]. SSN [redacted-ssn]. Card [redacted-card].'
+    assert redact_pii(text) == expected

@@ -4,6 +4,7 @@ from crucible.guardrails import (
     GuardrailViolation,
     assert_add_only,
     extract_test_file,
+    salvage_new_tests,
     test_filename,
     validate_new_tests,
 )
@@ -167,3 +168,209 @@ def test_add_only_allowed_file_does_not_short_circuit_later_lines():
     status = "?? tests/crucible_r1_loop_test.py\n M some_other_file.py\n"
     with pytest.raises(GuardrailViolation, match="add-only"):
         assert_add_only(status, ["tests/crucible_r1_loop_test.py"])
+
+
+# --- salvage_new_tests: per-test salvage (v3 amendment) ---
+#
+# Mutation-testing convention treats the pinned subject as ground truth at baseline:
+# a test that fails on pristine code encodes a wrong oracle for THIS subject and is
+# droppable, not fatal to the whole file. read_file/write_file are injected so this
+# stays unit-testable without touching a real filesystem.
+
+SOURCE_THREE_TESTS = (
+    "def test_a():\n    assert True\n\n\n"
+    "def test_b():\n    assert False\n\n\n"
+    "def test_c():\n    assert True\n"
+)
+
+SOURCE_TWO_TESTS = "def test_a():\n    assert False\n\n\ndef test_b():\n    assert False\n"
+
+SOURCE_ONE_TEST = "def test_a():\n    assert True\n"
+
+SOURCE_TWO_TESTS_ONE_BAD = "def test_a():\n    assert True\n\n\ndef test_b():\n    assert False\n"
+
+
+def _no_read_write():
+    def fake_read(cwd, path):
+        raise AssertionError("must not read the file on a green pristine run")
+
+    def fake_write(cwd, path, content):
+        raise AssertionError("must not write the file on a green pristine run")
+
+    return fake_read, fake_write
+
+
+def test_salvage_green_file_flake_checks_and_returns_empty_list():
+    calls = []
+
+    def fake_run(cwd, test_paths=None, timeout=300):
+        calls.append((cwd, test_paths))
+        return TestRunResult(True, 0, "ok")
+
+    fake_read, fake_write = _no_read_write()
+    dropped = salvage_new_tests(
+        "/subject", "tests/crucible_r0_x_test.py", fake_run, fake_read, fake_write
+    )
+    assert dropped == []
+    # flake check = run twice, both scoped to exactly the new test file
+    assert calls == [
+        ("/subject", ["tests/crucible_r0_x_test.py"]),
+        ("/subject", ["tests/crucible_r0_x_test.py"]),
+    ]
+
+
+def test_salvage_green_then_red_is_flaky():
+    results = [TestRunResult(True, 0, "ok"), TestRunResult(False, 1, "flaked")]
+
+    def fake_run(cwd, test_paths=None, timeout=300):
+        return results.pop(0)
+
+    fake_read, fake_write = _no_read_write()
+    with pytest.raises(GuardrailViolation, match="flaky"):
+        salvage_new_tests("/subject", "tests/x_test.py", fake_run, fake_read, fake_write)
+
+
+def test_salvage_drops_exactly_the_failing_test_and_reruns_green():
+    run_outputs = [
+        TestRunResult(
+            False, 1,
+            "FAILED tests/crucible_r0_x_test.py::test_b - assert False\n1 failed, 2 passed",
+        ),
+        TestRunResult(True, 0, "2 passed"),
+        TestRunResult(True, 0, "2 passed"),
+    ]
+    calls = []
+
+    def fake_run(cwd, test_paths=None, timeout=300):
+        calls.append(test_paths)
+        return run_outputs.pop(0)
+
+    def fake_read(cwd, path):
+        assert path == "tests/crucible_r0_x_test.py"
+        return SOURCE_THREE_TESTS
+
+    written = {}
+
+    def fake_write(cwd, path, content):
+        written["path"] = path
+        written["content"] = content
+
+    dropped = salvage_new_tests(
+        "/subject", "tests/crucible_r0_x_test.py", fake_run, fake_read, fake_write
+    )
+    assert dropped == ["test_b"]
+    assert "def test_b" not in written["content"]
+    assert "def test_a" in written["content"] and "def test_c" in written["content"]
+    assert written["path"] == "tests/crucible_r0_x_test.py"
+    assert len(calls) == 3  # 1 pristine run + 2 post-prune (green + flake check)
+
+
+def test_salvage_parses_suffix_style_failed_lines():
+    # some pytest verbose output styles print "path::name FAILED" rather than
+    # "FAILED path::name"; the parser must be robust to both.
+    run_outputs = [
+        TestRunResult(False, 1, "tests/x_test.py::test_b FAILED             [ 50%]\n1 failed, 1 passed"),
+        TestRunResult(True, 0, "1 passed"),
+        TestRunResult(True, 0, "1 passed"),
+    ]
+
+    def fake_run(cwd, test_paths=None, timeout=300):
+        return run_outputs.pop(0)
+
+    def fake_read(cwd, path):
+        return SOURCE_TWO_TESTS_ONE_BAD
+
+    written = {}
+
+    def fake_write(cwd, path, content):
+        written["content"] = content
+
+    dropped = salvage_new_tests("/subject", "tests/x_test.py", fake_run, fake_read, fake_write)
+    assert dropped == ["test_b"]
+    assert "def test_b" not in written["content"]
+    assert "def test_a" in written["content"]
+
+
+def test_salvage_raises_when_all_tests_fail_on_pristine():
+    def fake_run(cwd, test_paths=None, timeout=300):
+        return TestRunResult(
+            False, 1, "FAILED tests/x.py::test_a\nFAILED tests/x.py::test_b\n2 failed"
+        )
+
+    def fake_read(cwd, path):
+        return SOURCE_TWO_TESTS
+
+    def fake_write(cwd, path, content):
+        raise AssertionError("must not write a file with zero surviving tests")
+
+    with pytest.raises(GuardrailViolation, match="invalid"):
+        salvage_new_tests("/subject", "tests/x.py", fake_run, fake_read, fake_write)
+
+
+def test_salvage_raises_when_no_failed_names_can_be_parsed():
+    # red output that names no specific test: nothing is droppable, so the whole
+    # file is invalid (identical to validate_new_tests's prior behavior).
+    def fake_run(cwd, test_paths=None, timeout=300):
+        return TestRunResult(False, 1, "collection error: ImportError: no module named x")
+
+    def fake_read(cwd, path):
+        raise AssertionError("must not read the file when no failed test names were found")
+
+    def fake_write(cwd, path, content):
+        raise AssertionError("must not write when no failed test names were found")
+
+    with pytest.raises(GuardrailViolation, match="invalid"):
+        salvage_new_tests("/subject", "tests/x.py", fake_run, fake_read, fake_write)
+
+
+def test_salvage_raises_when_failed_name_not_found_in_ast():
+    def fake_run(cwd, test_paths=None, timeout=300):
+        return TestRunResult(False, 1, "FAILED tests/x.py::test_nonexistent\n1 failed")
+
+    def fake_read(cwd, path):
+        return SOURCE_ONE_TEST
+
+    def fake_write(cwd, path, content):
+        raise AssertionError("must not write before every failed name resolves in the AST")
+
+    with pytest.raises(GuardrailViolation, match="salvage failed"):
+        salvage_new_tests("/subject", "tests/x.py", fake_run, fake_read, fake_write)
+
+
+def test_salvage_raises_when_pruned_file_still_fails():
+    run_outputs = [
+        TestRunResult(False, 1, "FAILED tests/x.py::test_b\n1 failed, 1 passed"),
+        TestRunResult(False, 1, "still red somehow"),
+    ]
+
+    def fake_run(cwd, test_paths=None, timeout=300):
+        return run_outputs.pop(0)
+
+    def fake_read(cwd, path):
+        return SOURCE_TWO_TESTS_ONE_BAD
+
+    def fake_write(cwd, path, content):
+        pass
+
+    with pytest.raises(GuardrailViolation, match="invalid"):
+        salvage_new_tests("/subject", "tests/x.py", fake_run, fake_read, fake_write)
+
+
+def test_salvage_raises_flaky_after_prune():
+    run_outputs = [
+        TestRunResult(False, 1, "FAILED tests/x.py::test_b\n1 failed, 1 passed"),
+        TestRunResult(True, 0, "1 passed"),
+        TestRunResult(False, 1, "flaked"),
+    ]
+
+    def fake_run(cwd, test_paths=None, timeout=300):
+        return run_outputs.pop(0)
+
+    def fake_read(cwd, path):
+        return SOURCE_TWO_TESTS_ONE_BAD
+
+    def fake_write(cwd, path, content):
+        pass
+
+    with pytest.raises(GuardrailViolation, match="flaky"):
+        salvage_new_tests("/subject", "tests/x.py", fake_run, fake_read, fake_write)

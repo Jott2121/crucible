@@ -1,0 +1,146 @@
+"""
+Additional tests targeting surviving mutants in src/train.py.
+
+These tests independently verify:
+1. The hyperparameters used to construct each candidate model in `_candidates()`.
+2. The behavior of `evaluate()` -- in particular the >=0.5 threshold used to
+   convert probabilities to predictions, and that all metrics are computed
+   from the correct arguments.
+"""
+from __future__ import annotations
+
+import numpy as np
+import pandas as pd
+import pytest
+from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.metrics import (
+    average_precision_score,
+    brier_score_loss,
+    confusion_matrix,
+    f1_score,
+    precision_score,
+    recall_score,
+    roc_auc_score,
+)
+from sklearn.pipeline import Pipeline
+
+from src.train import RANDOM_STATE, ModelResult, _candidates, evaluate
+
+
+# ---------------------------------------------------------------------------
+# _candidates() hyperparameter checks
+# ---------------------------------------------------------------------------
+
+def test_candidates_keys_exact():
+    cands = _candidates()
+    assert set(cands.keys()) == {"LogisticRegression", "RandomForest", "XGBoost"}
+
+
+def test_logistic_regression_hyperparams():
+    lr = _candidates()["LogisticRegression"]
+    assert lr.max_iter == 2000
+    assert lr.class_weight == "balanced"
+    assert lr.random_state == RANDOM_STATE
+
+
+def test_random_forest_hyperparams():
+    rf = _candidates()["RandomForest"]
+    assert rf.n_estimators == 400
+    assert rf.max_depth is None
+    assert rf.min_samples_leaf == 2
+    assert rf.class_weight == "balanced"
+    assert rf.n_jobs == -1
+    assert rf.random_state == RANDOM_STATE
+
+
+def test_xgboost_hyperparams():
+    xgb = _candidates()["XGBoost"]
+    assert xgb.n_estimators == 400
+    assert xgb.max_depth == 4
+    assert xgb.learning_rate == pytest.approx(0.05, rel=1e-6)
+    assert xgb.subsample == pytest.approx(0.9, rel=1e-6)
+    assert xgb.colsample_bytree == pytest.approx(0.9, rel=1e-6)
+    assert xgb.scale_pos_weight == pytest.approx(5.0, rel=1e-6)
+    assert xgb.objective == "binary:logistic"
+    assert xgb.eval_metric == "logloss"
+    assert xgb.random_state == RANDOM_STATE
+    assert xgb.n_jobs == -1
+    assert xgb.tree_method == "hist"
+
+
+# ---------------------------------------------------------------------------
+# evaluate() behavior checks
+# ---------------------------------------------------------------------------
+
+class ColumnProbaClassifier(BaseEstimator, ClassifierMixin):
+    """A deterministic fake classifier whose predict_proba is directly read
+    from a fixed column 'p' of the input DataFrame. This lets us fully
+    control the probabilities seen by `evaluate()` without depending on any
+    real model's stochastic training behavior."""
+
+    def fit(self, X, y):
+        self.classes_ = np.array([0, 1])
+        return self
+
+    def predict_proba(self, X):
+        p = np.asarray(X["p"], dtype=float)
+        return np.column_stack([1 - p, p])
+
+    def predict(self, X):
+        p = np.asarray(X["p"], dtype=float)
+        return (p >= 0.5).astype(int)
+
+
+def _make_pipeline():
+    return Pipeline(steps=[("clf", ColumnProbaClassifier())])
+
+
+def _make_train_data():
+    # Balanced, perfectly separable training data so cross-validation runs
+    # without issue (10 negatives, 10 positives).
+    y_train = pd.Series([0] * 10 + [1] * 10)
+    p_train = [0.1] * 10 + [0.9] * 10
+    X_train = pd.DataFrame({"p": p_train})
+    return X_train, y_train
+
+
+def test_evaluate_threshold_and_metrics():
+    X_train, y_train = _make_train_data()
+
+    # Test set includes a probability exactly at the 0.5 boundary for both
+    # a positive and a negative example, to catch off-by-one threshold
+    # mutants (`>` vs `>=`).
+    proba_values = [0.5, 0.9, 0.1, 0.5]
+    y_test = pd.Series([1, 1, 0, 0])
+    X_test = pd.DataFrame({"p": proba_values})
+
+    pipe = _make_pipeline()
+    result = evaluate("TestModel", pipe, X_train, X_test, y_train, y_test)
+
+    assert isinstance(result, ModelResult)
+    assert result.name == "TestModel"
+
+    proba_arr = np.array(proba_values)
+    # Correct behavior uses >= 0.5, so the boundary values become 1.
+    expected_pred = (proba_arr >= 0.5).astype(int)
+    assert list(expected_pred) == [1, 1, 0, 1]
+
+    expected_roc_auc = roc_auc_score(y_test, proba_arr)
+    expected_pr_auc = average_precision_score(y_test, proba_arr)
+    expected_f1 = f1_score(y_test, expected_pred)
+    expected_precision = precision_score(y_test, expected_pred, zero_division=0)
+    expected_recall = recall_score(y_test, expected_pred)
+    expected_brier = brier_score_loss(y_test, proba_arr)
+    expected_confusion = confusion_matrix(y_test, expected_pred)
+
+    assert result.roc_auc == pytest.approx(expected_roc_auc, rel=1e-6)
+    assert result.pr_auc == pytest.approx(expected_pr_auc, rel=1e-6)
+    assert result.f1 == pytest.approx(expected_f1, rel=1e-6)
+    assert result.precision == pytest.approx(expected_precision, rel=1e-6)
+    assert result.recall == pytest.approx(expected_recall, rel=1e-6)
+    assert result.brier == pytest.approx(expected_brier, rel=1e-6)
+    assert result.confusion.tolist() == expected_confusion.tolist()
+
+    # Sanity: cv metrics should be finite floats within [0, 1].
+    assert 0.0 <= result.cv_roc_auc_mean <= 1.0
+    assert result.cv_roc_auc_std >= 0.0

@@ -1,0 +1,14 @@
+{
+  "subject": "/Users/jeffreyotterson/crucible-subjects/rag-guard",
+  "module": "rag_guard/guard.py",
+  "head_sha": "5e7e556327162f701211eb131c3a7f405da77921",
+  "arm": "loop-same",
+  "protocol_version": 4,
+  "tester_provider": "anthropic",
+  "tester_model": "claude-sonnet-5",
+  "critic_provider": "anthropic",
+  "critic_model": "claude-sonnet-5",
+  "max_rounds": 4,
+  "dry_rounds": 2,
+  "started_at": "20260710T174420Z"
+}

@@ -1,0 +1,385 @@
+{
+  "arms": [
+    {
+      "arm": "oneshot",
+      "baseline_all_mutants": 80,
+      "baseline_survivors": 22,
+      "cost_per_kill": 0.0105,
+      "cost_usd": 0.12645,
+      "dropped_tests": [],
+      "kill_rate_pct_of_survivors": 54.5,
+      "killed": 12,
+      "mutation_score_full_denom_pct": 87.5,
+      "subject": "graph-guard",
+      "verdict": "oneshot"
+    },
+    {
+      "arm": "loop_same",
+      "baseline_all_mutants": 80,
+      "baseline_survivors": 22,
+      "cost_per_kill": 0.0599,
+      "cost_usd": 1.018068,
+      "dropped_tests": [
+        "test_two_node_cycle_with_single_seed_analytic_fixed_point"
+      ],
+      "kill_rate_pct_of_survivors": 77.3,
+      "killed": 17,
+      "mutation_score_full_denom_pct": 93.8,
+      "subject": "graph-guard",
+      "verdict": "dry"
+    },
+    {
+      "arm": "loop_cross",
+      "baseline_all_mutants": 80,
+      "baseline_survivors": 22,
+      "cost_per_kill": 0.0158,
+      "cost_usd": 0.34684,
+      "dropped_tests": [
+        "test_ppr_directed_edge_seed_on_source_node",
+        "test_missing_adjacency_row_uses_empty_dict_default",
+        "test_missing_out_sum_entries_are_treated_as_dangling_nodes"
+      ],
+      "kill_rate_pct_of_survivors": 100.0,
+      "killed": 22,
+      "mutation_score_full_denom_pct": 100.0,
+      "subject": "graph-guard",
+      "verdict": "clean"
+    },
+    {
+      "arm": "oneshot",
+      "baseline_all_mutants": 71,
+      "baseline_survivors": 25,
+      "cost_per_kill": 0.0026,
+      "cost_usd": 0.055257,
+      "dropped_tests": [],
+      "kill_rate_pct_of_survivors": 84.0,
+      "killed": 21,
+      "mutation_score_full_denom_pct": 94.4,
+      "subject": "rag-guard",
+      "verdict": "oneshot"
+    },
+    {
+      "arm": "loop_same",
+      "baseline_all_mutants": 71,
+      "baseline_survivors": 25,
+      "cost_per_kill": 0.0043,
+      "cost_usd": 0.107262,
+      "dropped_tests": [],
+      "kill_rate_pct_of_survivors": 100.0,
+      "killed": 25,
+      "mutation_score_full_denom_pct": 100.0,
+      "subject": "rag-guard",
+      "verdict": "clean"
+    },
+    {
+      "arm": "loop_cross",
+      "baseline_all_mutants": 71,
+      "baseline_survivors": 25,
+      "cost_per_kill": 0.0063,
+      "cost_usd": 0.158159,
+      "dropped_tests": [
+        "test_redact_pii_card_with_spaces"
+      ],
+      "kill_rate_pct_of_survivors": 100.0,
+      "killed": 25,
+      "mutation_score_full_denom_pct": 100.0,
+      "subject": "rag-guard",
+      "verdict": "clean"
+    },
+    {
+      "arm": "oneshot",
+      "baseline_all_mutants": 69,
+      "baseline_survivors": 69,
+      "cost_per_kill": 0.0032,
+      "cost_usd": 0.113856,
+      "dropped_tests": [],
+      "kill_rate_pct_of_survivors": 52.2,
+      "killed": 36,
+      "mutation_score_full_denom_pct": 52.2,
+      "subject": "packaging",
+      "verdict": "oneshot"
+    },
+    {
+      "arm": "loop_same",
+      "baseline_all_mutants": 69,
+      "baseline_survivors": 69,
+      "cost_per_kill": 0.0095,
+      "cost_usd": 0.643488,
+      "dropped_tests": [],
+      "kill_rate_pct_of_survivors": 98.6,
+      "killed": 68,
+      "mutation_score_full_denom_pct": 98.6,
+      "subject": "packaging",
+      "verdict": "cap"
+    },
+    {
+      "arm": "loop_cross",
+      "baseline_all_mutants": 69,
+      "baseline_survivors": 69,
+      "cost_per_kill": 0.0044,
+      "cost_usd": 0.296251,
+      "dropped_tests": [
+        "test_32bit_lsb_with_interpreter",
+        "test_interpreter_is_read_from_the_pt_interp_program_header",
+        "test_program_header_file_size_is_interpreted_as_unsigned"
+      ],
+      "kill_rate_pct_of_survivors": 98.6,
+      "killed": 68,
+      "mutation_score_full_denom_pct": 98.6,
+      "subject": "packaging",
+      "verdict": "dry"
+    },
+    {
+      "arm": "oneshot",
+      "baseline_all_mutants": 187,
+      "baseline_survivors": 187,
+      "cost_per_kill": 0.001,
+      "cost_usd": 0.123171,
+      "dropped_tests": [],
+      "kill_rate_pct_of_survivors": 65.8,
+      "killed": 123,
+      "mutation_score_full_denom_pct": 65.8,
+      "subject": "idna",
+      "verdict": "oneshot"
+    },
+    {
+      "arm": "loop_same",
+      "baseline_all_mutants": 187,
+      "baseline_survivors": 187,
+      "cost_per_kill": 0.0035,
+      "cost_usd": 0.648183,
+      "dropped_tests": [
+        "test_convert_one_decode_success",
+        "test_convert_one_encode_success",
+        "test_main_decode_inferred_from_alabel",
+        "test_main_encode_unicode_snowman",
+        "test_main_explicit_encode_overrides_alabel_look",
+        "test_main_multiple_domains_mode_from_first",
+        "test_main_reads_from_stdin",
+        "test_convert_one_encode_forwards_uts46_false",
+        "test_main_strict_flag_disables_uts46_mapping"
+      ],
+      "kill_rate_pct_of_survivors": 100.0,
+      "killed": 187,
+      "mutation_score_full_denom_pct": 100.0,
+      "subject": "idna",
+      "verdict": "clean"
+    },
+    {
+      "arm": "loop_cross",
+      "baseline_all_mutants": 187,
+      "baseline_survivors": 187,
+      "cost_per_kill": 0.001,
+      "cost_usd": 0.188294,
+      "dropped_tests": [],
+      "kill_rate_pct_of_survivors": 100.0,
+      "killed": 187,
+      "mutation_score_full_denom_pct": 100.0,
+      "subject": "idna",
+      "verdict": "clean"
+    },
+    {
+      "arm": "oneshot",
+      "baseline_all_mutants": 255,
+      "baseline_survivors": 255,
+      "cost_per_kill": 0.0011,
+      "cost_usd": 0.065631,
+      "dropped_tests": [],
+      "kill_rate_pct_of_survivors": 24.3,
+      "killed": 62,
+      "mutation_score_full_denom_pct": 24.3,
+      "subject": "attrition-risk-ml",
+      "verdict": "oneshot"
+    },
+    {
+      "arm": "loop_same",
+      "baseline_all_mutants": null,
+      "baseline_survivors": 255,
+      "cost_per_kill": null,
+      "cost_usd": 0.065016,
+      "dropped_tests": [],
+      "kill_rate_pct_of_survivors": null,
+      "killed": null,
+      "mutation_score_full_denom_pct": null,
+      "subject": "attrition-risk-ml",
+      "verdict": "MISSING (incomplete)"
+    },
+    {
+      "arm": "loop_cross",
+      "baseline_all_mutants": 255,
+      "baseline_survivors": 255,
+      "cost_per_kill": 0.0013,
+      "cost_usd": 0.339743,
+      "dropped_tests": [
+        "test_run_builds_expected_pipelines_selects_best_and_persists_outputs",
+        "test_evaluate_uses_five_explicit_stratified_folds_and_computes_metrics"
+      ],
+      "kill_rate_pct_of_survivors": 99.6,
+      "killed": 254,
+      "mutation_score_full_denom_pct": 99.6,
+      "subject": "attrition-risk-ml",
+      "verdict": "cap"
+    }
+  ],
+  "counted": {
+    "attrition-risk-ml": {
+      "justification": "oneshot-20260710T193041Z and loop-cross-20260710T195033Z stand from the v7/v8 grid (run after the SandboxStatsFailure detector v5 and the src-layout shim v7). loop_same is a MISSING CELL per PROTOCOL.md Sec.6 and the v11 pre-committed stopping rule: the original loop-same-20260710T193123Z was reclassified INSTRUMENT-INVALID (both critic rounds truncation-rejected, v9 amendment), and all four rerun attempts failed on a nested-parallelism deadlock that survived three targeted fixes (joblib threading v10, native thread-pool pins v11 -- full forensic trail in DEVIATIONS.md). The dir recorded here, loop-same-20260711T040046Z (protocol_version 11, no result.json), is the final attempt, pointed at deliberately so analyze.py's Sec.6 guard renders the cell MISSING and its receipted spend appears in the cell table; its receipted rounds are evidence, never counted kills. Consequence: attrition-risk-ml contributes NO paired data to H1 or H2 (per-subject and both pooled views); its oneshot/loop-cross absolute figures still appear in the cell table. The pooled-with-attrition views therefore span 4 subjects for H1 and H2 -- the confirmatory-view label is retained with this composition stated explicitly wherever it appears.",
+      "loop_cross": "loop-cross-20260710T195033Z",
+      "loop_same": "loop-same-20260711T040046Z",
+      "oneshot": "oneshot-20260710T193041Z"
+    },
+    "graph-guard": {
+      "justification": "oneshot-20260710T191723Z stands from the v7/v8 grid (protocol_version 7 per meta.json; v8's only change was the loop-cross critic pin, H1-irrelevant -- see the corrected 2026-07-10 entry history). loop_same and loop_cross are v9-era reruns after the truncation reclassification (PROTOCOL.md v9 amendment; DEVIATIONS rows): loop-same-20260711T004651Z (protocol_version 9, verdict dry, third attempt -- attempt 1 killed externally, attempt 2 aborted on 300s read timeouts, both ledgered) and loop-cross-20260710T225355Z (protocol_version 9, verdict clean -- recovers the H2 cell whose original run was truncation-rejected at the tester round). All three cells post-date the v6 exclude-form scope fix.",
+      "loop_cross": "loop-cross-20260710T225355Z",
+      "loop_same": "loop-same-20260711T004651Z",
+      "oneshot": "oneshot-20260710T191723Z"
+    },
+    "idna": {
+      "justification": "Run after the -uall add-only status fix (DEVIATIONS.md row 22) that resolved idna's untracked-tests-dir false rejection, and after the zero-test-baseline engine fix. All three cells verdict oneshot/clean/clean; counted in full for both H1 and H2.",
+      "loop_cross": "loop-cross-20260710T194820Z",
+      "loop_same": "loop-same-20260710T182018Z",
+      "oneshot": "oneshot-20260710T181906Z"
+    },
+    "packaging": {
+      "justification": "oneshot-20260710T181053Z and loop-cross-20260710T194516Z stand from the v7/v8 grid (run after prep.py's drop_stale_testpaths fix and the zero-test-baseline engine fix, post-dating the earlier INFRA FAILURE cells, DEVIATIONS row). loop-same-20260710T225759Z is the v9 rerun (protocol_version 9, verdict cap, 68/69) replacing loop-same-20260710T181157Z, whose two critic rounds were both truncation-rejected (INSTRUMENT-INVALID, PROTOCOL.md v9 amendment).",
+      "loop_cross": "loop-cross-20260710T194516Z",
+      "loop_same": "loop-same-20260710T225759Z",
+      "oneshot": "oneshot-20260710T181053Z"
+    },
+    "rag-guard": {
+      "justification": "Run after the v6 exclude-form pytest_args fix (protocol_version 8 config) that resolved rag-guard's earlier include-list silent-zero corruption (DEVIATIONS.md row 25/27). All three cells verdict oneshot/clean/clean with the canary-verified scope; counted in full for both H1 and H2.",
+      "loop_cross": "loop-cross-20260710T194336Z",
+      "loop_same": "loop-same-20260710T192933Z",
+      "oneshot": "oneshot-20260710T192857Z"
+    }
+  },
+  "h1": {
+    "per_subject": {
+      "attrition-risk-ml": {
+        "excluded": "loop_same verdict=incomplete: missing cell, PROTOCOL.md Sec.6"
+      },
+      "graph-guard": {
+        "b_loop_same_only": 5,
+        "both": 12,
+        "c_oneshot_only": 0,
+        "favors_loop_same": true,
+        "neither": 5,
+        "p": 0.0625
+      },
+      "idna": {
+        "b_loop_same_only": 64,
+        "both": 123,
+        "c_oneshot_only": 0,
+        "favors_loop_same": true,
+        "neither": 0,
+        "p": 1.0842021724855044e-19
+      },
+      "packaging": {
+        "b_loop_same_only": 32,
+        "both": 36,
+        "c_oneshot_only": 0,
+        "favors_loop_same": true,
+        "neither": 1,
+        "p": 4.656612873077393e-10
+      },
+      "rag-guard": {
+        "b_loop_same_only": 4,
+        "both": 21,
+        "c_oneshot_only": 0,
+        "favors_loop_same": true,
+        "neither": 0,
+        "p": 0.125
+      }
+    },
+    "pooled_with_attrition": {
+      "b": 105,
+      "c": 0,
+      "p": 4.930380657631324e-32,
+      "subjects": [
+        "graph-guard",
+        "idna",
+        "packaging",
+        "rag-guard"
+      ]
+    },
+    "pooled_without_attrition": {
+      "b": 105,
+      "c": 0,
+      "p": 4.930380657631324e-32,
+      "subjects": [
+        "graph-guard",
+        "idna",
+        "packaging",
+        "rag-guard"
+      ]
+    }
+  },
+  "h2": {
+    "per_subject": {
+      "attrition-risk-ml": {
+        "excluded": "loop_same verdict=incomplete: missing cell, PROTOCOL.md Sec.6"
+      },
+      "graph-guard": {
+        "b_loop_cross_only": 5,
+        "both": 17,
+        "c_loop_same_only": 0,
+        "favors_loop_cross": true,
+        "neither": 0,
+        "p": 0.0625
+      },
+      "idna": {
+        "b_loop_cross_only": 0,
+        "both": 187,
+        "c_loop_same_only": 0,
+        "favors_loop_cross": false,
+        "neither": 0,
+        "p": 1.0
+      },
+      "packaging": {
+        "b_loop_cross_only": 0,
+        "both": 68,
+        "c_loop_same_only": 0,
+        "favors_loop_cross": false,
+        "neither": 1,
+        "p": 1.0
+      },
+      "rag-guard": {
+        "b_loop_cross_only": 0,
+        "both": 25,
+        "c_loop_same_only": 0,
+        "favors_loop_cross": false,
+        "neither": 0,
+        "p": 1.0
+      }
+    },
+    "pooled_with_attrition": {
+      "b": 5,
+      "c": 0,
+      "p": 0.0625,
+      "subjects": [
+        "graph-guard",
+        "idna",
+        "packaging",
+        "rag-guard"
+      ]
+    },
+    "pooled_without_attrition": {
+      "b": 5,
+      "c": 0,
+      "p": 0.0625,
+      "subjects": [
+        "graph-guard",
+        "idna",
+        "packaging",
+        "rag-guard"
+      ]
+    }
+  },
+  "spend": {
+    "all_n_receipts": 31,
+    "all_receipted_total_usd": 9.907782,
+    "counted_n_receipts": 14,
+    "counted_total_usd": 4.230654,
+    "shakeout_total_usd": 5.677128
+  }
+}

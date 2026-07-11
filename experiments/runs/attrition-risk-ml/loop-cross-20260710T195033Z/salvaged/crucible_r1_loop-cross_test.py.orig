@@ -1,0 +1,229 @@
+import json
+
+import numpy as np
+import pandas as pd
+import pytest
+from sklearn.metrics import classification_report
+
+import train
+
+
+def test_candidates_have_explicit_required_estimator_configuration(monkeypatch):
+    constructed = {}
+
+    class SpyEstimator:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+    def random_forest_spy(**kwargs):
+        constructed["RandomForest"] = kwargs
+        return SpyEstimator(**kwargs)
+
+    def xgboost_spy(**kwargs):
+        constructed["XGBoost"] = kwargs
+        return SpyEstimator(**kwargs)
+
+    monkeypatch.setattr(train, "RandomForestClassifier", random_forest_spy)
+    monkeypatch.setattr(train, "XGBClassifier", xgboost_spy)
+
+    candidates = train._candidates()
+
+    assert set(candidates) == {"LogisticRegression", "RandomForest", "XGBoost"}
+    assert constructed["RandomForest"]["max_depth"] is None
+    assert constructed["RandomForest"]["n_estimators"] == 400
+    assert constructed["XGBoost"]["objective"] == "binary:logistic"
+    assert constructed["XGBoost"]["eval_metric"] == "logloss"
+    assert constructed["XGBoost"]["tree_method"] == "hist"
+
+
+def test_evaluate_computes_metrics_threshold_and_cross_validation_contract(monkeypatch):
+    X_train = pd.DataFrame({"feature": range(10)})
+    y_train = pd.Series([0, 1] * 5)
+    X_test = pd.DataFrame({"feature": range(4)})
+    y_test = pd.Series([0, 1, 1, 0])
+
+    class FakePipe:
+        def __init__(self):
+            self.fit_arguments = None
+            self.predict_argument = None
+
+        def fit(self, X, y):
+            self.fit_arguments = (X, y)
+            return self
+
+        def predict_proba(self, X):
+            self.predict_argument = X
+            return np.array(
+                [
+                    [0.5, 0.5],
+                    [0.4, 0.6],
+                    [0.6, 0.4],
+                    [0.9, 0.1],
+                ]
+            )
+
+    pipe = FakePipe()
+    cv_scores = np.array([0.2, 0.4, 0.6, 0.8, 1.0])
+
+    def fake_cross_val_score(estimator, X, y, scoring, cv, n_jobs):
+        assert estimator is pipe
+        assert X is X_train
+        assert y is y_train
+        assert scoring == "roc_auc"
+        assert n_jobs == -1
+        assert cv.n_splits == 5
+        assert cv.shuffle is True
+        assert cv.random_state == train.RANDOM_STATE
+        return cv_scores
+
+    monkeypatch.setattr(train, "cross_val_score", fake_cross_val_score)
+
+    result = train.evaluate("demo", pipe, X_train, X_test, y_train, y_test)
+
+    expected_predictions = np.array([1, 1, 0, 0])
+    assert pipe.fit_arguments == (X_train, y_train)
+    assert pipe.predict_argument is X_test
+    assert result.name == "demo"
+    assert result.pipeline is pipe
+    assert result.roc_auc == pytest.approx(0.75, rel=1e-6)
+    assert result.pr_auc == pytest.approx(5 / 6, rel=1e-6)
+    assert result.f1 == pytest.approx(0.5, rel=1e-6)
+    assert result.precision == pytest.approx(0.5, rel=1e-6)
+    assert result.recall == pytest.approx(0.5, rel=1e-6)
+    assert result.brier == pytest.approx(0.195, rel=1e-6)
+    assert result.cv_roc_auc_mean == pytest.approx(0.6, rel=1e-6)
+    assert result.cv_roc_auc_std == pytest.approx(np.std(cv_scores), rel=1e-6)
+    assert np.array_equal(result.confusion, np.array([[1, 1], [1, 1]]))
+    assert result.classification_report_str == classification_report(
+        y_test, expected_predictions, digits=3
+    )
+
+
+def test_evaluate_uses_zero_precision_when_no_positive_predictions(monkeypatch):
+    X_train = pd.DataFrame({"feature": range(10)})
+    y_train = pd.Series([0, 1] * 5)
+    X_test = pd.DataFrame({"feature": range(4)})
+    y_test = pd.Series([0, 1, 1, 0])
+
+    class AlwaysNegativePipe:
+        def fit(self, X, y):
+            return self
+
+        def predict_proba(self, X):
+            return np.array([[0.9, 0.1]] * len(X))
+
+    monkeypatch.setattr(
+        train, "cross_val_score", lambda *args, **kwargs: np.array([0.5] * 5)
+    )
+
+    result = train.evaluate(
+        "always-negative", AlwaysNegativePipe(), X_train, X_test, y_train, y_test
+    )
+
+    assert result.precision == pytest.approx(0.0, rel=1e-6)
+    assert result.recall == pytest.approx(0.0, rel=1e-6)
+    assert result.f1 == pytest.approx(0.0, rel=1e-6)
+    assert np.array_equal(result.confusion, np.array([[2, 0], [2, 0]]))
+
+
+def test_run_builds_expected_pipelines_selects_best_and_persists_outputs(
+    monkeypatch, tmp_path, capsys
+):
+    X = pd.DataFrame({"feature": range(10)})
+    y = pd.Series([0, 1] * 5)
+    X_train, X_test = object(), object()
+    y_train, y_test = object(), object()
+    preprocessor = object()
+    pipeline_calls = []
+    evaluation_calls = []
+    dumped = []
+
+    monkeypatch.setattr(train, "MODELS_DIR", tmp_path / "models")
+    monkeypatch.setattr(train, "REPORTS_DIR", tmp_path / "reports")
+    train.MODELS_DIR.mkdir()
+    train.REPORTS_DIR.mkdir()
+    monkeypatch.setattr(train, "load_and_prepare", lambda: (X, y, {"ignored": True}))
+
+    def fake_split(actual_X, actual_y, **kwargs):
+        assert actual_X is X
+        assert actual_y is y
+        assert kwargs == {
+            "test_size": 0.2,
+            "stratify": y,
+            "random_state": train.RANDOM_STATE,
+        }
+        return X_train, X_test, y_train, y_test
+
+    monkeypatch.setattr(train, "train_test_split", fake_split)
+    monkeypatch.setattr(train, "_candidates", lambda: {"first": "a", "best": "b"})
+    monkeypatch.setattr(
+        train,
+        "build_preprocessor",
+        lambda actual_X: preprocessor if actual_X is X_train else pytest.fail("wrong data"),
+    )
+
+    def fake_pipeline(*, steps):
+        pipeline = {"steps": steps}
+        pipeline_calls.append(pipeline)
+        return pipeline
+
+    monkeypatch.setattr(train, "Pipeline", fake_pipeline)
+
+    def fake_evaluate(name, pipe, actual_X_train, actual_X_test, actual_y_train, actual_y_test):
+        assert (actual_X_train, actual_X_test, actual_y_train, actual_y_test) == (
+            X_train,
+            X_test,
+            y_train,
+            y_test,
+        )
+        evaluation_calls.append((name, pipe))
+        score = {"first": 0.4, "best": 0.9}[name]
+        return train.ModelResult(
+            name=name,
+            pipeline=pipe,
+            roc_auc=score,
+            pr_auc=score,
+            f1=score,
+            precision=score,
+            recall=score,
+            brier=1 - score,
+            cv_roc_auc_mean=score,
+            cv_roc_auc_std=0.0,
+            confusion=np.array([[1, 0], [0, 1]]),
+            classification_report_str="report",
+        )
+
+    monkeypatch.setattr(train, "evaluate", fake_evaluate)
+    monkeypatch.setattr(
+        train,
+        "joblib",
+        type(
+            "JoblibSpy",
+            (),
+            {"dump": staticmethod(lambda value, path: dumped.append((value, path)))},
+        ),
+    )
+
+    results = train.run()
+
+    assert list(results) == ["first", "best"]
+    assert [call[0] for call in evaluation_calls] == ["first", "best"]
+    assert pipeline_calls == [
+        {"steps": [("preprocess", preprocessor), ("model", "a")]},
+        {"steps": [("preprocess", preprocessor), ("model", "b")]},
+    ]
+    assert dumped == [
+        (results["best"].pipeline, train.MODELS_DIR / "best_model.joblib"),
+        ("best", train.MODELS_DIR / "best_model_name.joblib"),
+    ]
+
+    metrics_path = train.REPORTS_DIR / "metrics.json"
+    assert json.loads(metrics_path.read_text()) == {
+        "first": results["first"].to_dict(),
+        "best": results["best"].to_dict(),
+    }
+    assert metrics_path.read_text().startswith("{\n  ")
+    output = capsys.readouterr().out
+    assert "Best model: best (ROC-AUC = 0.900)" in output
+    assert f"Saved model → {train.MODELS_DIR / 'best_model.joblib'}" in output
+    assert f"Saved metrics → {metrics_path}" in output

@@ -89,3 +89,53 @@ def test_finish_preserves_system_and_user_verbatim():
     p = roles._finish("SYSTEM-TEXT", "USER-TEXT")
     assert p.system == "SYSTEM-TEXT"
     assert p.user == "USER-TEXT"
+
+
+# --- v7: per-subject import_hint threading ---
+
+HINT = ("Import the module under test as `import train` / `from train import ...` "
+        "(the src/ directory is on sys.path via conftest; do NOT import src.train).")
+
+
+def test_tester_prompt_import_hint_appears_in_user_text():
+    p = build_tester_prompt("src/train.py", "def f(): ...", import_hint=HINT)
+    assert HINT in p.user
+
+
+def test_tester_prompt_hash_changes_when_import_hint_present():
+    without = build_tester_prompt("src/train.py", "def f(): ...")
+    with_hint = build_tester_prompt("src/train.py", "def f(): ...", import_hint=HINT)
+    assert without.prompt_sha256 != with_hint.prompt_sha256
+
+
+def test_tester_prompt_hash_identical_for_omitted_and_explicit_none_hint():
+    a = build_tester_prompt("src/train.py", "def f(): ...")
+    b = build_tester_prompt("src/train.py", "def f(): ...", import_hint=None)
+    assert a.prompt_sha256 == b.prompt_sha256
+
+
+def test_tester_prompt_import_hint_does_not_touch_the_system_template():
+    # hash discipline: the hint is per-subject input, so it belongs in the
+    # hashed user text, never the shared system template.
+    without = build_tester_prompt("src/train.py", "def f(): ...")
+    with_hint = build_tester_prompt("src/train.py", "def f(): ...", import_hint=HINT)
+    assert with_hint.system == without.system
+    assert HINT not in with_hint.system
+
+
+def test_critic_prompt_import_hint_appears_in_user_text():
+    p = build_critic_prompt("src/train.py", "def f(): ...", {}, import_hint=HINT)
+    assert HINT in p.user
+
+
+def test_critic_prompt_hash_changes_when_import_hint_present():
+    without = build_critic_prompt("src/train.py", "def f(): ...", {})
+    with_hint = build_critic_prompt("src/train.py", "def f(): ...", {}, import_hint=HINT)
+    assert without.prompt_sha256 != with_hint.prompt_sha256
+
+
+def test_critic_prompt_import_hint_does_not_touch_the_system_template():
+    without = build_critic_prompt("src/train.py", "def f(): ...", {})
+    with_hint = build_critic_prompt("src/train.py", "def f(): ...", {}, import_hint=HINT)
+    assert with_hint.system == without.system
+    assert HINT not in with_hint.system

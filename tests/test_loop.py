@@ -1,9 +1,10 @@
 import pytest
 from oracle_gate.providers import Usage
 
-from crucible.engine import MutationOutcome
+from crucible.engine import MutationOutcome, SandboxStatsFailure
 from crucible.guardrails import GuardrailViolation
 from crucible.loop import LoopConfig, LoopResult, RoundReply, harden, oneshot
+from crucible.providers_ext import TruncatedOutput
 
 
 def outcome(survivors):
@@ -21,18 +22,28 @@ class FakeEnv:
         fail_calls=False,
         reject_on_write=False,
         fail_from_call=None,
+        dropped_by_round=None,
+        truncate_on_call=None,
     ):
         self.measurements = list(measurements)
         self.reject_rounds = set(reject_rounds)
         self.fail_calls = fail_calls
+        self.dropped_by_round = dropped_by_round or {}
         # 0-indexed count of model calls (tester+critic combined, in call order);
         # once the running count reaches fail_from_call, that call and all later ones fail.
         self.fail_from_call = fail_from_call
+        # 0-indexed call count at which the reply raises TruncatedOutput instead
+        # of a normal RoundReply (once; later calls behave normally).
+        self.truncate_on_call = truncate_on_call
         self.reject_on_write = reject_on_write
         self.written, self.removed = [], []
         self.calls = []  # records "tester"/"critic" in the order env was asked to speak
+        self.archived = []  # (round_no, arm, text, label) recorded by archive_rejected_text
         self._round = 0
         self._call_count = 0
+
+    def archive_rejected_text(self, round_no, arm, text, label="truncated"):
+        self.archived.append((round_no, arm, text, label))
 
     def measure(self):
         return self.measurements.pop(0)
@@ -42,10 +53,16 @@ class FakeEnv:
 
     def _reply(self, role):
         self.calls.append(role)
+        should_truncate = self.truncate_on_call is not None and self._call_count == self.truncate_on_call
         should_fail = self.fail_calls or (
             self.fail_from_call is not None and self._call_count >= self.fail_from_call
         )
         self._call_count += 1
+        if should_truncate:
+            raise TruncatedOutput(
+                text="truncated model output", usage=Usage(20, 32000),
+                model="claude-sonnet-5", prompt_sha256="b" * 64, cap=32000,
+            )
         if should_fail:
             raise RuntimeError("model down")
         return RoundReply("```python\nassert True\n```", "a" * 64, "claude-sonnet-5", Usage(10, 5))
@@ -68,6 +85,7 @@ class FakeEnv:
     def validate(self, test_path):
         if self._round in self.reject_rounds:
             raise GuardrailViolation("invalid: scripted rejection")
+        return list(self.dropped_by_round.get(self._round, []))
 
     def remove_test_file(self, path):
         self.removed.append(path)
@@ -245,6 +263,46 @@ def test_integrity_violation_after_measure_aborts_the_run():
     assert result.rounds[0].survivors_after == ["m1"]
 
 
+def test_post_write_sandbox_stats_failure_is_a_rejected_round_not_a_plausible_zero():
+    # v5: a generated test that passes validity but crashes mutmut's own
+    # sandbox (SandboxStatsFailure from the post-write env.measure() call)
+    # must reject the round -- never get recorded as a real zero-kill
+    # measurement, which is exactly the silent-corruption bug this fixes.
+    class SandboxFailEnv(FakeEnv):
+        def __init__(self, *a, **kw):
+            super().__init__(*a, **kw)
+            self._measure_calls = 0
+
+        def measure(self):
+            self._measure_calls += 1
+            if self._measure_calls == 2:  # the post-write measure, not the baseline
+                raise SandboxStatsFailure("mutmut run failed: runner returned 1")
+            return super().measure()
+
+    env = SandboxFailEnv([outcome(["m1", "m2"])])
+    result = oneshot(env, LoopConfig(arm="oneshot"))
+    assert result.rounds[0].status == "rejected"
+    assert "sandbox-invalid" in result.rounds[0].note
+    assert "runner returned 1" in result.rounds[0].note
+    assert result.rounds[0].test_file is None
+    assert result.rounds[0].survivors_after == ["m1", "m2"]
+    assert env.removed == ["tests/crucible_r0_oneshot_test.py"]
+    assert result.verdict == "rejected"
+
+
+def test_baseline_sandbox_stats_failure_propagates_uncaught():
+    # v5: the PRE-round baseline measure can't be broken by a generated test
+    # (none exists yet) -- if it raises SandboxStatsFailure, that is a real
+    # subject config error and must crash loud, not be swallowed as a round.
+    class BrokenBaselineEnv(FakeEnv):
+        def measure(self):
+            raise SandboxStatsFailure("subject config is broken")
+
+    env = BrokenBaselineEnv([])
+    with pytest.raises(SandboxStatsFailure, match="subject config is broken"):
+        oneshot(env, LoopConfig(arm="oneshot"))
+
+
 def test_on_round_streams_each_record_in_order():
     # the caller's on_round hook must see every record, in order, as it lands —
     # that is what makes receipts durable per round instead of buffered to the end.
@@ -255,6 +313,25 @@ def test_on_round_streams_each_record_in_order():
     assert len(seen) == 3
 
 
+def test_round_records_dropped_tests_from_env_validate():
+    # v3 salvage: env.validate returns the names of any pristine-failing tests it
+    # dropped from the file; the round must carry that forward in its receipt rather
+    # than discarding it, and a round where nothing was dropped keeps an empty list.
+    env = FakeEnv(
+        [outcome(["m1", "m2"]), outcome(["m1"])],
+        dropped_by_round={0: ["test_wrong_oracle"]},
+    )
+    result = oneshot(env, LoopConfig(arm="oneshot"))
+    assert result.rounds[0].dropped_tests == ["test_wrong_oracle"]
+    assert result.rounds[0].status == "ok"  # a salvaged round is still ok, not rejected
+
+
+def test_round_dropped_tests_defaults_to_empty_list_when_nothing_dropped():
+    env = FakeEnv([outcome(["m1"]), outcome(["m1"])])
+    result = oneshot(env, LoopConfig(arm="oneshot"))
+    assert result.rounds[0].dropped_tests == []
+
+
 def test_clean_verdict_when_last_round_exhausts_the_budget():
     # the final round exactly kills the last survivor at the budget cap: the loop's
     # top-of-iteration early-return never fires, so the tail "clean" computation must.
@@ -262,3 +339,38 @@ def test_clean_verdict_when_last_round_exhausts_the_budget():
     result = harden(env, LoopConfig(max_rounds=1, dry_rounds=99))
     assert result.verdict == "clean"
     assert len(result.rounds) == 2
+
+
+def test_critic_round_truncation_is_rejected_with_billed_receipt_and_archived_text():
+    # v9 instrument fix: a truncated critic reply is billed (the tokens WERE spent)
+    # and archived as evidence, but never retried and never credited with a kill.
+    # call 0 = tester (ok), call 1 = critic (truncates), call 2 = critic (ok, zero-kill)
+    env = FakeEnv(
+        [outcome(["m1"]), outcome(["m1"]), outcome(["m1"])],
+        truncate_on_call=1,
+    )
+    result = harden(env, LoopConfig(dry_rounds=2, arm="loop"))
+    rejected = result.rounds[1]
+    assert rejected.status == "rejected"
+    assert rejected.note.startswith("truncated: output hit max_tokens cap")
+    assert rejected.model == "claude-sonnet-5"
+    assert rejected.prompt_sha256 == "b" * 64
+    assert rejected.usage_in == 20 and rejected.usage_out == 32000
+    assert rejected.cost_usd > 0
+    assert rejected.test_file is None
+    assert rejected.survivors_after == ["m1"]  # zero kills credited
+    assert env.archived == [(1, "loop", "truncated model output", "truncated")]
+    # the loop continues past the rejected round to a normal dry verdict
+    assert result.verdict == "dry"
+    assert len(result.rounds) == 3
+
+
+def test_tester_round_truncation_makes_the_run_verdict_rejected():
+    env = FakeEnv([outcome(["m1"])], truncate_on_call=0)
+    result = oneshot(env, LoopConfig(arm="oneshot"))
+    assert result.verdict == "rejected"
+    assert result.rounds[0].status == "rejected"
+    assert result.rounds[0].note.startswith("truncated: output hit max_tokens cap")
+    assert result.rounds[0].usage_in == 20 and result.rounds[0].usage_out == 32000
+    assert result.rounds[0].cost_usd > 0
+    assert env.archived == [(0, "oneshot", "truncated model output", "truncated")]

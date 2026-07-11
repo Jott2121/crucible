@@ -11,8 +11,11 @@ The `env` duck-type (implemented for real in Task 11's CLI, faked in tests):
   env.call_tester() -> RoundReply
   env.call_critic(survivor_diffs: dict[str, str]) -> RoundReply
   env.write_test_file(round_no, arm, content) -> str  (repo-relative path; add-only check)
-  env.validate(test_path) -> None  (raises GuardrailViolation)
+  env.validate(test_path) -> list[str]  (raises GuardrailViolation; returns names of any
+    pristine-failing tests salvaged/dropped from the file -- v3 per-test salvage)
   env.remove_test_file(path) -> None  (a rejected round leaves no trace)
+  env.archive_rejected_text(round_no, arm, text) -> None  (preserve a truncated reply
+    as evidence; never touches the subject clone)
   env.assert_clean() -> None  (post-round integrity attestation; raises GuardrailViolation)
   env.cost_usd(model, usage) -> float
 """
@@ -22,7 +25,9 @@ from dataclasses import dataclass, field
 
 from oracle_gate.providers import Usage
 
+from crucible.engine import SandboxStatsFailure
 from crucible.guardrails import GuardrailViolation
+from crucible.providers_ext import TruncatedOutput
 
 
 @dataclass(frozen=True)
@@ -57,6 +62,7 @@ class RoundRecord:
     counts: dict = field(default_factory=dict)
     status: str = "ok"
     note: str = ""
+    dropped_tests: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -77,6 +83,17 @@ def _round(env, cfg, round_no, role, survivors_before) -> RoundRecord:
         else:
             diffs = {mid: env.survivor_diff(mid) for mid in survivors_before}
             reply = env.call_critic(diffs)
+    except TruncatedOutput as exc:
+        # billed but unusable: record the round honestly (the tokens WERE spent)
+        # and archive the reply as evidence, rather than let it read as a silent
+        # model/network failure. Never retried upstream -- see env._call.
+        rec.model, rec.prompt_sha256 = exc.model, exc.prompt_sha256
+        rec.usage_in, rec.usage_out = exc.usage.input_tokens, exc.usage.output_tokens
+        rec.cost_usd = env.cost_usd(exc.model, exc.usage)
+        env.archive_rejected_text(round_no, cfg.arm, exc.text)
+        rec.status, rec.note, rec.test_file = "rejected", str(exc), None
+        rec.survivors_after = list(survivors_before)  # zero kills credited
+        return rec
     except Exception as exc:  # model/network failure after env-level retries
         rec.status, rec.note = "aborted", f"model call failed: {type(exc).__name__}: {exc}"
         # an aborted round killed nothing: keep the survivor context rather than
@@ -92,7 +109,8 @@ def _round(env, cfg, round_no, role, survivors_before) -> RoundRecord:
     try:
         path = env.write_test_file(round_no, cfg.arm, reply.text)
         rec.test_file = path
-        env.validate(path)
+        dropped = env.validate(path)
+        rec.dropped_tests = list(dropped or [])
     except GuardrailViolation as exc:
         if path is not None:
             env.remove_test_file(path)
@@ -102,6 +120,17 @@ def _round(env, cfg, round_no, role, survivors_before) -> RoundRecord:
 
     try:
         after = env.measure()
+    except SandboxStatsFailure as exc:
+        # the generated test passed pristine validation but crashes mutmut's own
+        # sandbox (e.g. it asserts a directory also_copy never carried in) --
+        # NOT a legitimate zero-kill measurement. Reject the round rather than
+        # ever recording the plausible-zero this would otherwise produce.
+        env.remove_test_file(path)
+        rec.status, rec.note, rec.test_file = "rejected", f"sandbox-invalid: {exc}", None
+        rec.survivors_after = list(survivors_before)
+        return rec
+
+    try:
         # integrity attestation: executing the generated tests must not have
         # touched the tree; a tampered tree means the measurement is untrustworthy
         # and the run cannot continue.
