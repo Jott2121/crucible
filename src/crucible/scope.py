@@ -214,14 +214,24 @@ def _pytest_config_sections(subject_dir: Path):
     for fname, sect in (("pytest.ini", "pytest"), ("setup.cfg", "tool:pytest")):
         path = subject_dir / fname
         if path.is_file():
-            parser = configparser.ConfigParser()
+            # interpolation=None: pytest ini values routinely contain literal
+            # %-sequences (log_cli_format = %(message)s is the stock example);
+            # ConfigParser's default BasicInterpolation raises
+            # InterpolationMissingOptionError on value ACCESS for those -- a
+            # configparser.Error, not a parse-time error, so it must also stay
+            # inside the try (defense in depth) or it escapes canary_probe as
+            # a raw traceback instead of the CLI's REFUSING/exit-4 path.
+            parser = configparser.ConfigParser(interpolation=None)
+            section = None
             try:
                 parser.read_string(path.read_text())
+                if parser.has_section(sect):
+                    section = dict(parser.items(sect))
             except configparser.Error as exc:
                 raise RuntimeError(
                     f"cannot parse {fname} while checking pytest discovery config: {exc}")
-            if parser.has_section(sect):
-                yield fname, dict(parser.items(sect))
+            if section is not None:
+                yield fname, section
 
 
 def _tokens(value) -> list[str]:
@@ -246,23 +256,38 @@ def _assert_fresh_file_collectable(subject_dir: Path) -> None:
     Rules, all in the fail-safe direction (over-refuse, never under):
     - python_files defined and no pattern fnmatch-matches crucible_x_test.py
       -> refuse (fresh files would never be collected).
-    - testpaths defined at all -> refuse (discovery is pinned to fixed dirs;
-      crucible cannot mechanically prove fresh files land inside them).
-    - addopts containing a bare positional token -> refuse. HEURISTIC BOUNDS:
-      tokens are naive whitespace-splits; a token not starting with '-' is
-      treated as a discovery-pinning path. This misreads the separate argument
-      of a value-taking option (e.g. `-k expr`, `-p plugin`) as a path and
+    - testpaths defined and "tests" is NOT among its tokens -> refuse.
+      crucible writes every generated file to tests/crucible_*_test.py
+      (env._known_generated), so testpaths pinning discovery to a set of
+      dirs that includes "tests" provably still collects fresh files -- the
+      common testpaths = ["tests"] idiom (e.g. rag-guard) is safe and
+      waivable; any pin that excludes tests/ is not.
+    - addopts containing a bare positional token, or any token starting with
+      --ignore or --deselect (which pass the bare-positional check yet can
+      exclude fresh files under tests/) -> refuse. HEURISTIC BOUNDS: tokens
+      are naive whitespace-splits; a token not starting with '-' is treated
+      as a discovery-pinning path. This misreads the separate argument of a
+      value-taking option (e.g. `-k expr`, `-p plugin`) as a path and
       refuses, and mishandles quoted paths containing spaces -- both errors
-      refuse a possibly-fine subject, never waive a broken one."""
+      refuse a possibly-fine subject, never waive a broken one.
+
+    REMAINING UNSCANNED RESIDUALS (known, accepted): tox.ini [pytest] (a
+    fourth config source pytest honors) is not read; norecursedirs is not
+    checked (a subject listing tests/ there would still be waived); and a
+    collection-shaping conftest.py (collect_ignore, pytest_ignore_collect)
+    is invisible to any static config scan."""
     for fname, section in _pytest_config_sections(subject_dir):
         if "testpaths" in section:
-            raise RuntimeError(_DISCOVERY_REFUSAL.format(key="testpaths", file=fname))
+            if "tests" not in _tokens(section["testpaths"]):
+                raise RuntimeError(_DISCOVERY_REFUSAL.format(key="testpaths", file=fname))
         if "python_files" in section:
             patterns = _tokens(section["python_files"])
             if not any(fnmatch.fnmatch(_FRESH_TEST_BASENAME, p) for p in patterns):
                 raise RuntimeError(_DISCOVERY_REFUSAL.format(key="python_files", file=fname))
         if "addopts" in section:
-            if any(t and not t.startswith("-") for t in _tokens(section["addopts"])):
+            tokens = _tokens(section["addopts"])
+            if any(t and not t.startswith("-") for t in tokens) \
+                    or any(t.startswith(("--ignore", "--deselect")) for t in tokens):
                 raise RuntimeError(_DISCOVERY_REFUSAL.format(key="addopts", file=fname))
 
 
@@ -304,10 +329,14 @@ def canary_probe(subject_dir: Path, module: str, run=subprocess.run) -> CanaryVe
     is checked mechanically before any waiver is granted, by
     _assert_fresh_file_collectable(), which refuses (RuntimeError -> the
     CLI's REFUSING/exit-4 path) when python_files cannot match a
-    crucible_*_test.py name, when testpaths is defined at all, or when
-    addopts pins bare positional paths. Neither constraint substitutes for
-    the other: the exclude-form writer cannot see the subject's config, and
-    the config scan cannot see how crucible writes its own scope.
+    crucible_*_test.py name, when testpaths pins discovery to dirs that do
+    not include tests/ (where crucible writes every generated file), or when
+    addopts pins bare positional paths or carries --ignore/--deselect
+    tokens. Neither constraint substitutes for the other: the exclude-form
+    writer cannot see the subject's config, and the config scan cannot see
+    how crucible writes its own scope. The scan's own residuals (tox.ini,
+    norecursedirs, conftest-level collection hooks) are listed on
+    _assert_fresh_file_collectable.
 
     The "before" measure happens first and unconditionally, so a waived scope
     never pays for writing or pristine-checking a canary at all; only the

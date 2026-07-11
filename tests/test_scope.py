@@ -203,14 +203,80 @@ def test_waiver_ok_when_python_files_matches_test_suffix(tmp_path, monkeypatch):
     assert v.passed is True and v.waived is True
 
 
-def test_waiver_refused_when_testpaths_present(tmp_path, monkeypatch):
-    """testpaths defined at all -> refuse: it steers discovery into fixed
-    dirs and crucible cannot mechanically prove fresh files land inside."""
+def test_waiver_refused_when_testpaths_excludes_tests_dir(tmp_path, monkeypatch):
+    """testpaths pinned to dirs NOT including tests/ -> refuse: crucible
+    writes generated files to tests/crucible_*_test.py (env._known_generated),
+    outside every pinned path, so they would never be collected."""
     scope_mod, repo, fail_run = _waived_setup(monkeypatch, tmp_path, {
-        "pytest.ini": "[pytest]\ntestpaths = tests\n",
+        "pyproject.toml": '[tool.pytest.ini_options]\ntestpaths = ["spec"]\n',
     })
-    with pytest.raises(RuntimeError, match=r"testpaths in pytest\.ini"):
+    with pytest.raises(RuntimeError, match=r"testpaths in pyproject\.toml"):
         scope_mod.canary_probe(repo, "mypkg/mod.py", run=fail_run)
+
+
+def test_waiver_ok_when_testpaths_includes_tests_dir(tmp_path, monkeypatch):
+    """testpaths = ["tests"] (the common idiom -- rag-guard's exact config) is
+    provably safe: crucible writes fresh files to tests/crucible_*_test.py,
+    INSIDE the pinned path. A blanket testpaths refusal here falsely refused
+    the pilot subject (round-3 re-review Important 1)."""
+    scope_mod, repo, fail_run = _waived_setup(monkeypatch, tmp_path, {
+        "pyproject.toml": '[tool.pytest.ini_options]\ntestpaths = ["tests"]\n',
+    })
+    v = scope_mod.canary_probe(repo, "mypkg/mod.py", run=fail_run)
+    assert v.passed is True and v.waived is True
+
+
+def test_waiver_ok_when_testpaths_string_contains_tests(tmp_path, monkeypatch):
+    """Ini-string form with several dirs, one of them tests/ -> proceeds
+    (fresh files land inside a pinned path)."""
+    scope_mod, repo, fail_run = _waived_setup(monkeypatch, tmp_path, {
+        "pytest.ini": "[pytest]\ntestpaths = tests other\n",
+    })
+    v = scope_mod.canary_probe(repo, "mypkg/mod.py", run=fail_run)
+    assert v.passed is True and v.waived is True
+
+
+def test_waiver_ok_ini_value_with_interpolation_chars(tmp_path, monkeypatch):
+    """A pytest.ini carrying %-style values (log_cli_format = %(message)s is
+    the common case) must not crash the scan: ConfigParser's default
+    interpolation raises InterpolationMissingOptionError -- a
+    configparser.Error, not RuntimeError -- on value ACCESS, which escaped
+    canary_probe as a CLI exit-1 traceback (round-3 re-review Important 2).
+    No discovery keys here, so the waiver proceeds."""
+    scope_mod, repo, fail_run = _waived_setup(monkeypatch, tmp_path, {
+        "pytest.ini": "[pytest]\nlog_cli_format = %(message)s\n",
+    })
+    v = scope_mod.canary_probe(repo, "mypkg/mod.py", run=fail_run)
+    assert v.passed is True and v.waived is True
+
+
+def test_waiver_refused_addopts_ignore_token(tmp_path, monkeypatch):
+    """--ignore=... passes the bare-positional heuristic yet can kill
+    fresh-file collection under tests/ -- a false WAIVE in the unsafe
+    direction (round-3 re-review Minor). Refuse."""
+    scope_mod, repo, fail_run = _waived_setup(monkeypatch, tmp_path, {
+        "pyproject.toml": '[tool.pytest.ini_options]\naddopts = "--ignore=tests"\n',
+    })
+    with pytest.raises(RuntimeError, match=r"addopts in pyproject\.toml"):
+        scope_mod.canary_probe(repo, "mypkg/mod.py", run=fail_run)
+
+
+def test_waiver_refused_addopts_deselect_token(tmp_path, monkeypatch):
+    """--deselect=... same unsafe direction as --ignore. Refuse."""
+    scope_mod, repo, fail_run = _waived_setup(monkeypatch, tmp_path, {
+        "pytest.ini": "[pytest]\naddopts = --deselect=tests/crucible_x_test.py\n",
+    })
+    with pytest.raises(RuntimeError, match=r"addopts in pytest\.ini"):
+        scope_mod.canary_probe(repo, "mypkg/mod.py", run=fail_run)
+
+
+def test_waiver_ok_addopts_plain_flags(tmp_path, monkeypatch):
+    """addopts of plain short flags (-q -x) touches nothing -> proceeds."""
+    scope_mod, repo, fail_run = _waived_setup(monkeypatch, tmp_path, {
+        "pyproject.toml": '[tool.pytest.ini_options]\naddopts = "-q -x"\n',
+    })
+    v = scope_mod.canary_probe(repo, "mypkg/mod.py", run=fail_run)
+    assert v.passed is True and v.waived is True
 
 
 def test_waiver_refused_setup_cfg_python_files_mismatch(tmp_path, monkeypatch):
