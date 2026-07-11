@@ -74,3 +74,104 @@ def test_registry():
     assert get_provider("openai").name == "openai"
     with pytest.raises(KeyError):
         get_provider("nope")
+
+
+import json as _json
+
+
+class _FakeProc:
+    def __init__(self, returncode=0, stdout="", stderr=""):
+        self.returncode, self.stdout, self.stderr = returncode, stdout, stderr
+
+
+def _cli_envelope(text="pong", inp=12, out=5):
+    # REALITY CHECK (2026-07-11 live probe, `claude -p --output-format json`):
+    # the CLI emits a JSON ARRAY of stream events (system init, assistant
+    # message, rate_limit_event, ...), not a single flat object. The brief's
+    # canned single-object envelope does not match what the binary actually
+    # prints -- confirmed with and without the operator's interactive zsh
+    # `claude` function in the way (subprocess.run never sees that function
+    # anyway). The event carrying the real fields is the last one, type=="result".
+    return _json.dumps([
+        {"type": "system", "subtype": "init", "session_id": "s"},
+        {"type": "assistant", "message": {"content": [{"type": "text", "text": text}]}},
+        {"type": "rate_limit_event", "rate_limit_info": {"status": "allowed"}},
+        {
+            "type": "result", "subtype": "success", "is_error": False,
+            "result": text, "usage": {"input_tokens": inp, "output_tokens": out},
+            "total_cost_usd": 0.0, "session_id": "s",
+        },
+    ])
+
+
+def test_claude_cli_provider_parses_text_and_usage(monkeypatch):
+    from crucible.providers_ext import ClaudeCLIProvider
+    calls = {}
+
+    def fake_run(cmd, input=None, capture_output=True, text=True, timeout=None):
+        calls["cmd"], calls["input"], calls["timeout"] = cmd, input, timeout
+        return _FakeProc(stdout=_cli_envelope("hello", 100, 42))
+
+    p = ClaudeCLIProvider(run=fake_run)
+    reply, usage = p.complete_with_usage("SYS", "USER", model="claude-sonnet-5")
+    assert reply == "hello"
+    assert usage == Usage(100, 42)
+    assert calls["cmd"][0] == "claude" and "-p" in calls["cmd"]
+    assert "--output-format" in calls["cmd"] and "json" in calls["cmd"]
+    assert "claude-sonnet-5" in calls["cmd"]
+    assert calls["input"] == "USER"          # user prompt via stdin, never argv
+    assert "SYS" in calls["cmd"]             # system prompt via flag
+    assert calls["timeout"] == ClaudeCLIProvider.request_timeout == 1200
+
+
+def test_claude_cli_provider_error_paths(monkeypatch):
+    from crucible.providers_ext import ClaudeCLIProvider
+    p_exit = ClaudeCLIProvider(run=lambda *a, **k: _FakeProc(returncode=1, stderr="boom"))
+    with pytest.raises(RuntimeError, match="boom"):
+        p_exit.complete_with_usage("s", "u")
+    p_json = ClaudeCLIProvider(run=lambda *a, **k: _FakeProc(stdout="not json"))
+    with pytest.raises(RuntimeError, match="envelope"):
+        p_json.complete_with_usage("s", "u")
+
+    def raise_fnf(*a, **k):
+        raise FileNotFoundError("claude")
+
+    p_missing = ClaudeCLIProvider(run=raise_fnf)
+    with pytest.raises(RuntimeError, match="claude"):
+        p_missing.complete_with_usage("s", "u")
+
+
+def test_claude_cli_provider_is_error_envelope_fails_loud():
+    from crucible.providers_ext import ClaudeCLIProvider
+    # array-shaped, matching the live probe: the result event carries is_error.
+    env = _json.dumps([
+        {"type": "system", "subtype": "init"},
+        {"type": "result", "is_error": True, "result": "over quota",
+         "usage": {"input_tokens": 1, "output_tokens": 1}},
+    ])
+    p = ClaudeCLIProvider(run=lambda *a, **k: _FakeProc(stdout=env))
+    with pytest.raises(RuntimeError, match="over quota"):
+        p.complete_with_usage("s", "u")
+
+
+def test_claude_cli_provider_array_envelope_missing_result_event_fails_loud():
+    """Defensive: a stream with no type=='result' event (e.g. truncated output,
+    process killed mid-stream) must fail loud, not silently return empty text."""
+    from crucible.providers_ext import ClaudeCLIProvider
+    env = _json.dumps([{"type": "system", "subtype": "init"}])
+    p = ClaudeCLIProvider(run=lambda *a, **k: _FakeProc(stdout=env))
+    with pytest.raises(RuntimeError, match="envelope"):
+        p.complete_with_usage("s", "u")
+
+
+def test_billing_attrs():
+    from crucible.providers_ext import ClaudeCLIProvider
+    assert ClaudeCLIProvider.billing == "max-plan"
+    # absent attr means "api" -- the convention Task 2's meta stamping reads
+    assert getattr(LongAnthropicProvider, "billing", "api") == "api"
+    assert getattr(get_provider("openai"), "billing", "api") == "api"
+
+
+def test_registry_has_claude_cli():
+    from crucible.providers_ext import ClaudeCLIProvider
+    assert get_provider("claude-cli").__class__ is ClaudeCLIProvider
