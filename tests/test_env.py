@@ -195,6 +195,27 @@ def subprocess_log_subject(cwd):
     ).stdout.strip()
 
 
+def test_preflight_skips_scope_commit_when_only_engine_artifacts_are_untracked(tmp_path):
+    # Finding D (Opus re-review of b0402fc): the scope-commit trigger at
+    # env.py:118 used RAW `git status --porcelain -uall`, not
+    # _filtered_status(). Sequence: `crucible scope`'s canary probe leaves an
+    # untracked mutants/ dir -> operator commits the scope config per the
+    # skill -> harden's preflight: the dirty-check passes (filtered ignores
+    # mutants/), the scope write is a byte-identical no-op, but the RAW
+    # status is non-empty -> `git add pyproject.toml` stages nothing ->
+    # `git commit` fails "nothing to commit" -> uncaught RuntimeError.
+    # The trigger must use _filtered_status(), consistent with the
+    # dirty-check above it: no commit attempted, preflight succeeds, HEAD
+    # unchanged.
+    env = _env(tmp_path, [])
+    first_sha = env.preflight(module_path="subject_pkg/calc.py")  # commits the scope
+    # leftover engine artifact (exactly what the canary probe leaves behind)
+    (env.subject_dir / "mutants").mkdir()
+    (env.subject_dir / "mutants" / "junk.json").write_text("{}")
+    second_sha = env.preflight(module_path="subject_pkg/calc.py")  # must not raise
+    assert second_sha == first_sha  # nothing to commit; no commit attempted
+
+
 def test_preflight_skips_rewriting_extra_file_when_content_is_unchanged(tmp_path):
     # a second preflight call against an already-scoped, already-shimmed clone
     # (the real cell-isolation flow: reset_clone + preflight per cell) must be

@@ -119,6 +119,50 @@ def test_harden_end_to_end_survives_engine_artifacts(tmp_path):
 
 
 @pytest.mark.slow
+def test_harden_completes_after_scope_commit_with_leftover_mutants_dir(tmp_path):
+    """Finding D sequence test (Opus re-review of b0402fc): the exact operator
+    flow the harden-tests skill prescribes -- `crucible scope` writes the
+    config (its canary probe leaves an untracked mutants/ dir behind), the
+    operator commits pyproject.toml/conftest.py per skill step 4, then runs
+    `crucible harden`. Preflight's dirty-check passes (mutants/ is a filtered
+    engine artifact) and the scope write is byte-identical (fix B), so there
+    is genuinely nothing to commit -- but the commit TRIGGER at env.py:118
+    read raw `git status --porcelain -uall`, saw `?? mutants/`, staged
+    nothing, and crashed on `git commit` ("nothing to commit"). The whole
+    run must complete instead."""
+    subject = tmp_path / "subject"
+    shutil.copytree(Path(__file__).parent / "fixtures" / "subject", subject)
+    for cmd in (["git", "init", "-q"], ["git", "add", "-A"],
+                ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "seed"]):
+        subprocess.run(cmd, cwd=subject, check=True)
+    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-e", str(subject)], check=True)
+
+    # `crucible scope`'s file writes, committed per skill step 4 (this fixture
+    # is not src-layout, so there is no conftest.py -- the skill's command
+    # tolerates that)
+    from crucible.scope import apply, detect
+    apply(subject, detect(subject, "subject_pkg/calc.py"))
+    subprocess.run(["git", "add", "pyproject.toml"], cwd=subject, check=True)
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm",
+         "crucible: scope config for subject_pkg/calc.py"],
+        cwd=subject, check=True,
+    )
+    # what the canary probe (real mutmut) leaves behind, untracked
+    (subject / "mutants").mkdir()
+    (subject / "mutants" / "junk.json").write_text("{}")
+
+    replies = tmp_path / "replies.json"
+    replies.write_text(json.dumps([WEAK_TESTS, GOOD_TESTS]))
+
+    from crucible.cli import main
+    rc = main(["harden", str(subject), "--module", "subject_pkg/calc.py",
+               "--tester", "fake", "--critic", "fake", "--rounds", "1",
+               "--fake-replies", str(replies), "--runs-dir", str(tmp_path / "runs")])
+    assert rc == 0
+
+
+@pytest.mark.slow
 def test_cli_meta_records_billing(tmp_path):
     # FakeProvider carries no billing attribute -> getattr(..., "billing", "api")
     # default must land in meta.json for both roles.

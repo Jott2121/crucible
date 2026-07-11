@@ -115,7 +115,13 @@ class SubjectEnv:
             else:
                 write_scope(self.subject_dir / "pyproject.toml", [module_path],
                            create_if_missing=True)
-            if self._git("status", "--porcelain", "-uall").strip():
+            # _filtered_status, NOT raw status (Finding D, Opus re-review):
+            # a leftover untracked mutants/ dir (the canary probe's residue)
+            # made raw status non-empty while the scope write was a
+            # byte-identical no-op, so `git add pyproject.toml` staged
+            # nothing and the commit crashed "nothing to commit". Filtering
+            # keeps this trigger consistent with the dirty-check above.
+            if self._filtered_status().strip():
                 self._git("add", "pyproject.toml", *extra_files.keys())
                 commit_msg = f"crucible: scope mutmut to {module_path}"
                 if extra_files:

@@ -44,10 +44,14 @@ receipts shadow-priced and flagged `billing: max-plan`.
    `[tool.mutmut]` (and a `conftest.py` shim, for src-layout subjects)
    straight to the working tree, uncommitted. Commit it now, before running
    the loop:
-   `git add pyproject.toml conftest.py 2>/dev/null; git commit -m "crucible:
-   scope config for <M>"`. Skipping this step leaves the tree dirty, and
-   step 5's preflight hard-refuses a dirty tree outright -- receipts also
-   bind to a commit sha, so the validated scope needs one to bind to.
+   `git add pyproject.toml; [ -f conftest.py ] && git add conftest.py;
+   git commit -m "crucible: scope config for <M>"`
+   (`git add` is all-or-nothing on pathspecs: naming a conftest.py that does
+   not exist -- every non-src-layout subject -- aborts the whole add and
+   stages nothing, so the missing file must be tolerated with a guard, not
+   an error redirect). Skipping this step leaves the tree dirty, and step
+   5's preflight hard-refuses a dirty tree outright -- receipts also bind
+   to a commit sha, so the validated scope needs one to bind to.
 5. Run the loop on the Max plan:
    `~/ai-agentic-code-testing/.venv/bin/crucible harden <repo> --module <M>
    --tester claude-cli --critic claude-cli --runs-dir <repo>/.crucible-runs`
