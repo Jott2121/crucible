@@ -355,6 +355,80 @@ def test_canary_probe_waived_when_existing_suite_already_kills(tmp_path, monkeyp
     assert not (repo / "tests" / "crucible_canary_test.py").exists()
 
 
+def test_canary_probe_removes_mutants_residue_on_success(tmp_path, monkeypatch):
+    """Finding E leg 2: the canary probe's mutmut runs leave a mutants/ dir
+    (copied tests + pycs) in the subject; downstream, harden's preflight
+    pristine-suite check chokes on it (import-file-mismatch) and a retry sees
+    a phantom-dirty clone. canary_probe must clean it up in a finally --
+    success path here (strict branch, kills increase)."""
+    import crucible.scope as scope_mod
+
+    class FakeOutcome:
+        def __init__(self, killed):
+            self.counts = {"killed": killed}
+            self.all_mutants = 10
+            self.survivors = []
+
+    measures = iter([FakeOutcome(0), FakeOutcome(2)])
+
+    class FakeEngine:
+        def __init__(self, cwd, run=None):
+            self.cwd = Path(cwd)
+
+        def measure(self):
+            # what a real mutmut run leaves behind: mutants/ carrying copied tests
+            (self.cwd / "mutants" / "tests").mkdir(parents=True, exist_ok=True)
+            (self.cwd / "mutants" / "tests" / "test_mod.py").write_text("import mypkg\n")
+            return next(measures)
+
+    monkeypatch.setattr(scope_mod, "MutmutEngine", FakeEngine)
+    repo = _mk(tmp_path, {"mypkg/mod.py": "X = 1\n"})
+
+    def fake_run(cmd, cwd=None, capture_output=True, text=True, timeout=None, **kw):
+        class P:
+            returncode, stdout, stderr = 0, "1 passed", ""
+        return P()
+
+    v = scope_mod.canary_probe(repo, "mypkg/mod.py", run=fake_run)
+    assert v.passed is True
+    assert not (repo / "mutants").exists()
+
+
+def test_canary_probe_removes_mutants_residue_on_refusal(tmp_path, monkeypatch):
+    """Finding E leg 2, failure path: even when the probe REFUSES (here the
+    waiver's discovery-config scan raises), the mutants/ residue from the
+    baseline measure must not be left behind."""
+    import crucible.scope as scope_mod
+
+    class FakeOutcome:
+        counts = {"killed": 3}
+        all_mutants = 10
+        survivors = []
+
+    class FakeEngine:
+        def __init__(self, cwd, run=None):
+            self.cwd = Path(cwd)
+
+        def measure(self):
+            (self.cwd / "mutants" / "tests").mkdir(parents=True, exist_ok=True)
+            (self.cwd / "mutants" / "tests" / "test_mod.py").write_text("import mypkg\n")
+            return FakeOutcome()
+
+    monkeypatch.setattr(scope_mod, "MutmutEngine", FakeEngine)
+    repo = _mk(tmp_path, {
+        "mypkg/mod.py": "X = 1\n",
+        # python_files that can never match crucible_*_test.py -> waiver refused
+        "pyproject.toml": '[tool.pytest.ini_options]\npython_files = ["check_*.py"]\n',
+    })
+
+    def fail_run(cmd, cwd=None, capture_output=True, text=True, timeout=None, **kw):
+        raise AssertionError("no subprocess expected in the waived branch")
+
+    with pytest.raises(RuntimeError, match="python_files"):
+        scope_mod.canary_probe(repo, "mypkg/mod.py", run=fail_run)
+    assert not (repo / "mutants").exists()
+
+
 def test_canary_probe_refuses_pristine_failing_canary(tmp_path, monkeypatch):
     """killed=0 baseline (mocked, so we reach the strict branch) but the
     freshly-written canary itself fails on pristine code -- refuse loudly

@@ -11,6 +11,7 @@ import ast
 import configparser
 import fnmatch
 import importlib.util
+import shutil
 import subprocess
 import sys
 import tomllib
@@ -347,37 +348,45 @@ def canary_probe(subject_dir: Path, module: str, run=subprocess.run) -> CanaryVe
     if modname.startswith("src."):
         modname = modname[len("src."):]          # v7: bare name, never src.-qualified
     engine = MutmutEngine(subject_dir, run=run)
-    before = engine.measure()
-    before_killed = int(before.counts.get("killed", 0))
-    if before_killed > 0:
-        _assert_fresh_file_collectable(subject_dir)
+    # Finding E: the probe's mutmut runs leave a mutants/ dir behind (sandbox
+    # copies of the subject's tests + pycs); harden's preflight pristine-suite
+    # check chokes on the duplicate test modules and a retry sees a
+    # phantom-dirty clone. The probe cleans up after itself in a finally --
+    # success, refusal, or crash -- mirroring reset_clone's posture.
+    try:
+        before = engine.measure()
+        before_killed = int(before.counts.get("killed", 0))
+        if before_killed > 0:
+            _assert_fresh_file_collectable(subject_dir)
+            return CanaryVerdict(
+                kills_before=before_killed,
+                kills_after=before_killed,
+                mutants=before.all_mutants,
+                passed=True,
+                waived=True,
+            )
+        names = _public_top_level_names(subject_dir / module)
+        tests_dir = subject_dir / "tests"
+        tests_dir.mkdir(exist_ok=True)
+        canary = tests_dir / "crucible_canary_test.py"
+        try:
+            canary.write_text(_CANARY.format(modname=modname, names=names, probes=_CANARY_PROBES))
+            pristine = run([sys.executable, "-m", "pytest", "-q", str(canary), "--ignore=mutants"],
+                           cwd=str(subject_dir), capture_output=True, text=True, timeout=300)
+            if pristine.returncode != 0:
+                raise RuntimeError(
+                    "canary failed on pristine code -- the probe is wrong, not the subject: "
+                    f"{(pristine.stdout or '')[-400:]}")
+            after = engine.measure()
+        finally:
+            canary.unlink(missing_ok=True)
+        after_killed = int(after.counts.get("killed", 0))
         return CanaryVerdict(
             kills_before=before_killed,
-            kills_after=before_killed,
-            mutants=before.all_mutants,
-            passed=True,
-            waived=True,
+            kills_after=after_killed,
+            mutants=after.all_mutants,
+            passed=after_killed > before_killed,
+            waived=False,
         )
-    names = _public_top_level_names(subject_dir / module)
-    tests_dir = subject_dir / "tests"
-    tests_dir.mkdir(exist_ok=True)
-    canary = tests_dir / "crucible_canary_test.py"
-    try:
-        canary.write_text(_CANARY.format(modname=modname, names=names, probes=_CANARY_PROBES))
-        pristine = run([sys.executable, "-m", "pytest", "-q", str(canary), "--ignore=mutants"],
-                       cwd=str(subject_dir), capture_output=True, text=True, timeout=300)
-        if pristine.returncode != 0:
-            raise RuntimeError(
-                "canary failed on pristine code -- the probe is wrong, not the subject: "
-                f"{(pristine.stdout or '')[-400:]}")
-        after = engine.measure()
     finally:
-        canary.unlink(missing_ok=True)
-    after_killed = int(after.counts.get("killed", 0))
-    return CanaryVerdict(
-        kills_before=before_killed,
-        kills_after=after_killed,
-        mutants=after.all_mutants,
-        passed=after_killed > before_killed,
-        waived=False,
-    )
+        shutil.rmtree(subject_dir / "mutants", ignore_errors=True)

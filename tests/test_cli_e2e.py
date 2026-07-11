@@ -129,7 +129,15 @@ def test_harden_completes_after_scope_commit_with_leftover_mutants_dir(tmp_path)
     is genuinely nothing to commit -- but the commit TRIGGER at env.py:118
     read raw `git status --porcelain -uall`, saw `?? mutants/`, staged
     nothing, and crashed on `git commit` ("nothing to commit"). The whole
-    run must complete instead."""
+    run must complete instead.
+
+    Finding E upgrade: the residue is now REALISTIC -- mutants/ carrying a
+    copy of tests/test_calc.py (what mutmut's sandbox actually contains),
+    which a synthetic junk.json could never reproduce: without run_tests's
+    --ignore=mutants, preflight's root pytest run collects BOTH copies of
+    test_calc.py, dies on the import-file-mismatch/duplicate-module
+    collection error, and falsely reports 'subject suite is red on pristine
+    code'. Covers the manual-mutmut-run case leg 2's own cleanup cannot."""
     subject = tmp_path / "subject"
     shutil.copytree(Path(__file__).parent / "fixtures" / "subject", subject)
     for cmd in (["git", "init", "-q"], ["git", "add", "-A"],
@@ -148,14 +156,54 @@ def test_harden_completes_after_scope_commit_with_leftover_mutants_dir(tmp_path)
          "crucible: scope config for subject_pkg/calc.py"],
         cwd=subject, check=True,
     )
-    # what the canary probe (real mutmut) leaves behind, untracked
-    (subject / "mutants").mkdir()
+    # what a mutmut run actually leaves behind, untracked: the sandbox copy of
+    # the test suite (plus bookkeeping), whose duplicate test module names are
+    # what break an unshielded root pytest run
+    (subject / "mutants" / "tests").mkdir(parents=True)
+    shutil.copy(subject / "tests" / "test_calc.py", subject / "mutants" / "tests" / "test_calc.py")
     (subject / "mutants" / "junk.json").write_text("{}")
 
     replies = tmp_path / "replies.json"
     replies.write_text(json.dumps([WEAK_TESTS, GOOD_TESTS]))
 
     from crucible.cli import main
+    rc = main(["harden", str(subject), "--module", "subject_pkg/calc.py",
+               "--tester", "fake", "--critic", "fake", "--rounds", "1",
+               "--fake-replies", str(replies), "--runs-dir", str(tmp_path / "runs")])
+    assert rc == 0
+
+
+@pytest.mark.slow
+def test_real_scope_cli_then_skill_commit_then_harden_completes(tmp_path):
+    """Finding E, the test the reviewer demanded: the REAL end-to-end operator
+    flow with no synthetic residue at all. Run the actual `crucible scope`
+    CLI (its canary probe runs real mutmut, leaving whatever it really
+    leaves), commit the scope config exactly as harden-tests SKILL.md step 4
+    prescribes, then run `crucible harden --tester fake`. The whole flow must
+    complete: scope rc 0, harden rc 0."""
+    subject = tmp_path / "subject"
+    shutil.copytree(Path(__file__).parent / "fixtures" / "subject", subject)
+    for cmd in (["git", "init", "-q"], ["git", "add", "-A"],
+                ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "seed"]):
+        subprocess.run(cmd, cwd=subject, check=True)
+    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-e", str(subject)], check=True)
+
+    from crucible.cli import main
+    rc = main(["scope", str(subject), "--module", "subject_pkg/calc.py"])
+    assert rc == 0
+
+    # skill step 4, verbatim shape (no conftest.py here: non-src layout)
+    subprocess.run(["git", "add", "pyproject.toml"], cwd=subject, check=True)
+    if (subject / "conftest.py").is_file():
+        subprocess.run(["git", "add", "conftest.py"], cwd=subject, check=True)
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm",
+         "crucible: scope config for subject_pkg/calc.py"],
+        cwd=subject, check=True,
+    )
+
+    replies = tmp_path / "replies.json"
+    replies.write_text(json.dumps([WEAK_TESTS, GOOD_TESTS]))
     rc = main(["harden", str(subject), "--module", "subject_pkg/calc.py",
                "--tester", "fake", "--critic", "fake", "--rounds", "1",
                "--fake-replies", str(replies), "--runs-dir", str(tmp_path / "runs")])
