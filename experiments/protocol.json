@@ -1,5 +1,5 @@
 {
-  "protocol_version": 9,
+  "protocol_version": 10,
   "tester": {
     "provider": "anthropic",
     "model": "claude-sonnet-5"
@@ -35,7 +35,7 @@
         "data"
       ],
       "extra_files": {
-        "conftest.py": "import sys, pathlib\nsys.path.insert(0, str(pathlib.Path(__file__).parent / \"src\"))\n"
+        "conftest.py": "import sys, pathlib\nsys.path.insert(0, str(pathlib.Path(__file__).parent / \"src\"))\n\n# protocol v10: train.py hardcodes n_jobs=-1 (RandomForestClassifier,\n# XGBClassifier, cross_val_score); joblib's default loky process pool, forked INSIDE mutmut's\n# own forked worker, deadlocks (observed twice, 2026-07-10/11). Threading\n# backend never forks, so the deadlock class cannot occur; the mutation-kill\n# oracle is a deterministic pass/fail per mutant, unaffected by backend.\nimport joblib\njoblib.parallel_config(backend=\"threading\")\n"
       },
       "import_hint": "Import the module under test as `import train` / `from train import ...` (the src/ directory is on sys.path via conftest; do NOT import src.train).",
       "canary": "\"\"\"Free canary (crucible v7 amendment): asserts a stable fact about train.py's\nown logic (not a bare constant) so mutmut's trampoline records real coverage.\n\nImported the same way protocol.json's import_hint mandates for real generated\ntests (`from train import ...`, never `from src.train import ...`): the\nrepo-root conftest.py shim (protocol.json extra_files) puts src/ on\nsys.path, so this needs no manual per-file sys.path hack (dropped from the v6\ncanary). `from src.train import ...` still crashes mutmut's own trampoline\nthe instant a real function in train.py is called inside its mutants/\nsandbox (mutmut/__main__.py record_trampoline_hit hard-asserts against any\nmodule dotted-name starting with `src.`) -- see DEVIATIONS.md's\nattrition-risk-ml v5 reclassification and the v6 amendment's canary note.\"\"\"\nfrom train import _candidates\n\n\ndef test_canary_candidates_has_three_named_models():\n    assert set(_candidates().keys()) == {\"LogisticRegression\", \"RandomForest\", \"XGBoost\"}\n"

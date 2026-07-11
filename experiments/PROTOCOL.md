@@ -789,6 +789,49 @@ own hypothesis, not for it.
 
 v9 approved by Jeff Otterson 2026-07-10 (interactive gate).
 
+**Amendment (protocol_version 10 — attrition-risk-ml's committed conftest additionally forces
+joblib's threading backend inside the sandbox; one subject, one arm affected; approved after two
+documented deadlocks):**
+
+`attrition-risk-ml`'s pinned `src/train.py` hardcodes `n_jobs=-1` in three places
+(`RandomForestClassifier`, `XGBClassifier`, and the `cross_val_score` call), so any generated
+test that exercises the training path makes joblib spawn its default **loky process pool**. A
+process pool created inside `mutmut`'s own already-forked worker inherits copied lock state and
+can deadlock (classic nested-parallelism / fork-safety failure). This happened **twice
+consecutively** on the v9 `loop-same` reruns — first as an unbounded silent hang (killed by the
+controller after 68+ minutes of all-workers-0%-CPU, `loky` resource-tracker processes confirmed
+inside `mutmut`'s worker tree), then again with the new `MUTMUT_RUN_TIMEOUT_S` bound converting
+it into a loud `MeasureTimeout` after 3600s (`experiments/DEVIATIONS.md`, both rows). The failure
+is probabilistic — this same subject's `oneshot` and `loop-cross` counted cells, and both failed
+attempts' own earlier measures, completed the identical operation — but 2-for-2 on this cell says
+the dice are loaded against it.
+
+- **Fix.** `experiments/protocol.json`'s `attrition-risk-ml` `extra_files["conftest.py"]` (the
+  v7 shim mechanism, committed into the clone in the same commit as the mutmut scope) now also
+  runs `joblib.parallel_config(backend="threading")` at collection time. The threading backend
+  never forks, so the nested-fork deadlock class cannot occur. Verified against this repo's own
+  venv (joblib 1.5.3) that a bare `parallel_config(backend="threading")` call — no `with` block —
+  flips the process-global default and that `Parallel(n_jobs=2)` picks up `ThreadingBackend`.
+- **Why the measurement survives this.** The oracle is a deterministic per-mutant pass/fail
+  (pytest kills the mutant or it survives, §2); the parallel backend changes *where* sklearn's
+  training work runs (threads vs processes), not any numeric result or assertion outcome. The
+  flake double-run and per-test salvage gates (§6/§7) remain in force regardless.
+- **Disclosed asymmetry (limitation, on the record).** attrition-risk-ml's counted `oneshot` and
+  `loop-cross` cells ran WITHOUT this conftest line (they predate it and completed without
+  deadlock); its `loop-same` counted cell will be the only attrition cell measured with the
+  threading backend. Kill outcomes should be backend-invariant per the paragraph above, but the
+  instrument configuration is no longer byte-identical across this subject's three arms, and any
+  reader of RESULTS.md must be told so (RESULTS.md limitation entry required). Re-running all
+  three attrition arms under v10 for symmetry was considered and rejected: it would invalidate
+  two additional completed, unaffected cells (~$0.41 of counted data) to defend against a
+  mechanism that has no channel to affect a deterministic kill verdict.
+- **Scope.** No other subject carries a joblib dependency in its execution path; no other
+  subject's config is touched. Prompt hashes are unaffected (`extra_files` never enters a
+  prompt; `import_hint` is unchanged).
+
+v10 approved by Jeff Otterson 2026-07-11 (interactive gate; approval asked and given as
+"go with v10" after the two-deadlock evidence and time cost were presented).
+
 ## 4. Metrics
 
 - **Primary statistic — per-mutant paired kill outcomes, exact McNemar, two-sided.** Implemented
