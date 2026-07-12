@@ -1,12 +1,13 @@
 """crucible CLI. Subcommands: oneshot, harden, report, experiment, scope.
 
-Plain-ASCII output. Exit codes: 0 = clean/dry/cap/oneshot; 3 = aborted/rejected;
-4 = scope's canary probe refused -- either a RuntimeError from detect/apply/
-canary_probe (single refusal path, printed as "REFUSING: {exc}", no traceback
-leak) or a proven kills-did-not-increase verdict (unproven scope, refuse
-before spending any model tokens). A WAIVED verdict (the existing suite
-already kills under this scope -- 2026-07-11 owner-approved amendment) exits
-0, not 4.
+Plain-ASCII output. Exit codes: 0 = clean/dry/cap/oneshot; 2 = harden/oneshot
+refused before any work (e.g. the named module does not exist in the subject);
+3 = aborted/rejected; 4 = scope's canary probe refused -- a RuntimeError or
+FileNotFoundError from detect/apply/canary_probe (single refusal path, printed
+as "REFUSING: {exc}", no traceback leak) or a proven kills-did-not-increase
+verdict (unproven scope, refuse before spending any model tokens). A WAIVED
+verdict (the existing suite already kills under this scope -- 2026-07-11
+owner-approved amendment) exits 0, not 4.
 """
 from __future__ import annotations
 
@@ -41,7 +42,12 @@ def _cmd_run(args, mode):
     # writes the byte-identical [tool.mutmut] (+ conftest shim) that scope's
     # canary just validated -- never a bare source_paths that silently drops
     # also_copy/pytest_args/the src-shim (see env.py preflight's scope= handling).
-    plan = scope_mod.detect(subject, args.module)
+    try:
+        plan = scope_mod.detect(subject, args.module)
+    except FileNotFoundError as exc:
+        # clean one-line refusal naming the missing module; never a traceback
+        print(f"ERROR: {exc}")
+        return 2
     run_scope = {"also_copy": plan.also_copy, "pytest_args": plan.pytest_args or None}
     if plan.needs_src_shim:
         run_scope["extra_files"] = {"conftest.py": scope_mod.SRC_SHIM}
@@ -93,8 +99,12 @@ def _cmd_report(args) -> int:
     for r in runs:
         s = summarize(r)
         cpk = f"${s['cost_per_kill']:.4f}" if s["cost_per_kill"] is not None else "n/a"
+        # billing rides on every cost figure (spec §4: never silently mix
+        # metered API spend with Max-plan shadow prices -- a $ number without
+        # its billing basis is exactly that silent mix)
         print(f"{s['arm']:8s} verdict={s['verdict']:6s} baseline={s['baseline_survivors']:3d} "
-              f"killed={s['killed']:3d} cost=${s['cost_usd']:.4f} cost/kill={cpk}")
+              f"killed={s['killed']:3d} cost=${s['cost_usd']:.4f} cost/kill={cpk} "
+              f"billing={s['billing']}")
     if len(runs) == 2:
         both, a_only, b_only, neither = paired_kills(runs[0], runs[1])
         p = mcnemar_exact(a_only, b_only)
@@ -126,7 +136,16 @@ def main(argv=None) -> int:
     ep.add_argument("--subject", required=True)
     ep.add_argument("--module", required=True)
     ep.add_argument("--runs-dir", default="experiments/runs")
-    sp = sub.add_parser("scope")
+    sp = sub.add_parser(
+        "scope",
+        help="detect+write the mutmut scope for one module, then canary-prove it "
+             "($0, no model calls); refuses what it cannot validate",
+        description="Detect the subject's layout, write the [tool.mutmut] scope for "
+                    "one module, and prove it with a $0 canary probe before any model "
+                    "spend. Honest limitation (spec section 6): the heuristics target "
+                    "well-formed Python repos with pytest; a repo the gate cannot "
+                    "validate is refused, not guessed (exit 4 with the reason).",
+    )
     sp.add_argument("subject")
     sp.add_argument("--module", required=True)
     args = parser.parse_args(argv)
@@ -140,7 +159,6 @@ def main(argv=None) -> int:
         protocol = load_protocol(args.protocol)
         return run_arm(protocol, args.arm, args.subject, args.runs_dir, args.module)
     if args.cmd == "scope":
-        import crucible.scope as scope_mod
         subject = Path(args.subject).resolve()
         try:
             plan = scope_mod.detect(subject, args.module)
@@ -148,7 +166,9 @@ def main(argv=None) -> int:
             for note in plan.notes:
                 print(f"note: {note}")
             v = scope_mod.canary_probe(subject, args.module)
-        except RuntimeError as exc:
+        except (RuntimeError, FileNotFoundError) as exc:
+            # FileNotFoundError = detect's missing-module refusal; same single
+            # refusal path as RuntimeError, never a raw traceback
             print(f"REFUSING: {exc}")
             return 4
         print(f"scope written: also_copy={plan.also_copy} pytest_args={plan.pytest_args} "

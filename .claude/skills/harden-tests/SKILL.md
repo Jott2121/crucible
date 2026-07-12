@@ -40,6 +40,12 @@ receipts shadow-priced and flagged `billing: max-plan`.
    zero-kill baselines) or `canary: WAIVED (existing suite kills K of N
    mutants; collection proven)` (well-tested modules; the waiver is itself
    gated by a pytest-discovery config scan).
+   Honest limitation: the scope heuristics target well-formed Python repos
+   with pytest; a repo the gate cannot validate is refused, not guessed.
+   Disclosure: the strict branch's canary probe may CALL the target module's
+   public functions/classes with small dummy arguments on pristine code
+   (bounded, deterministic probes; on a pathological module that does I/O or
+   mutates state at call time, side effects are possible).
 4. Commit the scope config: `crucible scope` writes `pyproject.toml`'s
    `[tool.mutmut]` (and a `conftest.py` shim, for src-layout subjects)
    straight to the working tree, uncommitted. Commit it now, before running
@@ -59,10 +65,10 @@ receipts shadow-priced and flagged `billing: max-plan`.
    with a message naming kills and the receipt dir.
 7. Report, plain ASCII: verdict, kills/baseline survivors, rounds, dropped
    wrong-oracle tests, token totals, shadow cost with the `max-plan` flag
-   stated in words ("plan-covered, no metered spend"), receipt path -- the
-   billing flag itself lives in the run dir's `meta.json`
-   (`tester_billing`/`critic_billing`); `crucible report` does not print it.
-   Offer -- do not open -- a PR.
+   stated in words ("plan-covered, no metered spend"), receipt path.
+   `crucible report` prints `billing=` on every cost line (api / max-plan /
+   mixed:...); the underlying fields live in the run dir's `meta.json`
+   (`tester_billing`/`critic_billing`). Offer -- do not open -- a PR.
 
 ## Refusals
 

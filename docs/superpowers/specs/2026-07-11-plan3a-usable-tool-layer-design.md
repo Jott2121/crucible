@@ -118,18 +118,31 @@ with the experiment) into a first-class module:
 
 ## 7. `harden-tests` skill (.claude/skills/harden-tests/SKILL.md, in-repo)
 
-Thin by design — mechanics live in the tested CLI; the skill is instructions, not logic:
+Thin by design — mechanics live in the tested CLI; the skill is instructions, not logic.
 
-1. Preflight: repo is git-clean enough (crucible's own preflight enforces the rest), module
-   exists, `.venv`/pytest present; refuse politely otherwise.
-2. `crucible scope --module <M>` — if the canary fails, stop and report why.
-3. Create/switch to a local branch (`crucible/harden-<module>-<date>`), never main.
-4. `crucible harden --module <M> --provider claude-cli` (round cap and dry rules = engine
-   defaults).
-5. Present the receipt summary: kills, survivors remaining, dropped wrong-oracle tests, token
-   counts, shadow cost + `max-plan` flag. Offer — never auto-do — a PR.
-6. Guardrails inherited verbatim from repo-sentinel doctrine: local branch only, never main,
-   PR strictly opt-in, never on a repo Jeff doesn't own without explicit say-so.
+*Amended 2026-07-11 (fix-wave necessity): the original 6-step list omitted a mandatory
+commit between scope and harden — `crucible scope` writes the scope config (pyproject.toml,
+and conftest.py on src-layouts) to the working tree UNCOMMITTED, while harden's preflight
+hard-refuses a dirty tree (and receipts bind to a commit sha). The list below is the 7-step
+reality the shipped SKILL.md implements; the branch step also moved ahead of scope so the
+scope-config commit lands on the local branch, never the default branch.*
+
+1. Preflight: repo is committed-clean with a green pristine suite (crucible's own preflight
+   enforces this; hard requirement, not a nicety), module exists, `.venv`/pytest present;
+   refuse politely otherwise.
+2. Create/switch to a local branch (`crucible/harden-<module>-<date>`), never main.
+3. `crucible scope --module <M>` — if the canary fails (exit 4), stop and report why.
+4. Commit the scope config to the local branch (`git add pyproject.toml; [ -f conftest.py ]
+   && git add conftest.py; git commit -m "crucible: scope config for <M>"`).
+5. `crucible harden --module <M> --tester claude-cli --critic claude-cli` (round cap and dry
+   rules = engine defaults).
+6. Commit the accepted generated tests to the local branch, naming kills + receipt dir.
+7. Present the receipt summary: kills, survivors remaining, dropped wrong-oracle tests, token
+   counts, shadow cost + `max-plan` billing flag (printed by `crucible report`, stored in the
+   run dir's meta.json). Offer — never auto-do — a PR.
+
+Guardrails inherited verbatim from repo-sentinel doctrine: local branch only, never main,
+PR strictly opt-in, never on a repo Jeff doesn't own without explicit say-so.
 
 Ships in-repo so the public flip inherits it; Jeff's personal `~/.claude/skills` gets a
 symlink so it's invocable everywhere now.

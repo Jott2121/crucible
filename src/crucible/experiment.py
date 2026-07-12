@@ -73,7 +73,9 @@ def assert_protocol_committed(repo_root, protocol_path, run=subprocess.run) -> N
 
 
 def run_arm(protocol: dict, arm_name: str, subject_dir, runs_root, module_path: str) -> int:
-    """Run one cell. Imports stay local so unit tests of the gate need no providers."""
+    """Run one cell. Heavy runtime imports (env/loop/receipts) stay local so unit
+    tests of the pre-registration gate never load them; get_provider itself has
+    been module-level since Task 3 (the billing guardrail below needs it)."""
     from datetime import datetime, timezone
 
     from crucible.env import SubjectEnv
