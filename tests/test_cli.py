@@ -183,6 +183,8 @@ def test_cmd_run_derives_scope_from_detect_and_passes_it_to_subjectenv(monkeypat
         "also_copy": ["pkga", "pkgb"],
         "pytest_args": ["--ignore=tests/test_hazard.py"],
         "extra_files": {"conftest.py": scope_mod.SRC_SHIM},
+        "import_hint": ("Import the module under test as `pkga.mod` -- the "
+                        "src/ prefix is not importable in the test environment."),
     }
 
 
@@ -241,3 +243,23 @@ def test_cli_scope_subcommand_runtimeerror_exits_4_no_traceback(monkeypatch, tmp
     out = capsys.readouterr().out
     assert rc == 4
     assert "REFUSING: canary failed on pristine" in out
+
+
+def test_derive_run_scope_threads_import_hint_on_src_layout(tmp_path):
+    from crucible.cli import _derive_run_scope
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "mod.py").write_text("X = 1\n")
+    scope = _derive_run_scope(tmp_path, "src/mod.py")
+    assert scope["import_hint"] == (
+        "Import the module under test as `mod` -- the src/ prefix is not "
+        "importable in the test environment.")
+    assert "conftest.py" in scope["extra_files"]
+
+
+def test_derive_run_scope_no_hint_on_package_dir(tmp_path):
+    from crucible.cli import _derive_run_scope
+    (tmp_path / "mypkg").mkdir()
+    (tmp_path / "mypkg" / "mod.py").write_text("X = 1\n")
+    scope = _derive_run_scope(tmp_path, "mypkg/mod.py")
+    assert "import_hint" not in scope
+    assert scope["also_copy"] == ["mypkg"]

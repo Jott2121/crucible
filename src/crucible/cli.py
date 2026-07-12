@@ -33,6 +33,29 @@ def _provider(name, fake_replies):
     return get_provider(name)
 
 
+def _derive_run_scope(subject: Path, module: str) -> dict:
+    """Derive the run scope the SAME way `crucible scope` does, so harden's
+    preflight writes the byte-identical [tool.mutmut] (+ conftest shim) that
+    scope's canary validated -- never a bare source_paths that silently drops
+    also_copy/pytest_args/the src-shim (see env.py preflight's scope=
+    handling). On src-layouts, also thread the bare-module import_hint into
+    the tester/critic prompts (env.py reads scope["import_hint"]) --
+    generated tests import `mod`, never `src.mod` (the sandbox path the shim
+    creates; closes the ledger's src-layout inefficiency residual)."""
+    plan = scope_mod.detect(subject, module)
+    run_scope: dict = {"also_copy": plan.also_copy,
+                       "pytest_args": plan.pytest_args or None}
+    if plan.needs_src_shim:
+        run_scope["extra_files"] = {"conftest.py": scope_mod.SRC_SHIM}
+        modname = module[:-3].replace("/", ".")
+        if modname.startswith("src."):
+            modname = modname[len("src."):]
+        run_scope["import_hint"] = (
+            f"Import the module under test as `{modname}` -- the src/ prefix "
+            "is not importable in the test environment.")
+    return run_scope
+
+
 def _cmd_run(args, mode):
     subject = Path(args.subject).resolve()
 
@@ -51,19 +74,12 @@ def _cmd_run(args, mode):
     tester = _provider(args.tester, args.fake_replies)
     critic = tester if args.critic == args.tester else _provider(args.critic, args.fake_replies)
 
-    # Derive scope the SAME way `crucible scope` does, so harden's preflight
-    # writes the byte-identical [tool.mutmut] (+ conftest shim) that scope's
-    # canary just validated -- never a bare source_paths that silently drops
-    # also_copy/pytest_args/the src-shim (see env.py preflight's scope= handling).
     try:
-        plan = scope_mod.detect(subject, args.module)
+        run_scope = _derive_run_scope(subject, args.module)
     except FileNotFoundError as exc:
         # clean one-line refusal naming the missing module; never a traceback
         print(f"ERROR: {exc}")
         return 2
-    run_scope = {"also_copy": plan.also_copy, "pytest_args": plan.pytest_args or None}
-    if plan.needs_src_shim:
-        run_scope["extra_files"] = {"conftest.py": scope_mod.SRC_SHIM}
 
     env = SubjectEnv(subject_dir=subject, tester_provider=tester, tester_model=args.tester_model,
                      critic_provider=critic, critic_model=args.critic_model,
