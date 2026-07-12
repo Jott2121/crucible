@@ -42,7 +42,16 @@ import subprocess
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-EXEMPT = ("experiments/", "docs/RELATED-WORK.md")
+# Exempt = files whose CONTENT is the retraction/definition itself (amended
+# 2026-07-12: the original two-path tuple was underinclusive -- this test
+# flagged the plan/spec docs that define it, and would flag its own STALE
+# list once tracked):
+#   experiments/            -- the frozen autopsy discusses the retracted number
+#   docs/RELATED-WORK.md    -- prior-art discussion references it
+#   docs/superpowers/       -- process specs/plans defining this sweep quote its targets
+#   this test file          -- the STALE list IS the tokens
+EXEMPT = ("experiments/", "docs/RELATED-WORK.md", "docs/superpowers/",
+          "tests/test_no_stale_claims.py")
 STALE = ["9.5×10⁻⁶⁶", "3.4×10⁻¹⁸",
          "supported with a load-bearing caveat"]
 
@@ -51,7 +60,7 @@ def _tracked_files():
     out = subprocess.run(["git", "ls-files"], cwd=REPO, capture_output=True,
                          text=True, check=True).stdout
     return [f for f in out.splitlines()
-            if not f.startswith(EXEMPT[0]) and f != EXEMPT[1]]
+            if not any(f == e or f.startswith(e) for e in EXEMPT)]
 
 
 def test_no_retracted_numbers_outside_exempt_paths():

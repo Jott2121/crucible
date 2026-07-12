@@ -57,9 +57,16 @@ verified, never edited); new tool features.
   rejecting same-lineage critic rounds — an instrument artifact, caught and repaired, and the
   reason fail-closed instrumentation is the tool's design center.
 - Replace the GitHub description (see §7 for the drafted copy) and set topics.
-- Mechanical sweep: grep the tracked tree (outside `experiments/` and `docs/RELATED-WORK.md`,
-  where the autopsy and prior-art discussion legitimately reference them) for the stale tokens
-  (`9.5×10⁻⁶⁶`, `3.4×10⁻¹⁸`, "supported with a load-bearing caveat") → zero hits after the pass.
+- Mechanical sweep: grep the tracked tree for the stale tokens (`9.5×10⁻⁶⁶`, `3.4×10⁻¹⁸`,
+  "supported with a load-bearing caveat") → zero hits after the pass, exempting the paths whose
+  CONTENT is the retraction itself: `experiments/` (the autopsy), `docs/RELATED-WORK.md`
+  (prior-art discussion), `docs/superpowers/` (process specs/plans that define this very sweep
+  and must quote its targets), and the sweep test file (its STALE list is the tokens).
+  *(Amended 2026-07-12 at execution: the original two-path exemption was underinclusive — the
+  invariant test correctly flagged the plan/spec documents that define it, and would have
+  flagged itself once tracked. The rule is unchanged in spirit: outsider-facing surfaces carry
+  no retracted claim; files that quote the tokens AS retraction/definition context are exempt,
+  each exemption named in the test's docstring.)*
 - The old README's "Status: private" line and internal spec pointers go; docs links that remain
   must resolve for an outsider.
 
