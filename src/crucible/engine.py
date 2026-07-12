@@ -215,10 +215,15 @@ class MutmutEngine:
         # error out on pytest's "import file mismatch" -- a collision this
         # confirmatory check causes by running after mutation generation, not
         # a real failure of the subject's own suite.
-        pristine = self.run(
-            [sys.executable, "-m", "pytest", "-q", "--ignore=mutants"],
-            cwd=str(self.cwd), capture_output=True, text=True,
-        )
+        try:
+            pristine = self.run(
+                [sys.executable, "-m", "pytest", "-q", "--ignore=mutants"],
+                cwd=str(self.cwd), capture_output=True, text=True, timeout=300,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(
+                "pristine suite timed out (300s) during zero-baseline confirmation"
+            ) from exc
         if pristine.returncode not in (0, 5):
             return None
         ids = [m.id for m in mutants]
