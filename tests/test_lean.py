@@ -23,6 +23,14 @@ def test_tools_empty_string_is_emitted_not_skipped():
     assert "--tools" not in argv2
 
 
+def test_setting_sources_empty_string_is_emitted_not_skipped():
+    # "" is a real value (load no setting sources); None means "don't pass the flag"
+    argv, _ = LeanProfile(setting_sources="").build()
+    assert argv == ["--setting-sources", ""]
+    argv2, _ = LeanProfile(setting_sources=None).build()
+    assert "--setting-sources" not in argv2
+
+
 def test_cwd_passthrough():
     _, cwd = LeanProfile(cwd=Path("/tmp/x")).build()
     assert cwd == "/tmp/x"

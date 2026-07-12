@@ -25,6 +25,7 @@ def test_cli_report_line_includes_billing(tmp_path, capsys):
     out = capsys.readouterr().out
     assert rc == 0
     assert "billing=max-plan" in out
+    assert "lean=ambient" in out
 
 
 def test_cli_scope_missing_module_refuses_exit_4_no_traceback(tmp_path, capsys):

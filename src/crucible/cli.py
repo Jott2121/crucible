@@ -122,7 +122,7 @@ def _cmd_report(args) -> int:
         # its billing basis is exactly that silent mix)
         print(f"{s['arm']:8s} verdict={s['verdict']:6s} baseline={s['baseline_survivors']:3d} "
               f"killed={s['killed']:3d} cost=${s['cost_usd']:.4f} cost/kill={cpk} "
-              f"billing={s['billing']}")
+              f"billing={s['billing']} lean={s['lean_isolation']}")
     if len(runs) == 2:
         both, a_only, b_only, neither = paired_kills(runs[0], runs[1])
         p = mcnemar_exact(a_only, b_only)
