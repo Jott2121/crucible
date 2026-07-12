@@ -1,6 +1,6 @@
 ---
 name: harden-tests
-description: Use when Jeff asks to "harden tests" for a module/repo -- runs crucible's adversarial test-hardening loop (Tester -> mutation testing -> Critic on named survivors) on the Max plan at $0 metered, onto a LOCAL branch, with mutation-kill receipts. Triggers: "harden tests", "harden the tests for X", "run crucible on X", "mutation-harden".
+description: Use when the operator asks to "harden tests" for a module/repo -- runs crucible's adversarial test-hardening loop (Tester -> mutation testing -> Critic on named survivors) on the Max plan at $0 metered, onto a LOCAL branch, with mutation-kill receipts. Triggers: "harden tests", "harden the tests for X", "run crucible on X", "mutation-harden".
 ---
 
 # harden-tests

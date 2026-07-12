@@ -30,8 +30,8 @@ than guess). No AI is involved yet: the survivor count is plain mutation testing
         --tester claude-cli --critic claude-cli --runs-dir ~/.crucible-runs/yourrepo
 
 With `claude-cli`, model calls run through Claude Code headless on your Claude subscription —
-**$0 metered spend**, and every receipt carries `billing: max-plan` so plan-covered shadow
-dollars are never mistaken for an invoice. No subscription? `--tester anthropic` uses the
+**$0 metered spend**, and every run's `meta.json` records `billing: max-plan` so plan-covered
+shadow dollars are never mistaken for an invoice. No subscription? `--tester anthropic` uses the
 metered API via `ANTHROPIC_API_KEY`.
 
 Lean invocation is the default: the subprocess runs with `--tools ""`, collapsing Claude
@@ -49,8 +49,10 @@ Every run writes a receipt directory:
     receipt.jsonl     # one line per round: tokens in/out, cost, kills, survivors, prompt hash
     result.json       # verdict + totals
 
-Generated tests land on a **local branch only** — never main, and opening a PR is strictly
-opt-in. If the canary can't prove your scope, crucible refuses instead of spending tokens.
+Generated tests are written into the working tree of wherever you run it — so run it on a
+throwaway branch; the bundled `harden-tests` skill (`.claude/skills/harden-tests/`) enforces
+the full ritual: **local branch only, never main, PR strictly opt-in**. If the canary can't
+prove your scope, crucible refuses instead of spending tokens.
 
 ## Results
 
