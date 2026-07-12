@@ -13,6 +13,7 @@ its request body carries no max_tokens) are never truncation-checked.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import urllib.error
 import urllib.request
@@ -94,6 +95,12 @@ class ClaudeCLIProvider(Provider):
     silently. User prompt goes via stdin (argv has length limits; module
     sources do not).
 
+    LEAN BY DEFAULT (Task 3): every call runs under DEFAULT_LEAN (`--tools ""`
+    etc, ~75x token win, see crucible.lean) unless a lean_profile is passed
+    explicitly or CRUCIBLE_LEAN=0 is set in the environment, which falls back
+    to AMBIENT (the operator's full interactive tool surface) as an escape
+    hatch for calls that genuinely need it.
+
     REALITY vs the canned envelope: a live probe (2026-07-11, `echo ... |
     claude -p --output-format json --model claude-sonnet-5 --system-prompt
     "..."`) showed `--output-format json` prints a JSON ARRAY of stream
@@ -120,8 +127,13 @@ class ClaudeCLIProvider(Provider):
     default_model = "claude-sonnet-5"
     request_timeout = 1200
 
-    def __init__(self, run=subprocess.run):
+    def __init__(self, run=subprocess.run, lean_profile=None):
         self._run = run
+        if lean_profile is None:
+            from crucible.lean import AMBIENT, DEFAULT_LEAN
+            lean_profile = AMBIENT if os.environ.get("CRUCIBLE_LEAN") == "0" else DEFAULT_LEAN
+        self._profile = lean_profile
+        self.isolation_name = lean_profile.name
 
     @staticmethod
     def _extract_result(stdout: str) -> dict:
@@ -140,11 +152,12 @@ class ClaudeCLIProvider(Provider):
 
     def complete_with_usage(self, system, user, model=None):
         model = model or self.default_model
+        argv, cwd = self._profile.build()
         cmd = ["claude", "-p", "--output-format", "json",
-               "--model", model, "--system-prompt", system]
+               "--model", model, "--system-prompt", system] + argv
         try:
             proc = self._run(cmd, input=user, capture_output=True, text=True,
-                             timeout=self.request_timeout)
+                             timeout=self.request_timeout, cwd=cwd)
         except FileNotFoundError as exc:
             raise RuntimeError(
                 "claude CLI not found on PATH; install Claude Code or use an API provider"

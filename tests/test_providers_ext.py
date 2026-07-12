@@ -119,7 +119,7 @@ def test_claude_cli_provider_parses_text_and_usage(monkeypatch):
     from crucible.providers_ext import ClaudeCLIProvider
     calls = {}
 
-    def fake_run(cmd, input=None, capture_output=True, text=True, timeout=None):
+    def fake_run(cmd, input=None, capture_output=True, text=True, timeout=None, cwd=None):
         calls["cmd"], calls["input"], calls["timeout"] = cmd, input, timeout
         return _FakeProc(stdout=_cli_envelope("hello", 100, 42, cache_creation=7, cache_read=51))
 
@@ -213,3 +213,42 @@ def test_billing_attrs():
 def test_registry_has_claude_cli():
     from crucible.providers_ext import ClaudeCLIProvider
     assert get_provider("claude-cli").__class__ is ClaudeCLIProvider
+
+
+def test_claude_cli_applies_lean_argv_and_cwd():
+    from crucible.lean import LeanProfile
+    from crucible.providers_ext import ClaudeCLIProvider
+    calls = {}
+
+    def fake_run(cmd, input=None, capture_output=True, text=True, timeout=None, cwd=None):
+        calls["cmd"], calls["cwd"] = cmd, cwd
+        return _FakeProc(stdout=_cli_envelope("hi", 10, 2))
+
+    prof = LeanProfile(tools="", strict_mcp=True, name="tools-off")
+    p = ClaudeCLIProvider(run=fake_run, lean_profile=prof)
+    p.complete_with_usage("SYS", "USER", model="claude-sonnet-5")
+    assert "--tools" in calls["cmd"] and "--strict-mcp-config" in calls["cmd"]
+    assert calls["cmd"][calls["cmd"].index("--tools") + 1] == ""   # disable all tools
+    assert calls["cwd"] is None
+    assert p.isolation_name == "tools-off"
+
+
+def test_claude_cli_defaults_to_lean_and_escape_hatch(monkeypatch):
+    from crucible.providers_ext import ClaudeCLIProvider
+    seen = {}
+
+    def fake_run(cmd, input=None, capture_output=True, text=True, timeout=None, cwd=None):
+        seen["cmd"] = cmd
+        return _FakeProc(stdout=_cli_envelope("hi", 10, 2))
+
+    # default (no profile, no env) -> lean
+    monkeypatch.delenv("CRUCIBLE_LEAN", raising=False)
+    p = ClaudeCLIProvider(run=fake_run)
+    p.complete_with_usage("S", "U")
+    assert "--tools" in seen["cmd"] and p.isolation_name == "tools-off"
+
+    # escape hatch -> ambient
+    monkeypatch.setenv("CRUCIBLE_LEAN", "0")
+    p2 = ClaudeCLIProvider(run=fake_run)
+    p2.complete_with_usage("S", "U")
+    assert "--tools" not in seen["cmd"] and p2.isolation_name == "ambient"
