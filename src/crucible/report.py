@@ -49,4 +49,7 @@ def summarize(run: dict) -> dict:
         "killed": killed,
         "cost_usd": cost,
         "cost_per_kill": (cost / killed) if killed else None,
+        "billing": (lambda t, c: t if t == c else f"mixed:{t}+{c}")(
+            run["meta"].get("tester_billing", "api"),
+            run["meta"].get("critic_billing", "api")),
     }

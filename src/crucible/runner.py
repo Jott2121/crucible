@@ -19,7 +19,15 @@ def run_tests(cwd, test_paths=None, timeout=300, run=subprocess.run) -> TestRunR
     # default in this repo's config, but not necessarily under every addopts/ini a
     # third-party subject might carry; guardrails.salvage_new_tests parses those lines
     # to identify which specific test(s) to drop, so they must not be suppressible.
-    cmd = [sys.executable, "-m", "pytest", "-q", "-rf", *(test_paths or [])]
+    #
+    # --ignore=mutants (Finding E): mutmut's sandbox dir carries copies of the
+    # subject's own tests/test_*.py; a root pytest run that collects both copies
+    # dies on import-file-mismatch and falsely reports the pristine suite red.
+    # Same dodge the canary's own pristine check (scope.py) and the engine's
+    # _zero_test_baseline probe (engine.py) already use -- this is the third and
+    # last pytest invocation that needed it. Harmless for explicit test_paths
+    # callers (validate/salvage): their paths live under tests/, never mutants/.
+    cmd = [sys.executable, "-m", "pytest", "-q", "-rf", "--ignore=mutants", *(test_paths or [])]
     try:
         proc = run(cmd, cwd=str(cwd), capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired:

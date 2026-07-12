@@ -66,13 +66,30 @@ class SubjectEnv:
         untracked-new; without -uall the collapsed line never matches the
         add-only allowlist (which lists file paths), and a legitimately
         written file gets rejected as tampering. The two-char status codes and
-        everything else about the output are unchanged."""
+        everything else about the output are unchanged.
+
+        Untracked __pycache__/ entries at ANY depth are also exempt (Finding
+        E): every pytest run -- including a FAILED preflight's own pristine
+        check -- leaves bytecode caches behind, and on a subject whose
+        .gitignore does not cover them a retry after a failed preflight
+        refused with a misleading "dirty clone" message. Constraint that
+        keeps this safe: only entries with a __pycache__ path COMPONENT are
+        exempt (regenerated-from-source interpreter byproducts, never a model
+        escape route the add-only guardrails need to see); a bare *.pyc
+        outside __pycache__ is deliberately NOT exempt -- Python imports
+        sourceless .pyc modules, so exempting those would hand generated test
+        code (which executes during validate) a smuggling path. mutants/-
+        prefixed pycs are already covered by the mutants/ prefix rule."""
+        def _exempt(path: str) -> bool:
+            p = path.strip().rstrip("/")
+            return (p in {a.rstrip("/") for a in ENGINE_ARTIFACTS}
+                    or p.startswith("mutants/")
+                    or "__pycache__" in p.split("/"))
+
         status = self._git("status", "--porcelain", "-uall")
         return "\n".join(
             line for line in status.splitlines()
-            if not (line[:2] == "??" and line[3:].strip().rstrip("/") in
-                    {a.rstrip("/") for a in ENGINE_ARTIFACTS}
-                    or line[:2] == "??" and line[3:].strip().startswith("mutants/"))
+            if not (line[:2] == "??" and _exempt(line[3:]))
         )
 
     def reset_clone(self) -> None:
@@ -115,7 +132,13 @@ class SubjectEnv:
             else:
                 write_scope(self.subject_dir / "pyproject.toml", [module_path],
                            create_if_missing=True)
-            if self._git("status", "--porcelain", "-uall").strip():
+            # _filtered_status, NOT raw status (Finding D, Opus re-review):
+            # a leftover untracked mutants/ dir (the canary probe's residue)
+            # made raw status non-empty while the scope write was a
+            # byte-identical no-op, so `git add pyproject.toml` staged
+            # nothing and the commit crashed "nothing to commit". Filtering
+            # keeps this trigger consistent with the dirty-check above.
+            if self._filtered_status().strip():
                 self._git("add", "pyproject.toml", *extra_files.keys())
                 commit_msg = f"crucible: scope mutmut to {module_path}"
                 if extra_files:

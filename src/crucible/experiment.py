@@ -11,6 +11,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from crucible.providers_ext import get_provider
+
 VALID_MODES = ("oneshot", "harden")
 
 
@@ -71,18 +73,31 @@ def assert_protocol_committed(repo_root, protocol_path, run=subprocess.run) -> N
 
 
 def run_arm(protocol: dict, arm_name: str, subject_dir, runs_root, module_path: str) -> int:
-    """Run one cell. Imports stay local so unit tests of the gate need no providers."""
+    """Run one cell. Heavy runtime imports (env/loop/receipts) stay local so unit
+    tests of the pre-registration gate never load them; get_provider itself has
+    been module-level since Task 3 (the billing guardrail below needs it)."""
     from datetime import datetime, timezone
 
     from crucible.env import SubjectEnv
     from crucible.loop import LoopConfig, harden, oneshot
-    from crucible.providers_ext import get_provider
     from crucible.receipts import ReceiptWriter
 
     arm = protocol["arms"][arm_name]
     tester = get_provider(protocol["tester"]["provider"])
     critic_cfg = arm.get("critic", protocol["tester"])
     critic = tester if critic_cfg == protocol["tester"] else get_provider(critic_cfg["provider"])
+
+    # Pre-registered runs demand metered, receipt-exact API spend: a Max-plan
+    # (or any non-"api"-billed) provider must be refused before any run dir
+    # exists or a model is called (spec 2026-07-11 §5).
+    for role, prov in (("tester", tester), ("critic", critic)):
+        billing = getattr(prov, "billing", "api")
+        if billing != "api":
+            raise ValueError(
+                f"experiment refuses {role} provider {getattr(prov, 'name', prov)!r}: "
+                f"billing={billing!r} -- pre-registered runs require metered API spend "
+                "(spec docs/superpowers/specs/2026-07-11-plan3a-usable-tool-layer-design.md §5)"
+            )
 
     subject_name = Path(subject_dir).name
     subjects = protocol.get("subjects", {})
@@ -123,6 +138,8 @@ def run_arm(protocol: dict, arm_name: str, subject_dir, runs_root, module_path: 
         "tester_provider": protocol["tester"]["provider"],
         "tester_model": protocol["tester"]["model"],
         "critic_provider": critic_cfg["provider"], "critic_model": critic_cfg["model"],
+        "tester_billing": getattr(tester, "billing", "api"),
+        "critic_billing": getattr(critic, "billing", "api"),
         "max_rounds": cfg.max_rounds, "dry_rounds": cfg.dry_rounds, "started_at": stamp,
     })
     # rejected-artifact preservation (v3): a rejected or salvaged-away test file lands

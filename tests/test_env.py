@@ -195,6 +195,58 @@ def subprocess_log_subject(cwd):
     ).stdout.strip()
 
 
+def test_preflight_skips_scope_commit_when_only_engine_artifacts_are_untracked(tmp_path):
+    # Finding D (Opus re-review of b0402fc): the scope-commit trigger at
+    # env.py:118 used RAW `git status --porcelain -uall`, not
+    # _filtered_status(). Sequence: `crucible scope`'s canary probe leaves an
+    # untracked mutants/ dir -> operator commits the scope config per the
+    # skill -> harden's preflight: the dirty-check passes (filtered ignores
+    # mutants/), the scope write is a byte-identical no-op, but the RAW
+    # status is non-empty -> `git add pyproject.toml` stages nothing ->
+    # `git commit` fails "nothing to commit" -> uncaught RuntimeError.
+    # The trigger must use _filtered_status(), consistent with the
+    # dirty-check above it: no commit attempted, preflight succeeds, HEAD
+    # unchanged.
+    env = _env(tmp_path, [])
+    first_sha = env.preflight(module_path="subject_pkg/calc.py")  # commits the scope
+    # leftover engine artifact (exactly what the canary probe leaves behind)
+    (env.subject_dir / "mutants").mkdir()
+    (env.subject_dir / "mutants" / "junk.json").write_text("{}")
+    second_sha = env.preflight(module_path="subject_pkg/calc.py")  # must not raise
+    assert second_sha == first_sha  # nothing to commit; no commit attempted
+
+
+def test_filtered_status_exempts_untracked_pycache_at_any_depth(tmp_path):
+    # Finding E leg 3: a failed (or any) preflight pytest run leaves
+    # __pycache__/ dirs behind; on a subject whose own .gitignore does not
+    # cover them they show as untracked, and a RETRY after a failed preflight
+    # refused with a misleading "dirty clone" message. __pycache__ entries are
+    # a pytest/import byproduct regenerated from source -- never a model
+    # escape route the add-only guardrails need to see -- so _filtered_status
+    # exempts them at any depth. Everything else untracked must still count.
+    import subprocess
+
+    env = _env(tmp_path, [])
+    # the fixture's own .gitignore covers __pycache__; the filter must not
+    # depend on the subject being polite about that
+    (env.subject_dir / ".gitignore").unlink()
+    subprocess.run(["git", "add", "-A"], cwd=env.subject_dir, check=True)
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "no gitignore"],
+        cwd=env.subject_dir, check=True,
+    )
+    for d in ("subject_pkg/__pycache__", "tests/__pycache__"):
+        (env.subject_dir / d).mkdir(parents=True)
+        (env.subject_dir / d / "x.cpython-314.pyc").write_bytes(b"\x00")
+    assert env._filtered_status().strip() == ""
+    # a retry-shaped preflight over this residue must succeed, not refuse dirty
+    sha = env.preflight(module_path="subject_pkg/calc.py")
+    assert len(sha) == 40
+    # but a plain untracked non-pycache file is still dirt
+    (env.subject_dir / "stray.txt").write_text("uncommitted")
+    assert "stray.txt" in env._filtered_status()
+
+
 def test_preflight_skips_rewriting_extra_file_when_content_is_unchanged(tmp_path):
     # a second preflight call against an already-scoped, already-shimmed clone
     # (the real cell-isolation flow: reset_clone + preflight per cell) must be

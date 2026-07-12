@@ -317,3 +317,23 @@ def test_run_arm_resets_the_clone_before_preflight(tmp_path, monkeypatch):
             tmp_path / "runs", "graph_guard/ppr.py")
 
     assert order == ["reset_clone", "preflight"]
+
+
+def test_run_arm_refuses_non_api_provider(monkeypatch, tmp_path):
+    """Pre-registered runs demand metered, receipt-exact spend; a plan-covered
+    provider must be refused BEFORE any run dir exists (spec 2026-07-11 §5)."""
+    import crucible.experiment as exp
+
+    class MaxPlanFake:
+        billing = "max-plan"
+        name = "claude-cli"
+
+        def complete_with_usage(self, *a, **k):
+            raise AssertionError("must never be called")
+
+    monkeypatch.setattr(exp, "get_provider", lambda name: MaxPlanFake())
+    protocol = dict(PROTOCOL_FOR_RUN_ARM, tester={"provider": "claude-cli", "model": "claude-sonnet-5"})
+    with pytest.raises(ValueError, match="max-plan"):
+        exp.run_arm(protocol, "oneshot", tmp_path / "graph-guard",
+                    tmp_path / "runs", "graph_guard/ppr.py")
+    assert not (tmp_path / "runs").exists() or not any((tmp_path / "runs").iterdir())
