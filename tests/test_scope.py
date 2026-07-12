@@ -509,3 +509,583 @@ def test_discovery_scan_ignores_tox_ini_without_pytest_section(tmp_path):
         "tox.ini": "[tox]\nenvlist = py311\n",
     })
     scope_mod._assert_fresh_file_collectable(repo)  # must not raise
+
+
+# --- mutation-survivor triage (triage-A, src/crucible/scope.py) -----------
+
+
+def test_top_level_imports_splits_dotted_import_to_first_segment(tmp_path):
+    """`import a.b.c` binds only the top-level package `a` -- split(".")[0],
+    not split(None)[0] (whitespace split, a no-op on a dotted name with no
+    spaces, which would leave the whole dotted path in the set)."""
+    import crucible.scope as scope_mod
+    repo = _mk(tmp_path, {"probe.py": "import a.b.c\n"})
+    assert scope_mod._top_level_imports(repo / "probe.py") == {"a"}
+
+
+def test_top_level_imports_splits_dotted_from_import_to_first_segment(tmp_path):
+    """`from pkg.sub import thing` binds the top-level package `pkg` --
+    node.module.split(".")[0], not split("XX.XX")[0] (a substring absent from
+    "pkg.sub", so split is a no-op and the whole dotted module leaks through)."""
+    import crucible.scope as scope_mod
+    repo = _mk(tmp_path, {"probe.py": "from pkg.sub import thing\n"})
+    assert scope_mod._top_level_imports(repo / "probe.py") == {"pkg"}
+
+
+def test_detect_notes_content_for_sandbox_hazard(tmp_path):
+    """detect() must record WHICH test file and WHICH local package(s) are
+    hazardous, not just that pytest_args grew -- test_detect_flags_sandbox_
+    hazard_test_files only checks pytest_args, leaving the notes text (and the
+    notes= constructor argument itself) unobserved."""
+    repo = _mk(tmp_path, {
+        "mypkg/mod.py": "X = 1\n",
+        "tests/test_hazard.py": "from toolbelt import helper\n",
+        "toolbelt/__init__.py": "helper = 1\n",
+    })
+    plan = detect(repo, "mypkg/mod.py")
+    assert plan.notes == [
+        "tests/test_hazard.py imports local package(s) "
+        "['toolbelt'] absent from mutmut's sandbox"
+    ]
+
+
+def test_apply_writes_conftest_and_pyproject_with_exact_lowercase_names(tmp_path, monkeypatch):
+    """apply() must write to literally "conftest.py" and "pyproject.toml" --
+    asserting via (repo / "conftest.py").read_text() is not enough to prove
+    this on a case-insensitive filesystem (macOS default APFS), where a
+    write to "CONFTEST.PY" is transparently readable back as "conftest.py".
+    Spy on Path.write_text and check the exact strings passed, which is
+    filesystem-case-independent."""
+    calls = []
+    orig_write_text = Path.write_text
+
+    def spy_write_text(self, *a, **kw):
+        calls.append(str(self))
+        return orig_write_text(self, *a, **kw)
+
+    monkeypatch.setattr(Path, "write_text", spy_write_text)
+    repo = _mk(tmp_path, {"src/mod.py": "X = 1\n"})
+    apply(repo, detect(repo, "src/mod.py"))
+    assert any(c.endswith("/conftest.py") for c in calls)
+    assert not any(c.endswith("/CONFTEST.PY") for c in calls)
+    assert any(c.endswith("/pyproject.toml") for c in calls)
+    assert not any(c.endswith("/PYPROJECT.TOML") for c in calls)
+
+
+def test_apply_writes_pytest_args_line_when_plan_has_hazards(tmp_path):
+    """apply() must forward plan.pytest_args (not a dropped/short-circuited
+    None) into write_scope so the pyproject.toml [tool.mutmut] table actually
+    carries the exclude-form pytest_add_cli_args_test_selection line."""
+    repo = _mk(tmp_path, {
+        "mypkg/mod.py": "X = 1\n",
+        "tests/test_hazard.py": "from toolbelt import helper\n",
+        "toolbelt/__init__.py": "helper = 1\n",
+    })
+    plan = detect(repo, "mypkg/mod.py")
+    apply(repo, plan)
+    py = (repo / "pyproject.toml").read_text()
+    assert 'pytest_add_cli_args_test_selection = ["--ignore=tests/test_hazard.py"]' in py
+
+
+def test_public_top_level_names_excludes_private_defs(tmp_path):
+    """FunctionDef/ClassDef names starting with "_" must not appear -- the
+    startswith("_") check, not a string ("XX_XX") that can never match."""
+    import crucible.scope as scope_mod
+    repo = _mk(tmp_path, {
+        "probe.py": "def pub_fn():\n    pass\n\n\ndef _priv_fn():\n    pass\n\n\n"
+                    "class Pub:\n    pass\n\n\nclass _Priv:\n    pass\n",
+    })
+    assert scope_mod._public_top_level_names(repo / "probe.py") == ["pub_fn", "Pub"]
+
+
+def test_public_top_level_names_assign_targets_exclude_private(tmp_path):
+    """Module-level Assign targets follow the same public/private rule as
+    defs: PUB is kept, _priv is dropped -- and the kept value is the target's
+    real name (target.id), not None."""
+    import crucible.scope as scope_mod
+    repo = _mk(tmp_path, {"probe.py": "PUB = 1\n_priv = 2\n"})
+    assert scope_mod._public_top_level_names(repo / "probe.py") == ["PUB"]
+
+
+def test_public_top_level_names_skips_non_name_assignment_targets(tmp_path):
+    """A tuple-unpacking assignment (`a, b = 1, 2`) has a non-Name target
+    (ast.Tuple); the isinstance guard must short-circuit past it rather than
+    evaluate target.id (which Tuple nodes don't have)."""
+    import crucible.scope as scope_mod
+    repo = _mk(tmp_path, {"probe.py": "a, b = 1, 2\nPUB = 3\n"})
+    assert scope_mod._public_top_level_names(repo / "probe.py") == ["PUB"]
+
+
+def test_pytest_config_sections_reads_exact_lowercase_pyproject_name(tmp_path, monkeypatch):
+    """_pytest_config_sections must read literally "pyproject.toml" -- same
+    case-insensitive-filesystem blind spot as the conftest.py check above;
+    spy on Path.read_text and check the exact string."""
+    import crucible.scope as scope_mod
+    calls = []
+    orig_read_text = Path.read_text
+
+    def spy_read_text(self, *a, **kw):
+        calls.append(str(self))
+        return orig_read_text(self, *a, **kw)
+
+    monkeypatch.setattr(Path, "read_text", spy_read_text)
+    repo = _mk(tmp_path, {
+        "mypkg/mod.py": "X = 1\n",
+        "pyproject.toml": '[tool.pytest.ini_options]\ntestpaths = ["tests"]\n',
+    })
+    list(scope_mod._pytest_config_sections(repo))
+    assert any(c.endswith("/pyproject.toml") for c in calls)
+    assert not any(c.endswith("/PYPROJECT.TOML") for c in calls)
+
+
+def test_pytest_config_sections_tool_present_without_pytest_subsection(tmp_path):
+    """A pyproject.toml with a [tool.*] table but no [tool.pytest] must yield
+    nothing, not crash -- `.get("pytest", {})` must default to a dict so the
+    chained `.get("ini_options")` has something to call, not None."""
+    import crucible.scope as scope_mod
+    repo = _mk(tmp_path, {
+        "mypkg/mod.py": "X = 1\n",
+        "pyproject.toml": "[tool.other]\nx = 1\n",
+    })
+    assert list(scope_mod._pytest_config_sections(repo)) == []
+
+
+def test_pytest_config_sections_no_tool_section_at_all(tmp_path):
+    """A pyproject.toml with no [tool] table at all must yield nothing, not
+    crash -- `.get("tool", {})` must default to a dict, not None."""
+    import crucible.scope as scope_mod
+    repo = _mk(tmp_path, {
+        "mypkg/mod.py": "X = 1\n",
+        "pyproject.toml": '[project]\nname = "x"\n',
+    })
+    assert list(scope_mod._pytest_config_sections(repo)) == []
+
+
+def test_pytest_config_sections_ini_file_without_pytest_section(tmp_path):
+    """pytest.ini exists but has no [pytest] section -- must yield nothing.
+    The pre-try `section` initializer must be None (falls through the final
+    `if section is not None` guard), not a falsy-but-not-None "" (which would
+    wrongly pass that guard and yield an empty section)."""
+    import crucible.scope as scope_mod
+    repo = _mk(tmp_path, {
+        "mypkg/mod.py": "X = 1\n",
+        "pytest.ini": "[other]\nx = 1\n",
+    })
+    assert list(scope_mod._pytest_config_sections(repo)) == []
+
+
+def test_pytest_config_sections_malformed_ini_raises_runtime_error_with_message(tmp_path):
+    """A pytest.ini that configparser can't parse at all (no section headers)
+    must raise RuntimeError carrying the real exception text, not
+    RuntimeError(None)."""
+    import crucible.scope as scope_mod
+    repo = _mk(tmp_path, {
+        "mypkg/mod.py": "X = 1\n",
+        "pytest.ini": "not a valid ini file\n",
+    })
+    with pytest.raises(RuntimeError, match=r"^cannot parse pytest\.ini"):
+        list(scope_mod._pytest_config_sections(repo))
+
+
+def test_canary_probe_strips_src_prefix_from_modname(tmp_path, monkeypatch):
+    """A "src/pkg/mod.py" module must import as "pkg.mod" in the canary (v7:
+    bare name, never src.-qualified) -- both the startswith("src.") check
+    (not a string that can never match, in either case) and the actual strip
+    (not modname = None) must be intact. Inspect the canary file's content
+    from inside the faked pristine subprocess call, before it gets cleaned up."""
+    import crucible.scope as scope_mod
+
+    class FakeOutcome:
+        def __init__(self, killed):
+            self.counts = {"killed": killed}
+            self.all_mutants = 10
+            self.survivors = []
+
+    measures = iter([FakeOutcome(0), FakeOutcome(2)])
+
+    class FakeEngine:
+        def __init__(self, cwd, run=None):
+            pass
+
+        def measure(self):
+            return next(measures)
+
+    monkeypatch.setattr(scope_mod, "MutmutEngine", FakeEngine)
+    repo = _mk(tmp_path, {"src/mypkg/mod.py": "X = 1\n"})
+    seen = {}
+
+    def fake_run(cmd, cwd=None, capture_output=True, text=True, timeout=None, **kw):
+        canary_path = Path(cwd) / "tests" / "crucible_canary_test.py"
+        seen["content"] = canary_path.read_text()
+
+        class P:
+            returncode, stdout, stderr = 0, "1 passed", ""
+        return P()
+
+    scope_mod.canary_probe(repo, "src/mypkg/mod.py", run=fake_run)
+    assert "import_module('mypkg.mod')" in seen["content"]
+
+
+def test_canary_probe_passes_run_through_to_engine(tmp_path, monkeypatch):
+    """canary_probe must construct MutmutEngine(subject_dir, run=run) --
+    forwarding the caller's `run`, not dropping the kwarg so the engine falls
+    back to its own default (real subprocess.run, unusable in a fast test)."""
+    import crucible.scope as scope_mod
+
+    class FakeOutcome:
+        counts = {"killed": 3}
+        all_mutants = 10
+        survivors = []
+
+    captured = {}
+
+    class FakeEngine:
+        def __init__(self, cwd, run=None):
+            captured["run"] = run
+
+        def measure(self):
+            return FakeOutcome()
+
+    monkeypatch.setattr(scope_mod, "MutmutEngine", FakeEngine)
+    repo = _mk(tmp_path, {"mypkg/mod.py": "X = 1\n"})
+
+    def fail_run(cmd, cwd=None, capture_output=True, text=True, timeout=None, **kw):
+        raise AssertionError("canary_probe must not shell out in the waived branch")
+
+    scope_mod.canary_probe(repo, "mypkg/mod.py", run=fail_run)
+    assert captured["run"] is fail_run
+
+
+def test_canary_probe_defaults_missing_before_killed_count_to_zero(tmp_path, monkeypatch):
+    """When the engine's baseline Outcome carries no "killed" key at all
+    (counts={}), before_killed must default to 0 (the zero-coverage strict-
+    branch case), not crash on int(None) and not silently default to 1 (which
+    would wrongly waive a subject with zero real kills)."""
+    import crucible.scope as scope_mod
+
+    class FakeOutcome:
+        def __init__(self, counts):
+            self.counts = counts
+            self.all_mutants = 10
+            self.survivors = []
+
+    measures = iter([FakeOutcome({}), FakeOutcome({"killed": 2})])
+
+    class FakeEngine:
+        def __init__(self, cwd, run=None):
+            pass
+
+        def measure(self):
+            return next(measures)
+
+    monkeypatch.setattr(scope_mod, "MutmutEngine", FakeEngine)
+    repo = _mk(tmp_path, {"mypkg/mod.py": "X = 1\n"})
+
+    def fake_run(cmd, cwd=None, capture_output=True, text=True, timeout=None, **kw):
+        class P:
+            returncode, stdout, stderr = 0, "1 passed", ""
+        return P()
+
+    v = scope_mod.canary_probe(repo, "mypkg/mod.py", run=fake_run)
+    assert v.kills_before == 0
+    assert v.waived is False
+    assert v.passed is True
+
+
+def test_canary_probe_waives_at_exactly_one_kill(tmp_path, monkeypatch):
+    """The waiver boundary is `before_killed > 0` -- a single kill already
+    proves collection, so kills_before == 1 must waive immediately (no second,
+    strict-branch measurement), not require kills_before > 1."""
+    import crucible.scope as scope_mod
+
+    class FakeOutcome:
+        counts = {"killed": 1}
+        all_mutants = 10
+        survivors = []
+
+    class FakeEngine:
+        def __init__(self, cwd, run=None):
+            pass
+
+        def measure(self):
+            return FakeOutcome()
+
+    monkeypatch.setattr(scope_mod, "MutmutEngine", FakeEngine)
+    repo = _mk(tmp_path, {"mypkg/mod.py": "X = 1\n"})
+
+    def fail_run(cmd, cwd=None, capture_output=True, text=True, timeout=None, **kw):
+        raise AssertionError("must not shell out when kills_before == 1 (waived)")
+
+    v = scope_mod.canary_probe(repo, "mypkg/mod.py", run=fail_run)
+    assert v.waived is True and v.kills_before == 1
+
+
+def test_canary_probe_pristine_subprocess_call_arguments(tmp_path, monkeypatch):
+    """The pristine canary check must be invoked with cwd=str(subject_dir),
+    capture_output=True, text=True, timeout=300, and the pytest cmd -- every
+    one of those, not a dropped kwarg (silently defaulting to something else)
+    or a nearby-but-wrong value. Use sentinel defaults in the fake `run` so an
+    OMITTED kwarg is distinguishable from one explicitly passed the "correct"
+    value."""
+    import crucible.scope as scope_mod
+
+    _MISSING = object()
+
+    class FakeOutcome:
+        def __init__(self, killed):
+            self.counts = {"killed": killed}
+            self.all_mutants = 10
+            self.survivors = []
+
+    measures = iter([FakeOutcome(0), FakeOutcome(2)])
+
+    class FakeEngine:
+        def __init__(self, cwd, run=None):
+            pass
+
+        def measure(self):
+            return next(measures)
+
+    monkeypatch.setattr(scope_mod, "MutmutEngine", FakeEngine)
+    repo = _mk(tmp_path, {"mypkg/mod.py": "X = 1\n"})
+    calls = []
+
+    def fake_run(cmd, cwd=_MISSING, capture_output=_MISSING, text=_MISSING, timeout=_MISSING, **kw):
+        calls.append(dict(cmd=cmd, cwd=cwd, capture_output=capture_output,
+                           text=text, timeout=timeout))
+
+        class P:
+            returncode, stdout, stderr = 0, "1 passed", ""
+        return P()
+
+    scope_mod.canary_probe(repo, "mypkg/mod.py", run=fake_run)
+    assert len(calls) == 1
+    call = calls[0]
+    assert call["cwd"] == str(repo)
+    assert call["capture_output"] is True
+    assert call["text"] is True
+    assert call["timeout"] == 300
+    assert call["cmd"][:3] == [sys.executable, "-m", "pytest"]
+
+
+def test_canary_probe_pristine_failure_message_empty_stdout(tmp_path, monkeypatch):
+    """With empty pristine stdout, the RuntimeError message must be exactly
+    the fixed prefix -- not wrapped in extra "XX" marker text, and not padded
+    with a non-empty placeholder in place of the (correctly empty) fallback."""
+    import crucible.scope as scope_mod
+
+    class FakeOutcome:
+        counts = {"killed": 0}
+        all_mutants = 10
+        survivors = []
+
+    class FakeEngine:
+        def __init__(self, cwd, run=None):
+            pass
+
+        def measure(self):
+            return FakeOutcome()
+
+    monkeypatch.setattr(scope_mod, "MutmutEngine", FakeEngine)
+    repo = _mk(tmp_path, {"mypkg/mod.py": "X = 1\n"})
+
+    def fake_run(cmd, cwd=None, capture_output=True, text=True, timeout=None, **kw):
+        class P:
+            returncode, stdout, stderr = 1, "", "boom"
+        return P()
+
+    with pytest.raises(RuntimeError) as exc_info:
+        scope_mod.canary_probe(repo, "mypkg/mod.py", run=fake_run)
+    assert str(exc_info.value) == (
+        "canary failed on pristine code -- the probe is wrong, not the subject: ")
+
+
+def test_canary_probe_pristine_failure_message_uses_stdout_tail(tmp_path, monkeypatch):
+    """With a long pristine stdout, the RuntimeError message must end with
+    exactly the LAST 400 characters (stdout[-400:], not stdout[400:] which
+    slices from the front, and not stdout[-401:] which is one character too
+    many) -- and it must actually be the stdout content, not a dropped-to-''
+    placeholder from a mangled `or`."""
+    import crucible.scope as scope_mod
+
+    class FakeOutcome:
+        counts = {"killed": 0}
+        all_mutants = 10
+        survivors = []
+
+    class FakeEngine:
+        def __init__(self, cwd, run=None):
+            pass
+
+        def measure(self):
+            return FakeOutcome()
+
+    monkeypatch.setattr(scope_mod, "MutmutEngine", FakeEngine)
+    repo = _mk(tmp_path, {"mypkg/mod.py": "X = 1\n"})
+    stdout_text = "".join(f"line{i}\n" for i in range(100))
+    assert len(stdout_text) > 401  # long enough to distinguish -400 from -401 and +400
+
+    def fake_run(cmd, cwd=None, capture_output=True, text=True, timeout=None, **kw):
+        class P:
+            returncode, stdout, stderr = 1, stdout_text, ""
+        return P()
+
+    with pytest.raises(RuntimeError) as exc_info:
+        scope_mod.canary_probe(repo, "mypkg/mod.py", run=fake_run)
+    expected = ("canary failed on pristine code -- the probe is wrong, not the subject: "
+                + stdout_text[-400:])
+    assert str(exc_info.value) == expected
+
+
+def test_canary_probe_unlink_tolerates_already_missing_canary_file(tmp_path, monkeypatch):
+    """The canary file is written just before the pristine subprocess call
+    and always removed in a `finally` -- that removal must tolerate the file
+    already being gone (missing_ok=True), e.g. if the pristine pytest
+    invocation itself (or subject-side tooling) already deleted it, not raise
+    FileNotFoundError and mask a real result."""
+    import crucible.scope as scope_mod
+
+    class FakeOutcome:
+        def __init__(self, killed):
+            self.counts = {"killed": killed}
+            self.all_mutants = 10
+            self.survivors = []
+
+    measures = iter([FakeOutcome(0), FakeOutcome(2)])
+
+    class FakeEngine:
+        def __init__(self, cwd, run=None):
+            pass
+
+        def measure(self):
+            return next(measures)
+
+    monkeypatch.setattr(scope_mod, "MutmutEngine", FakeEngine)
+    repo = _mk(tmp_path, {"mypkg/mod.py": "X = 1\n"})
+
+    def fake_run(cmd, cwd=None, capture_output=True, text=True, timeout=None, **kw):
+        (repo / "tests" / "crucible_canary_test.py").unlink()  # simulate external removal
+        class P:
+            returncode, stdout, stderr = 0, "1 passed", ""
+        return P()
+
+    v = scope_mod.canary_probe(repo, "mypkg/mod.py", run=fake_run)
+    assert v.passed is True
+
+
+def test_canary_probe_defaults_missing_after_killed_count_to_zero(tmp_path, monkeypatch):
+    """Same as the before_killed default-to-zero rule, for the second (after)
+    measurement: a counts dict with no "killed" key must yield after_killed
+    == 0, not crash on int(None) and not silently default to 1."""
+    import crucible.scope as scope_mod
+
+    class FakeOutcome:
+        def __init__(self, counts):
+            self.counts = counts
+            self.all_mutants = 10
+            self.survivors = []
+
+    measures = iter([FakeOutcome({"killed": 0}), FakeOutcome({})])
+
+    class FakeEngine:
+        def __init__(self, cwd, run=None):
+            pass
+
+        def measure(self):
+            return next(measures)
+
+    monkeypatch.setattr(scope_mod, "MutmutEngine", FakeEngine)
+    repo = _mk(tmp_path, {"mypkg/mod.py": "X = 1\n"})
+
+    def fake_run(cmd, cwd=None, capture_output=True, text=True, timeout=None, **kw):
+        class P:
+            returncode, stdout, stderr = 0, "1 passed", ""
+        return P()
+
+    v = scope_mod.canary_probe(repo, "mypkg/mod.py", run=fake_run)
+    assert v.kills_after == 0
+    assert v.passed is False
+
+
+def test_canary_probe_reports_after_measurement_mutant_count(tmp_path, monkeypatch):
+    """CanaryVerdict.mutants must be the SECOND (after) measurement's
+    all_mutants, not None -- use distinct before/after values so a mixup is
+    also observable, not just a dropped field."""
+    import crucible.scope as scope_mod
+
+    class FakeOutcome:
+        def __init__(self, killed, all_mutants):
+            self.counts = {"killed": killed}
+            self.all_mutants = all_mutants
+            self.survivors = []
+
+    measures = iter([FakeOutcome(0, 7), FakeOutcome(2, 42)])
+
+    class FakeEngine:
+        def __init__(self, cwd, run=None):
+            pass
+
+        def measure(self):
+            return next(measures)
+
+    monkeypatch.setattr(scope_mod, "MutmutEngine", FakeEngine)
+    repo = _mk(tmp_path, {"mypkg/mod.py": "X = 1\n"})
+
+    def fake_run(cmd, cwd=None, capture_output=True, text=True, timeout=None, **kw):
+        class P:
+            returncode, stdout, stderr = 0, "1 passed", ""
+        return P()
+
+    v = scope_mod.canary_probe(repo, "mypkg/mod.py", run=fake_run)
+    assert v.mutants == 42
+
+
+def test_canary_probe_removes_exact_lowercase_mutants_dirname(tmp_path, monkeypatch):
+    """The residue cleanup must target literally "mutants" -- spy on
+    shutil.rmtree (as called from inside crucible.scope) and check the exact
+    path string, which is filesystem-case-independent (unlike asserting the
+    directory is merely gone, which a case-insensitive filesystem would
+    satisfy even for an "MUTANTS" rmtree call)."""
+    import crucible.scope as scope_mod
+    calls = []
+    orig_rmtree = shutil.rmtree
+
+    def spy_rmtree(path, *a, **kw):
+        calls.append(str(path))
+        return orig_rmtree(path, *a, **kw)
+
+    monkeypatch.setattr(scope_mod.shutil, "rmtree", spy_rmtree)
+
+    class FakeOutcome:
+        counts = {"killed": 3}
+        all_mutants = 10
+        survivors = []
+
+    class FakeEngine:
+        def __init__(self, cwd, run=None):
+            pass
+
+        def measure(self):
+            return FakeOutcome()
+
+    monkeypatch.setattr(scope_mod, "MutmutEngine", FakeEngine)
+    repo = _mk(tmp_path, {"mypkg/mod.py": "X = 1\n"})
+
+    def fail_run(cmd, cwd=None, capture_output=True, text=True, timeout=None, **kw):
+        raise AssertionError("no subprocess expected in the waived branch")
+
+    scope_mod.canary_probe(repo, "mypkg/mod.py", run=fail_run)
+    assert any(c.endswith("/mutants") for c in calls)
+    assert not any(c.endswith("/MUTANTS") for c in calls)
+
+
+def test_discovery_scan_names_pyproject_in_unparseable_refusal(tmp_path):
+    # Kills x__pytest_config_sections__mutmut_7: the refusal for an unparseable
+    # pyproject.toml must NAME the file (RuntimeError(None) is useless to a user).
+    import crucible.scope as scope_mod
+    repo = _mk(tmp_path, {
+        "mypkg/mod.py": "X = 1\n",
+        "pyproject.toml": "[tool.pytest.ini_options\nbroken = true\n",  # invalid TOML
+    })
+    with pytest.raises(RuntimeError, match="pyproject.toml"):
+        scope_mod._assert_fresh_file_collectable(repo)

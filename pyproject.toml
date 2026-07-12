@@ -13,7 +13,9 @@ authors = [{ name = "Jeff Otterson" }]
 dependencies = [
     "oracle-gate @ git+https://github.com/Jott2121/oracle-gate@ce9b0b93ba59afa4598a85738db9abd7f975e8bc#subdirectory=tool",
     "agent-cost-attribution @ git+https://github.com/Jott2121/agent-cost-attribution@b502b093e5344beea06dcafcf32239e90302ddad",
-    "mutmut>=3,<4",
+    # Exact pin: scope.py's SRC_SHIM reads MUTANT_UNDER_TEST at call time -- a
+    # mutmut 3.6.0 internal contract, not a public API (accepted residual, now pinned).
+    "mutmut==3.6.0",
 ]
 
 [project.optional-dependencies]
@@ -35,8 +37,13 @@ source_paths = [
     "src/crucible/report.py",
     "src/crucible/meter.py",
     "src/crucible/roles.py",
+    "src/crucible/scope.py",
+    "src/crucible/lean.py",
 ]
-pytest_add_cli_args_test_selection = ["tests/"]
+# --ignore=tests/test_analyze.py: it imports experiments/analyze.py, which is
+# outside source_paths/also_copy so absent from mutmut's sandbox -- the same
+# v6 hazard class crucible's own scope tool flags on subject repos.
+pytest_add_cli_args_test_selection = ["tests/", "--ignore=tests/test_analyze.py"]
 # also_copy: pytest_add_cli_args_test_selection = ["tests/"] collects the WHOLE
 # suite, and several tests import crucible modules outside source_paths
 # (engine.py, cli.py, etc). mutmut's sandbox only contains files listed in
