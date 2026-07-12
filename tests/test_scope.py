@@ -490,3 +490,22 @@ def test_canary_probe_strict_branch_when_no_existing_test_touches_module(tmp_pat
     assert v.passed is True
     assert v.waived is False
     assert v.kills_after > v.kills_before
+
+
+def test_discovery_scan_refuses_tox_ini_python_files_mismatch(tmp_path):
+    import crucible.scope as scope_mod
+    repo = _mk(tmp_path, {
+        "mypkg/mod.py": "X = 1\n",
+        "tox.ini": "[pytest]\npython_files = check_*.py\n",
+    })
+    with pytest.raises(RuntimeError, match="tox.ini"):
+        scope_mod._assert_fresh_file_collectable(repo)
+
+
+def test_discovery_scan_ignores_tox_ini_without_pytest_section(tmp_path):
+    import crucible.scope as scope_mod
+    repo = _mk(tmp_path, {
+        "mypkg/mod.py": "X = 1\n",
+        "tox.ini": "[tox]\nenvlist = py311\n",
+    })
+    scope_mod._assert_fresh_file_collectable(repo)  # must not raise
