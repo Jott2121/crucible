@@ -376,6 +376,18 @@ def canary_probe(subject_dir: Path, module: str, run=subprocess.run) -> CanaryVe
                 waived=True,
             )
         names = _public_top_level_names(subject_dir / module)
+        if not names:
+            # All-private/empty module: with no public names to smoke-call, the
+            # canary's own `assert _NAMES, 'module exports nothing public'`
+            # would fail on pristine code, and that failure would be reported
+            # through the "canary failed on pristine code -- the probe is
+            # wrong, not the subject" path -- misleading here, since the probe
+            # is not wrong, the subject genuinely has nothing to probe. Refuse
+            # up front instead, before writing anything.
+            raise RuntimeError(
+                f"module {module} exposes no public top-level symbols to probe; "
+                "point crucible at a module with public API"
+            )
         tests_dir = subject_dir / "tests"
         tests_dir.mkdir(exist_ok=True)
         canary = tests_dir / "crucible_canary_test.py"

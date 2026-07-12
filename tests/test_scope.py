@@ -174,6 +174,39 @@ def test_canary_probe_fails_when_kills_flat(tmp_path, monkeypatch):
     assert v.waived is False
 
 
+def test_canary_probe_refuses_before_writing_canary_when_module_has_no_public_names(
+    tmp_path, monkeypatch,
+):
+    """Finding #8: an all-private/empty module (_public_top_level_names
+    returns []) must refuse with a clear, honest message BEFORE writing any
+    canary test file -- not fall through to the misleading 'canary failed on
+    pristine code -- the probe is wrong, not the subject' path. `run` raises
+    if ever called: this must be a pre-check, no subprocess, no canary file."""
+    import crucible.scope as scope_mod
+
+    class FakeOutcome:
+        counts = {"killed": 0}
+        all_mutants = 10
+        survivors = []
+
+    class FakeEngine:
+        def __init__(self, cwd, run=None):
+            pass
+
+        def measure(self):
+            return FakeOutcome()
+
+    monkeypatch.setattr(scope_mod, "MutmutEngine", FakeEngine)
+    repo = _mk(tmp_path, {"mypkg/mod.py": "_private = 1\n\ndef _helper():\n    pass\n"})
+
+    def fail_run(cmd, cwd=None, capture_output=True, text=True, timeout=None, **kw):
+        raise AssertionError("canary_probe must not shell out when there is nothing to probe")
+
+    with pytest.raises(RuntimeError, match="exposes no public top-level symbols"):
+        scope_mod.canary_probe(repo, "mypkg/mod.py", run=fail_run)
+    assert not (repo / "tests" / "crucible_canary_test.py").exists()
+
+
 def _waived_setup(monkeypatch, tmp_path, extra_files):
     """Shared rig for the waived-branch discovery-config tests: a fake engine
     whose baseline already kills (killed=3, so canary_probe reaches the WAIVED
