@@ -141,8 +141,8 @@ the gate was re-run, not assumed.
 | Canonical (7 modules) | 913 | 906 | 7 | 0 | 99.2% | 99.2% |
 | + post-run killing test (targeted-verified) | 913 | 907 | 6 | 0 | **99.3%** | **99.3%** |
 
-Both denominators coincide this pass (zero no-coverage mutants). 33 new killing tests
-were added across test_scope/test_guardrails/test_loop/test_roles (suite 265 → 298).
+Both denominators coincide this pass (zero no-coverage mutants). 34 new killing tests
+were added across test_scope/test_guardrails/test_loop/test_roles (suite 265 → 299).
 
 **The 6 remaining survivors are all documented equivalents, each with a written
 disposition (no bare exclusions):**
