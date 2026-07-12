@@ -1,5 +1,5 @@
 {
-  "subject": "/Users/jeffreyotterson/crucible-subjects/packaging",
+  "subject": "~/crucible-subjects/packaging",
   "module": "src/packaging/_elffile.py",
   "head_sha": "318f97928d57a92219e0a78e9e477f87d3847d92",
   "arm": "loop-cross",

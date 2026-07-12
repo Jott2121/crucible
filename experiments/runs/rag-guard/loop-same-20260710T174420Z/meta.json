@@ -1,5 +1,5 @@
 {
-  "subject": "/Users/jeffreyotterson/crucible-subjects/rag-guard",
+  "subject": "~/crucible-subjects/rag-guard",
   "module": "rag_guard/guard.py",
   "head_sha": "5e7e556327162f701211eb131c3a7f405da77921",
   "arm": "loop-same",

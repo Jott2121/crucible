@@ -1,5 +1,5 @@
 {
-  "subject": "/Users/jeffreyotterson/crucible-subjects/graph-guard",
+  "subject": "~/crucible-subjects/graph-guard",
   "module": "graph_guard/ppr.py",
   "head_sha": "78ab121e4bcebf0d8d34b5e4d3de520d3ff39fb7",
   "arm": "loop-same",

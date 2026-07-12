@@ -1,5 +1,5 @@
 {
-  "subject": "/Users/jeffreyotterson/crucible-subjects/rag-guard",
+  "subject": "~/crucible-subjects/rag-guard",
   "module": "rag_guard/guard.py",
   "head_sha": "526f2f317a7c364f6ae86be746975ae639e38778",
   "arm": "oneshot",
