@@ -21,15 +21,24 @@ class LeanProfile:
     name: str = "ambient"
 
     def build(self) -> tuple[list[str], str | None]:
-        argv: list[str] = []
-        if self.tools is not None:
-            argv += ["--tools", self.tools]
-        if self.strict_mcp:
-            argv.append("--strict-mcp-config")
-        if self.setting_sources is not None:
-            argv += ["--setting-sources", self.setting_sources]
-        cwd = str(self.cwd) if self.cwd is not None else None
-        return argv, cwd
+        return _build_argv(self)
+
+
+# Module-level, not a method: mutmut 3.6 generates zero mutants for methods defined
+# on a frozen dataclass (confirmed -- `build` above produced no `x_build__mutmut_N`
+# variants under mutants/src/crucible/lean.py). Moving the actual logic to a plain
+# module-level function puts it back inside the mutation-testing gate; the method
+# becomes a one-line delegate with nothing left to mutate.
+def _build_argv(p: LeanProfile) -> tuple[list[str], str | None]:
+    argv: list[str] = []
+    if p.tools is not None:
+        argv += ["--tools", p.tools]
+    if p.strict_mcp:
+        argv.append("--strict-mcp-config")
+    if p.setting_sources is not None:
+        argv += ["--setting-sources", p.setting_sources]
+    cwd = str(p.cwd) if p.cwd is not None else None
+    return argv, cwd
 
 
 AMBIENT = LeanProfile(name="ambient")

@@ -134,6 +134,13 @@ def test_critic_prompt_hash_changes_when_import_hint_present():
     assert without.prompt_sha256 != with_hint.prompt_sha256
 
 
+def test_import_hint_line_is_the_empty_string_when_hint_is_falsy():
+    # a falsy hint must produce exactly "" (never a placeholder), or user text like
+    # build_tester_prompt's f-string would silently gain stray literal characters.
+    assert roles._import_hint_line(None) == ""
+    assert roles._import_hint_line("") == ""
+
+
 def test_critic_prompt_import_hint_does_not_touch_the_system_template():
     without = build_critic_prompt("src/train.py", "def f(): ...", {})
     with_hint = build_critic_prompt("src/train.py", "def f(): ...", {}, import_hint=HINT)

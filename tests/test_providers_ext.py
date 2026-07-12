@@ -208,6 +208,12 @@ def test_billing_attrs():
     # absent attr means "api" -- the convention Task 2's meta stamping reads
     assert getattr(LongAnthropicProvider, "billing", "api") == "api"
     assert getattr(get_provider("openai"), "billing", "api") == "api"
+    # Finding #9: FakeProvider carries billing='fake' -- never metered API
+    # spend, not even shadow-priced -- so experiment.py's pre-call billing
+    # gate rejects it up front with a clear message instead of letting it
+    # ride under the 'api' default and crash confusingly later.
+    assert FakeProvider.billing == "fake"
+    assert getattr(get_provider("fake"), "billing", "api") == "fake"
 
 
 def test_registry_has_claude_cli():

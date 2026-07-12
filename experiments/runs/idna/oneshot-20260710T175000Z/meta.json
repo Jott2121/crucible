@@ -1,5 +1,5 @@
 {
-  "subject": "/Users/jeffreyotterson/crucible-subjects/idna",
+  "subject": "~/crucible-subjects/idna",
   "module": "idna/cli.py",
   "head_sha": "9efc56ffad9ac8a3b38ec75b1659982a5d7f44a2",
   "arm": "oneshot",

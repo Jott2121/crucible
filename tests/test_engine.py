@@ -269,6 +269,35 @@ def test_measure_treats_all_not_checked_as_zero_test_baseline_when_suite_is_gree
     assert outcome.all_mutants == 1
 
 
+def test_zero_test_baseline_pristine_pytest_has_a_timeout_and_refuses_on_hang(tmp_path):
+    """Finding #7: _zero_test_baseline's confirmatory pristine `pytest -q
+    --ignore=mutants` run is the one pytest invocation in the engine with no
+    timeout -- every other invocation (mutmut run via the tee, run_tests
+    elsewhere) caps at some bound. A hanging subject suite must become a loud
+    refusal, not an unbounded hang. TDD: inject a run callable that raises
+    subprocess.TimeoutExpired for that specific command."""
+    import subprocess
+
+    (tmp_path / "mutants").mkdir()
+    (tmp_path / "mutants" / "mutmut-cicd-stats.json").write_text(
+        '{"killed": 0, "survived": 0, "no_coverage": 0, "timeout": 0}'
+    )
+    inner = FakeRun({
+        "mutmut --version": (0, "mutmut, version 3.6.0"),
+        "mutmut run": (1, ""),
+        "mutmut export-cicd-stats": (0, ""),
+        "mutmut results --all true": (0, "    subject_pkg.calc.x_clamp__mutmut_1: not checked\n"),
+    })
+
+    def run(cmd, **kwargs):
+        if list(cmd[-3:]) == ["pytest", "-q", "--ignore=mutants"]:
+            raise subprocess.TimeoutExpired(cmd, kwargs.get("timeout"))
+        return inner(cmd, **kwargs)
+
+    with pytest.raises(RuntimeError, match=r"pristine suite timed out \(300s\)"):
+        MutmutEngine(tmp_path, run=run).measure()
+
+
 def test_measure_reraises_when_pytest_confirms_a_real_error(tmp_path):
     """All-"not checked" alone is not enough: if a bare `pytest -q` does NOT
     confirm either legitimate zero-coverage case (e.g. a real collection

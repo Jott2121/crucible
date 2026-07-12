@@ -165,6 +165,18 @@ def test_load_protocol_rejects_non_string_import_hint(tmp_path):
         load_protocol(p)
 
 
+class _ApiBilledFake:
+    """A provider stand-in with billing='api', for run_arm tests that exercise
+    wiring/validation unrelated to the billing gate itself. FakeProvider's own
+    billing='fake' (finding #9) correctly trips the pre-call billing gate
+    before any of these tests' FakeSubjectEnv stand-ins are ever constructed,
+    so these tests patch get_provider to something the gate accepts and let
+    the (never-actually-called-through-FakeSubjectEnv) provider object ride
+    along."""
+    name = "fake"
+    billing = "api"
+
+
 PROTOCOL_FOR_RUN_ARM = {
     "protocol_version": 2,
     "tester": {"provider": "fake", "model": "fake-model"},
@@ -176,17 +188,21 @@ PROTOCOL_FOR_RUN_ARM = {
 }
 
 
-def test_run_arm_raises_protocol_error_when_subject_not_in_protocol(tmp_path):
+def test_run_arm_raises_protocol_error_when_subject_not_in_protocol(monkeypatch, tmp_path):
+    import crucible.experiment as experiment_module
     from crucible.experiment import run_arm
 
+    monkeypatch.setattr(experiment_module, "get_provider", lambda name: _ApiBilledFake())
     with pytest.raises(ProtocolError, match="not in protocol"):
         run_arm(PROTOCOL_FOR_RUN_ARM, "oneshot", tmp_path / "unknown-subject",
                 tmp_path / "runs", "some/module.py")
 
 
-def test_run_arm_raises_protocol_error_on_module_mismatch(tmp_path):
+def test_run_arm_raises_protocol_error_on_module_mismatch(monkeypatch, tmp_path):
+    import crucible.experiment as experiment_module
     from crucible.experiment import run_arm
 
+    monkeypatch.setattr(experiment_module, "get_provider", lambda name: _ApiBilledFake())
     with pytest.raises(ProtocolError, match="does not match"):
         run_arm(PROTOCOL_FOR_RUN_ARM, "oneshot", tmp_path / "graph-guard",
                 tmp_path / "runs", "graph_guard/wrong.py")
@@ -238,6 +254,8 @@ def test_run_arm_wires_the_run_dir_into_env_set_artifact_dir(tmp_path, monkeypat
         def cost_usd(self, model, usage):
             return 0.0
 
+    import crucible.experiment as experiment_module
+    monkeypatch.setattr(experiment_module, "get_provider", lambda name: _ApiBilledFake())
     monkeypatch.setattr(env_module, "SubjectEnv", FakeSubjectEnv)
 
     subject_dir = tmp_path / "graph-guard"
@@ -311,12 +329,30 @@ def test_run_arm_resets_the_clone_before_preflight(tmp_path, monkeypatch):
         def cost_usd(self, model, usage):
             return 0.0
 
+    import crucible.experiment as experiment_module
+    monkeypatch.setattr(experiment_module, "get_provider", lambda name: _ApiBilledFake())
     monkeypatch.setattr(env_module, "SubjectEnv", FakeSubjectEnv)
 
     run_arm(PROTOCOL_FOR_RUN_ARM, "oneshot", tmp_path / "graph-guard",
             tmp_path / "runs", "graph_guard/ppr.py")
 
     assert order == ["reset_clone", "preflight"]
+
+
+def test_run_arm_refuses_fake_provider(monkeypatch, tmp_path):
+    """Finding #9: FakeProvider.billing='fake' so the same pre-call billing
+    gate that refuses a max-plan provider also refuses a fake one -- before
+    the fix, getattr(prov, 'billing', 'api') defaulted a fake tester to 'api'
+    (cleared the gate), and the run then crashed confusingly on the first
+    call with 'FakeProvider exhausted'. Real get_provider('fake') (not a
+    stand-in), so this proves the actual registered provider is caught."""
+    import crucible.experiment as exp
+
+    protocol = dict(PROTOCOL_FOR_RUN_ARM, tester={"provider": "fake", "model": "fake-model"})
+    with pytest.raises(ValueError, match="fake"):
+        exp.run_arm(protocol, "oneshot", tmp_path / "graph-guard",
+                    tmp_path / "runs", "graph_guard/ppr.py")
+    assert not (tmp_path / "runs").exists() or not any((tmp_path / "runs").iterdir())
 
 
 def test_run_arm_refuses_non_api_provider(monkeypatch, tmp_path):

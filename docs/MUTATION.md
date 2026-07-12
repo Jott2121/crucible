@@ -126,3 +126,46 @@ Otterson, 2026-07-11** (interactive gate; approval given after the experiment me
 main at `687637e`). This is the repo owner's named sign-off the triage rule required;
 the analytical dispositions are unchanged. A future mutation run listing exactly these
 two ids as survivors is at the documented 99.5% score with zero untriaged survivors.
+
+## 2026-07-12 — public-flip pass: scope.py + lean.py enter the gate; 3a-era drift repaid
+
+Scope grew from 5 modules to 7 (`+scope.py`, `+lean.py` — lean via a behavior-preserving
+delegate refactor, because mutmut 3.6 generates ZERO mutants for methods of a frozen
+dataclass; an ungraded module must never be reported as a clean one). The canonical run
+also exposed 16 real survivors in guardrails/report/roles/loop introduced by Plan-3a-era
+churn (salvage paths, billing, import_hint) that postdated the last documented pass —
+the gate was re-run, not assumed.
+
+| Run | Mutants | Killed | Survived | No-cov | Overall | Covered |
+|-----|---------|--------|----------|--------|---------|---------|
+| Canonical (7 modules) | 913 | 906 | 7 | 0 | 99.2% | 99.2% |
+| + post-run killing test (targeted-verified) | 913 | 907 | 6 | 0 | **99.3%** | **99.3%** |
+
+Both denominators coincide this pass (zero no-coverage mutants). 34 new killing tests
+were added across test_scope/test_guardrails/test_loop/test_roles (suite 265 → 299).
+
+**The 6 remaining survivors are all documented equivalents, each with a written
+disposition (no bare exclusions):**
+
+1. `guardrails.x_extract_test_file__mutmut_4` — pre-documented above; Jeff-approved
+   exemption 2026-07-11.
+2. `report.x_mcnemar_exact__mutmut_4` — pre-documented above; Jeff-approved exemption
+   2026-07-11.
+3. `guardrails.x__parse_failed_test_names__mutmut_3` (`(output or "")` →
+   `(output or "XXXX")`) — analytically equivalent: the fallback only fires on falsy
+   input, and `"XXXX"` cannot match either FAILED-line regex (both require the literal
+   substring `FAILED`), so every falsy input yields `set()` on both branches.
+4. `scope.x_canary_probe__mutmut_120` (drops the explicit `waived=False` kwarg) —
+   analytically AND empirically equivalent: the dataclass field default is the same
+   literal `False`, and no constructed assertion can observe explicit-vs-default
+   (verified: it alone survived a targeted run in which all 52 sibling survivors were
+   killed by the new tests).
+5. `scope.x_detect__mutmut_19` (`"tests"`→`"TESTS"`) — **environment-limited equivalent**:
+   macOS APFS is case-insensitive so the path still resolves; killable on case-sensitive
+   filesystems. Documented, not exempted-forever.
+6. `lean.x__build_argv__mutmut_3` (`+=`→`=` on first append to an empty list) —
+   analytically equivalent; extend and assign coincide on `[]`.
+
+Honest limitation, restated: mutmut 3.6 cannot mutate dataclass-method bodies; any logic
+left inside one is OUTSIDE this gate. lean.py's logic was moved to module level for
+exactly this reason; the pattern is now a review checklist item.

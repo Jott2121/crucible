@@ -365,6 +365,25 @@ def test_critic_round_truncation_is_rejected_with_billed_receipt_and_archived_te
     assert len(result.rounds) == 3
 
 
+def test_truncated_round_prices_using_the_truncated_replys_own_model_and_usage():
+    # rec.cost_usd must be computed from exc.model and exc.usage together -- a fixed
+    # 0.01 return value from FakeEnv.cost_usd (as in the tests above) can't distinguish
+    # a dropped/None model or usage argument from the real pair, so this env records
+    # the actual arguments it was called with.
+    calls = []
+
+    class PricingEnv(FakeEnv):
+        def cost_usd(self, model, usage):
+            calls.append((model, usage))
+            return 0.01
+
+    env = PricingEnv([outcome(["m1"]), outcome(["m1"]), outcome(["m1"])], truncate_on_call=1)
+    result = harden(env, LoopConfig(dry_rounds=2, arm="loop"))
+    assert result.rounds[1].status == "rejected"
+    # call 0 = tester round 0 (normal reply); call 1 = the truncated critic round
+    assert calls[1] == ("claude-sonnet-5", Usage(20, 32000))
+
+
 def test_tester_round_truncation_makes_the_run_verdict_rejected():
     env = FakeEnv([outcome(["m1"])], truncate_on_call=0)
     result = oneshot(env, LoopConfig(arm="oneshot"))

@@ -121,9 +121,22 @@ class SubjectEnv:
             extra_files = (self.scope or {}).get("extra_files") or {}
             for rel_path, content in extra_files.items():
                 target = self.subject_dir / rel_path
-                if not target.exists() or target.read_text() != content:
-                    target.parent.mkdir(parents=True, exist_ok=True)
-                    target.write_text(content)
+                if target.exists() and target.read_text() == content:
+                    continue  # identical: true no-op
+                # conftest.py specifically carries the same clobber hazard as
+                # scope.apply(): a subject's own root conftest.py (real
+                # fixtures) must never be silently overwritten by the src-shim.
+                # Other extra_files keep today's overwrite behavior -- this
+                # guard does not generalize to arbitrary extra_files.
+                if rel_path == "conftest.py" and target.exists():
+                    raise RuntimeError(
+                        f"{target} already exists and differs from crucible's src/ "
+                        "sys.path shim; subject has a root conftest.py -- crucible "
+                        "will not overwrite it. Merge the src/ sys.path shim "
+                        "yourself or move your conftest."
+                    )
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(content)
             if self.scope is not None:
                 write_scope(self.subject_dir / "pyproject.toml", [module_path],
                            also_copy=self.scope.get("also_copy"),

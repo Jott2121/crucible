@@ -1,5 +1,5 @@
 {
-  "subject": "/Users/jeffreyotterson/crucible-subjects/attrition-risk-ml",
+  "subject": "~/crucible-subjects/attrition-risk-ml",
   "module": "src/train.py",
   "head_sha": "aa4bae12130c46f9586a0b2a860931a8aac08479",
   "arm": "loop-cross",

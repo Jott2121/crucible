@@ -75,7 +75,16 @@ def detect(subject_dir: Path, module: str) -> ScopePlan:
 def apply(subject_dir: Path, plan: ScopePlan) -> None:
     subject_dir = Path(subject_dir)
     if plan.needs_src_shim:
-        (subject_dir / "conftest.py").write_text(SRC_SHIM)
+        conftest = subject_dir / "conftest.py"
+        if conftest.exists() and conftest.read_text() != SRC_SHIM:
+            raise RuntimeError(
+                f"{conftest} already exists and differs from crucible's src/ sys.path "
+                "shim; subject has a root conftest.py -- crucible will not overwrite it. "
+                "Merge the src/ sys.path shim yourself or move your conftest."
+            )
+        if not conftest.exists():
+            conftest.write_text(SRC_SHIM)
+        # identical content: no-op, proceed
     write_scope(subject_dir / "pyproject.toml", [plan.module],
                 also_copy=plan.also_copy,
                 pytest_args=plan.pytest_args or None,
@@ -199,9 +208,9 @@ _DISCOVERY_REFUSAL = (
 def _pytest_config_sections(subject_dir: Path):
     """Yield (filename, mapping) for each pytest config section present in the
     subject: pyproject.toml [tool.pytest.ini_options] (tomllib), pytest.ini
-    [pytest] and setup.cfg [tool:pytest] (configparser) -- stdlib only. A file
-    that exists but cannot be parsed raises RuntimeError (fail-safe: an
-    unparseable config cannot prove anything about discovery)."""
+    [pytest], setup.cfg [tool:pytest], and tox.ini [pytest] (configparser) --
+    stdlib only. A file that exists but cannot be parsed raises RuntimeError
+    (fail-safe: an unparseable config cannot prove anything about discovery)."""
     pyproject = subject_dir / "pyproject.toml"
     if pyproject.is_file():
         try:
@@ -212,7 +221,8 @@ def _pytest_config_sections(subject_dir: Path):
         section = data.get("tool", {}).get("pytest", {}).get("ini_options")
         if isinstance(section, dict):
             yield "pyproject.toml", section
-    for fname, sect in (("pytest.ini", "pytest"), ("setup.cfg", "tool:pytest")):
+    for fname, sect in (("pytest.ini", "pytest"), ("setup.cfg", "tool:pytest"),
+                        ("tox.ini", "pytest")):
         path = subject_dir / fname
         if path.is_file():
             # interpolation=None: pytest ini values routinely contain literal
@@ -250,9 +260,9 @@ def _assert_fresh_file_collectable(subject_dir: Path) -> None:
     from ever being collected -- the v6 failure class through the side door:
     an existing suite can kill mutants (earning the waiver) under discovery
     settings that silently exclude every file crucible will generate later.
-    Scans pyproject.toml [tool.pytest.ini_options], pytest.ini [pytest], and
-    setup.cfg [tool:pytest]; absent files/sections/keys prove nothing is
-    steering discovery, so the waiver proceeds.
+    Scans pyproject.toml [tool.pytest.ini_options], pytest.ini [pytest],
+    setup.cfg [tool:pytest], and tox.ini [pytest]; absent files/sections/keys
+    prove nothing is steering discovery, so the waiver proceeds.
 
     Rules, all in the fail-safe direction (over-refuse, never under):
     - python_files defined and no pattern fnmatch-matches crucible_x_test.py
@@ -272,11 +282,11 @@ def _assert_fresh_file_collectable(subject_dir: Path) -> None:
       refuses, and mishandles quoted paths containing spaces -- both errors
       refuse a possibly-fine subject, never waive a broken one.
 
-    REMAINING UNSCANNED RESIDUALS (known, accepted): tox.ini [pytest] (a
-    fourth config source pytest honors) is not read; norecursedirs is not
+    REMAINING UNSCANNED RESIDUALS (known, accepted): norecursedirs is not
     checked (a subject listing tests/ there would still be waived); and a
     collection-shaping conftest.py (collect_ignore, pytest_ignore_collect)
-    is invisible to any static config scan."""
+    is invisible to any static config scan. (tox.ini [pytest] residual
+    closed 2026-07-12 -- now scanned like pytest.ini/setup.cfg.)"""
     for fname, section in _pytest_config_sections(subject_dir):
         if "testpaths" in section:
             if "tests" not in _tokens(section["testpaths"]):
@@ -335,8 +345,8 @@ def canary_probe(subject_dir: Path, module: str, run=subprocess.run) -> CanaryVe
     addopts pins bare positional paths or carries --ignore/--deselect
     tokens. Neither constraint substitutes for the other: the exclude-form
     writer cannot see the subject's config, and the config scan cannot see
-    how crucible writes its own scope. The scan's own residuals (tox.ini,
-    norecursedirs, conftest-level collection hooks) are listed on
+    how crucible writes its own scope. The scan's own residuals
+    (norecursedirs, conftest-level collection hooks) are listed on
     _assert_fresh_file_collectable.
 
     The "before" measure happens first and unconditionally, so a waived scope
@@ -366,6 +376,18 @@ def canary_probe(subject_dir: Path, module: str, run=subprocess.run) -> CanaryVe
                 waived=True,
             )
         names = _public_top_level_names(subject_dir / module)
+        if not names:
+            # All-private/empty module: with no public names to smoke-call, the
+            # canary's own `assert _NAMES, 'module exports nothing public'`
+            # would fail on pristine code, and that failure would be reported
+            # through the "canary failed on pristine code -- the probe is
+            # wrong, not the subject" path -- misleading here, since the probe
+            # is not wrong, the subject genuinely has nothing to probe. Refuse
+            # up front instead, before writing anything.
+            raise RuntimeError(
+                f"module {module} exposes no public top-level symbols to probe; "
+                "point crucible at a module with public API"
+            )
         tests_dir = subject_dir / "tests"
         tests_dir.mkdir(exist_ok=True)
         canary = tests_dir / "crucible_canary_test.py"

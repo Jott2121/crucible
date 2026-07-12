@@ -1,6 +1,6 @@
 ---
 name: harden-tests
-description: Use when Jeff asks to "harden tests" for a module/repo -- runs crucible's adversarial test-hardening loop (Tester -> mutation testing -> Critic on named survivors) on the Max plan at $0 metered, onto a LOCAL branch, with mutation-kill receipts. Triggers: "harden tests", "harden the tests for X", "run crucible on X", "mutation-harden".
+description: Use when the operator asks to "harden tests" for a module/repo -- runs crucible's adversarial test-hardening loop (Tester -> mutation testing -> Critic on named survivors) on the Max plan at $0 metered, onto a LOCAL branch, with mutation-kill receipts. Triggers: "harden tests", "harden the tests for X", "run crucible on X", "mutation-harden".
 ---
 
 # harden-tests
@@ -20,8 +20,9 @@ receipts shadow-priced and flagged `billing: max-plan`.
 - If the scope step refuses (exit 4), STOP and report the printed reason --
   never hand-tune the scope to force a pass; a scope the gate cannot prove
   is a scope that silently loses kills (the v6 lesson this gate exists for).
-- Requires: `claude` CLI on PATH (logged in), crucible's venv
-  (`~/ai-agentic-code-testing/.venv`), a git-clean subject repo.
+- Requires: `claude` CLI on PATH (logged in), `crucible` installed and on
+  PATH (`pip install -e ".[dev]"` in the crucible checkout), a git-clean
+  subject repo.
 
 ## Procedure
 
@@ -34,7 +35,7 @@ receipts shadow-priced and flagged `billing: max-plan`.
 2. Branch: `git checkout -b crucible/harden-<module-stem>-<YYYYMMDD>` (never
    reuse an existing branch).
 3. Scope + collection gate (free, no model calls):
-   `~/ai-agentic-code-testing/.venv/bin/crucible scope <repo> --module <M>`
+   `crucible scope <repo> --module <M>`
    -- exit 4 means stop and report the printed reason. Two passing shapes,
    both fine: `canary: KILLS (a -> b of N mutants)` (strict must-kill proof,
    zero-kill baselines) or `canary: WAIVED (existing suite kills K of N
@@ -59,7 +60,7 @@ receipts shadow-priced and flagged `billing: max-plan`.
    5's preflight hard-refuses a dirty tree outright -- receipts also bind
    to a commit sha, so the validated scope needs one to bind to.
 5. Run the loop on the Max plan:
-   `~/ai-agentic-code-testing/.venv/bin/crucible harden <repo> --module <M>
+   `crucible harden <repo> --module <M>
    --tester claude-cli --critic claude-cli --runs-dir ~/.crucible-runs/<repo-name>`
    The runs dir must live OUTSIDE the repo: receipts written inside the
    subject tree show up as untracked files and trip crucible's own add-only

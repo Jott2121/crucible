@@ -2,6 +2,7 @@ import pytest
 
 from crucible.guardrails import (
     GuardrailViolation,
+    _parse_failed_test_names,
     assert_add_only,
     extract_test_file,
     salvage_new_tests,
@@ -168,6 +169,23 @@ def test_add_only_allowed_file_does_not_short_circuit_later_lines():
     status = "?? tests/crucible_r1_loop_test.py\n M some_other_file.py\n"
     with pytest.raises(GuardrailViolation, match="add-only"):
         assert_add_only(status, ["tests/crucible_r1_loop_test.py"])
+
+
+# --- _parse_failed_test_names ---
+
+def test_parse_failed_test_names_strips_bracketed_param_id():
+    # "drop path::, keep func; strip param id": a parametrized failure line carries
+    # "[case_id]" after the function name, which must be stripped, not kept.
+    out = "FAILED tests/x.py::test_b[case1] - assert False\n1 failed"
+    assert _parse_failed_test_names(out) == {"test_b"}
+
+
+def test_parse_failed_test_names_uses_the_last_double_colon_segment():
+    # a class-scoped node id has TWO "::" segments after the path
+    # ("path::TestClass::test_method"); the function name is the LAST segment,
+    # not the first one after path::.
+    out = "FAILED tests/x.py::TestClass::test_method - assert False\n1 failed"
+    assert _parse_failed_test_names(out) == {"test_method"}
 
 
 # --- salvage_new_tests: per-test salvage (v3 amendment) ---
@@ -374,3 +392,112 @@ def test_salvage_raises_flaky_after_prune():
 
     with pytest.raises(GuardrailViolation, match="flaky"):
         salvage_new_tests("/subject", "tests/x.py", fake_run, fake_read, fake_write)
+
+
+# --- salvage_new_tests: exact-message tail slicing (mirrors validate_new_tests's
+# equivalent tests above -- each raise site truncates to the LAST 2000 chars, and a
+# sign flip ([+2000:]) or off-by-one ([-2001:]) must produce a distinguishably wrong
+# message on a >4000-char output). ---
+
+def test_salvage_flaky_message_shows_last_2000_chars_of_second_output():
+    long_output = "".join(f"{i:04d}" for i in range(1500))  # 6000 chars, see note above
+    expected_tail = long_output[-2000:]
+    results = [TestRunResult(True, 0, "ok"), TestRunResult(False, 1, long_output)]
+
+    def fake_run(cwd, test_paths=None, timeout=300):
+        return results.pop(0)
+
+    fake_read, fake_write = _no_read_write()
+    with pytest.raises(GuardrailViolation) as exc_info:
+        salvage_new_tests("/subject", "tests/x.py", fake_run, fake_read, fake_write)
+    assert str(exc_info.value) == f"flaky: passed once then failed\n{expected_tail}"
+
+
+def test_salvage_invalid_message_shows_last_2000_chars_when_no_failed_names_parsed():
+    # a long collection-error output with no parseable FAILED lines: nothing is
+    # droppable, so the whole file is rejected with an exact tail-sliced message.
+    long_output = "collection error: " + "".join(f"{i:04d}" for i in range(1500))
+    expected_tail = long_output[-2000:]
+
+    def fake_run(cwd, test_paths=None, timeout=300):
+        return TestRunResult(False, 1, long_output)
+
+    def fake_read(cwd, path):
+        raise AssertionError("must not read when no failed test names were found")
+
+    def fake_write(cwd, path, content):
+        raise AssertionError("must not write when no failed test names were found")
+
+    with pytest.raises(GuardrailViolation) as exc_info:
+        salvage_new_tests("/subject", "tests/x.py", fake_run, fake_read, fake_write)
+    assert str(exc_info.value) == f"invalid: fails on pristine code\n{expected_tail}"
+
+
+def test_salvage_invalid_message_after_prune_shows_last_2000_chars():
+    long_output = "".join(f"{i:04d}" for i in range(1500))
+    expected_tail = long_output[-2000:]
+    run_outputs = [
+        TestRunResult(False, 1, "FAILED tests/x.py::test_b\n1 failed, 1 passed"),
+        TestRunResult(False, 1, long_output),
+    ]
+
+    def fake_run(cwd, test_paths=None, timeout=300):
+        return run_outputs.pop(0)
+
+    def fake_read(cwd, path):
+        return SOURCE_TWO_TESTS_ONE_BAD
+
+    def fake_write(cwd, path, content):
+        pass
+
+    with pytest.raises(GuardrailViolation) as exc_info:
+        salvage_new_tests("/subject", "tests/x.py", fake_run, fake_read, fake_write)
+    assert str(exc_info.value) == f"invalid: pruned file still fails on pristine code\n{expected_tail}"
+
+
+def test_salvage_flaky_message_after_prune_shows_last_2000_chars():
+    long_output = "".join(f"{i:04d}" for i in range(1500))
+    expected_tail = long_output[-2000:]
+    run_outputs = [
+        TestRunResult(False, 1, "FAILED tests/x.py::test_b\n1 failed, 1 passed"),
+        TestRunResult(True, 0, "1 passed"),
+        TestRunResult(False, 1, long_output),
+    ]
+
+    def fake_run(cwd, test_paths=None, timeout=300):
+        return run_outputs.pop(0)
+
+    def fake_read(cwd, path):
+        return SOURCE_TWO_TESTS_ONE_BAD
+
+    def fake_write(cwd, path, content):
+        pass
+
+    with pytest.raises(GuardrailViolation) as exc_info:
+        salvage_new_tests("/subject", "tests/x.py", fake_run, fake_read, fake_write)
+    assert str(exc_info.value) == f"flaky: passed once then failed after salvage\n{expected_tail}"
+
+
+def test_salvage_final_flake_check_is_scoped_to_the_pruned_file():
+    # the post-prune flake check must pass the SAME scoped test_paths as every other
+    # call, not a dropped/None test_paths= kwarg (which silently defaults to running
+    # the whole cwd instead of just the pruned file).
+    run_outputs = [
+        TestRunResult(False, 1, "FAILED tests/x.py::test_b\n1 failed, 1 passed"),
+        TestRunResult(True, 0, "1 passed"),
+        TestRunResult(True, 0, "1 passed"),
+    ]
+    calls = []
+
+    def fake_run(cwd, test_paths=None, timeout=300):
+        calls.append(test_paths)
+        return run_outputs.pop(0)
+
+    def fake_read(cwd, path):
+        return SOURCE_TWO_TESTS_ONE_BAD
+
+    def fake_write(cwd, path, content):
+        pass
+
+    salvage_new_tests("/subject", "tests/x.py", fake_run, fake_read, fake_write)
+    assert calls == [["tests/x.py"], ["tests/x.py"], ["tests/x.py"]]
