@@ -52,4 +52,5 @@ def summarize(run: dict) -> dict:
         "billing": (lambda t, c: t if t == c else f"mixed:{t}+{c}")(
             run["meta"].get("tester_billing", "api"),
             run["meta"].get("critic_billing", "api")),
+        "lean_isolation": run["meta"].get("lean_isolation", "ambient"),
     }

@@ -280,3 +280,28 @@ def test_cli_meta_records_billing(tmp_path):
     meta = json.loads((run_dir / "meta.json").read_text())
     assert meta["tester_billing"] == "api"
     assert meta["critic_billing"] == "api"
+
+
+@pytest.mark.slow
+def test_cli_meta_records_lean_isolation(tmp_path):
+    # FakeProvider carries no isolation_name attribute ->
+    # getattr(tester, "isolation_name", "ambient") default must land in meta.json.
+    subject = tmp_path / "subject"
+    shutil.copytree(Path(__file__).parent / "fixtures" / "subject", subject)
+    for cmd in (["git", "init", "-q"], ["git", "add", "-A"],
+                ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "seed"]):
+        subprocess.run(cmd, cwd=subject, check=True)
+    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-e", str(subject)], check=True)
+
+    replies = tmp_path / "replies.json"
+    replies.write_text(json.dumps([GOOD_TESTS]))
+
+    from crucible.cli import main
+    rc = main(["oneshot", str(subject), "--module", "subject_pkg/calc.py",
+               "--tester", "fake", "--critic", "fake",
+               "--fake-replies", str(replies), "--runs-dir", str(tmp_path / "runs")])
+    assert rc == 0
+
+    run_dir = next((tmp_path / "runs").iterdir())
+    meta = json.loads((run_dir / "meta.json").read_text())
+    assert meta["lean_isolation"] == "ambient"   # fake has no isolation_name

@@ -82,6 +82,7 @@ def _cmd_run(args, mode):
         "tester_provider": args.tester, "critic_provider": args.critic,
         "tester_billing": getattr(tester, "billing", "api"),
         "critic_billing": getattr(critic, "billing", "api"),
+        "lean_isolation": getattr(tester, "isolation_name", "ambient"),
         "max_rounds": args.rounds, "dry_rounds": args.dry_rounds, "started_at": stamp,
         "crucible_version": crucible.__version__,
         "oracle_gate_version": importlib.metadata.version("oracle-gate"),
