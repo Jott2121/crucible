@@ -75,6 +75,15 @@ class FakeProvider(Provider):
     name = "fake"
     lineage = "fake"
     default_model = "fake-model"
+    # Fake runs are never metered API spend -- getattr(prov, 'billing', 'api')
+    # previously defaulted a fake provider to 'api', which cleared
+    # experiment.py's pre-registered-run billing gate (that gate exists to
+    # refuse anything but real metered spend BEFORE any run dir exists or a
+    # model is called) and let the run crash confusingly later on the first
+    # scripted-reply exhaustion instead of refusing up front with a clear
+    # message. billing='fake' is also the more honest label for meta.json:
+    # fake runs were never metered spend of any kind, not even shadow-priced.
+    billing = "fake"
 
     def __init__(self, replies):
         self.replies = list(replies)

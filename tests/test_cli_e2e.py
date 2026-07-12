@@ -258,8 +258,9 @@ def test_cli_run_preserves_rejected_test_file_under_run_dir(tmp_path):
 
 @pytest.mark.slow
 def test_cli_meta_records_billing(tmp_path):
-    # FakeProvider carries no billing attribute -> getattr(..., "billing", "api")
-    # default must land in meta.json for both roles.
+    # Finding #9: FakeProvider carries billing='fake' (never metered API
+    # spend, not even shadow-priced) -> that value, not the getattr(...,
+    # "api") default, must land in meta.json for both roles.
     subject = tmp_path / "subject"
     shutil.copytree(Path(__file__).parent / "fixtures" / "subject", subject)
     for cmd in (["git", "init", "-q"], ["git", "add", "-A"],
@@ -278,8 +279,8 @@ def test_cli_meta_records_billing(tmp_path):
 
     run_dir = next((tmp_path / "runs").iterdir())
     meta = json.loads((run_dir / "meta.json").read_text())
-    assert meta["tester_billing"] == "api"
-    assert meta["critic_billing"] == "api"
+    assert meta["tester_billing"] == "fake"
+    assert meta["critic_billing"] == "fake"
 
 
 @pytest.mark.slow
