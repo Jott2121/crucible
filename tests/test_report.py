@@ -65,6 +65,7 @@ def test_summarize_full_shape_and_values():
         "cost_usd": pytest.approx(6.0),
         "cost_per_kill": pytest.approx(3.0),
         "billing": "api",
+        "lean_isolation": "ambient",
     }
 
 
@@ -90,3 +91,11 @@ def test_summarize_billing_field_legacy_default_and_max_plan():
     mixed = dict(base, meta={"arm": "harden", "tester_billing": "api",
                               "critic_billing": "max-plan"})
     assert summarize(mixed)["billing"] == "mixed:api+max-plan"
+
+
+def test_summarize_surfaces_lean_isolation():
+    base = {"meta": {"arm": "harden"}, "rounds": [],
+            "result": {"verdict": "dry", "total_cost_usd": 0.0, "baseline_survivors": []}}
+    assert summarize(base)["lean_isolation"] == "ambient"
+    lean = dict(base, meta={"arm": "harden", "lean_isolation": "tools-off"})
+    assert summarize(lean)["lean_isolation"] == "tools-off"
