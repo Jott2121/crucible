@@ -210,6 +210,52 @@ def test_real_scope_cli_then_skill_commit_then_harden_completes(tmp_path):
     assert rc == 0
 
 
+ALL_WRONG_TESTS = """```python
+from subject_pkg.calc import acceptance_rate
+
+
+def test_wrong_oracle_a():
+    assert acceptance_rate(10, 5) == 0.99
+
+
+def test_wrong_oracle_b():
+    assert acceptance_rate(1, 1) == 0.5
+```"""
+
+
+@pytest.mark.slow
+def test_cli_run_preserves_rejected_test_file_under_run_dir(tmp_path):
+    """Gate-7 live defect 3: run_arm wires env.set_artifact_dir(run_dir) so a
+    rejected test file is preserved as evidence; _cmd_run never did, so the
+    first live run's rejected tester file was DELETED -- violating the
+    never-discarded posture (spec: a rejected test is never counted as a
+    kill, but never thrown away either). A fake tester whose tests all carry
+    wrong oracles forces a rejected round; the file must land under
+    <run_dir>/rejected/ and be gone from the subject clone."""
+    subject = tmp_path / "subject"
+    shutil.copytree(Path(__file__).parent / "fixtures" / "subject", subject)
+    for cmd in (["git", "init", "-q"], ["git", "add", "-A"],
+                ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "seed"]):
+        subprocess.run(cmd, cwd=subject, check=True)
+    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-e", str(subject)], check=True)
+
+    replies = tmp_path / "replies.json"
+    replies.write_text(json.dumps([ALL_WRONG_TESTS]))
+
+    from crucible.cli import main
+    rc = main(["oneshot", str(subject), "--module", "subject_pkg/calc.py",
+               "--tester", "fake", "--critic", "fake",
+               "--fake-replies", str(replies), "--runs-dir", str(tmp_path / "runs")])
+    assert rc == 3  # rejected round -> rejected verdict
+
+    run_dir = next((tmp_path / "runs").iterdir())
+    preserved = list((run_dir / "rejected").glob("*.py"))
+    assert preserved, "rejected test file must be preserved under <run_dir>/rejected/"
+    assert "test_wrong_oracle_a" in preserved[0].read_text()
+    # and it leaves no trace in the subject clone
+    assert not list((subject / "tests").glob("crucible_*_test.py"))
+
+
 @pytest.mark.slow
 def test_cli_meta_records_billing(tmp_path):
     # FakeProvider carries no billing attribute -> getattr(..., "billing", "api")

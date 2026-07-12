@@ -60,15 +60,20 @@ receipts shadow-priced and flagged `billing: max-plan`.
    to a commit sha, so the validated scope needs one to bind to.
 5. Run the loop on the Max plan:
    `~/ai-agentic-code-testing/.venv/bin/crucible harden <repo> --module <M>
-   --tester claude-cli --critic claude-cli --runs-dir <repo>/.crucible-runs`
+   --tester claude-cli --critic claude-cli --runs-dir ~/.crucible-runs/<repo-name>`
+   The runs dir must live OUTSIDE the repo: receipts written inside the
+   subject tree show up as untracked files and trip crucible's own add-only
+   guardrail mid-run (gate-7 live lesson; the CLI now refuses an inside-repo
+   runs-dir outright).
 6. Commit the accepted `tests/crucible_*_test.py` files to the local branch
    with a message naming kills and the receipt dir.
 7. Report, plain ASCII: verdict, kills/baseline survivors, rounds, dropped
    wrong-oracle tests, token totals, shadow cost with the `max-plan` flag
-   stated in words ("plan-covered, no metered spend"), receipt path.
-   `crucible report` prints `billing=` on every cost line (api / max-plan /
-   mixed:...); the underlying fields live in the run dir's `meta.json`
-   (`tester_billing`/`critic_billing`). Offer -- do not open -- a PR.
+   stated in words ("plan-covered, no metered spend"), receipt path (under
+   `~/.crucible-runs/<repo-name>/`). `crucible report` prints `billing=` on
+   every cost line (api / max-plan / mixed:...); the underlying fields live
+   in the run dir's `meta.json` (`tester_billing`/`critic_billing`).
+   Offer -- do not open -- a PR.
 
 ## Refusals
 

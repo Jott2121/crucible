@@ -84,7 +84,7 @@ class _FakeProc:
         self.returncode, self.stdout, self.stderr = returncode, stdout, stderr
 
 
-def _cli_envelope(text="pong", inp=12, out=5):
+def _cli_envelope(text="pong", inp=12, out=5, cache_creation=None, cache_read=None):
     # REALITY CHECK (2026-07-11 live probe, `claude -p --output-format json`):
     # the CLI emits a JSON ARRAY of stream events (system init, assistant
     # message, rate_limit_event, ...), not a single flat object. The brief's
@@ -92,13 +92,24 @@ def _cli_envelope(text="pong", inp=12, out=5):
     # prints -- confirmed with and without the operator's interactive zsh
     # `claude` function in the way (subprocess.run never sees that function
     # anyway). The event carrying the real fields is the last one, type=="result".
+    #
+    # Gate-7 reality upgrade: real result events carry cache_creation_input_tokens
+    # and cache_read_input_tokens alongside input_tokens -- the session preload
+    # rides the cache fields, so input_tokens alone can be tiny (in=4 for an
+    # out=11519 call on the first live run). Pass None to omit a field
+    # (forward-compat with envelopes that lack them).
+    usage = {"input_tokens": inp, "output_tokens": out}
+    if cache_creation is not None:
+        usage["cache_creation_input_tokens"] = cache_creation
+    if cache_read is not None:
+        usage["cache_read_input_tokens"] = cache_read
     return _json.dumps([
         {"type": "system", "subtype": "init", "session_id": "s"},
         {"type": "assistant", "message": {"content": [{"type": "text", "text": text}]}},
         {"type": "rate_limit_event", "rate_limit_info": {"status": "allowed"}},
         {
             "type": "result", "subtype": "success", "is_error": False,
-            "result": text, "usage": {"input_tokens": inp, "output_tokens": out},
+            "result": text, "usage": usage,
             "total_cost_usd": 0.0, "session_id": "s",
         },
     ])
@@ -110,18 +121,45 @@ def test_claude_cli_provider_parses_text_and_usage(monkeypatch):
 
     def fake_run(cmd, input=None, capture_output=True, text=True, timeout=None):
         calls["cmd"], calls["input"], calls["timeout"] = cmd, input, timeout
-        return _FakeProc(stdout=_cli_envelope("hello", 100, 42))
+        return _FakeProc(stdout=_cli_envelope("hello", 100, 42, cache_creation=7, cache_read=51))
 
     p = ClaudeCLIProvider(run=fake_run)
     reply, usage = p.complete_with_usage("SYS", "USER", model="claude-sonnet-5")
     assert reply == "hello"
-    assert usage == Usage(100, 42)
+    assert usage == Usage(100 + 7 + 51, 42)  # input = prompt + cache writes + cache reads
     assert calls["cmd"][0] == "claude" and "-p" in calls["cmd"]
     assert "--output-format" in calls["cmd"] and "json" in calls["cmd"]
     assert "claude-sonnet-5" in calls["cmd"]
     assert calls["input"] == "USER"          # user prompt via stdin, never argv
     assert "SYS" in calls["cmd"]             # system prompt via flag
     assert calls["timeout"] == ClaudeCLIProvider.request_timeout == 1200
+
+
+def test_claude_cli_provider_counts_cache_tokens_in_input():
+    """Gate-7 live defect 2: the result event's input_tokens EXCLUDES cache
+    tokens (the session preload rides cache_read/cache_creation), so the
+    first live receipt recorded in=4 for a call whose out=11519. Input must
+    be the sum input_tokens + cache_creation_input_tokens +
+    cache_read_input_tokens -- at standard API rates the shadow input cost
+    becomes an upper bound (cache reads are cheaper): conservative,
+    disclosed in the provider docstring."""
+    from crucible.providers_ext import ClaudeCLIProvider
+
+    p = ClaudeCLIProvider(run=lambda *a, **k: _FakeProc(
+        stdout=_cli_envelope("t", 4, 11519, cache_creation=5000, cache_read=30000)))
+    _, usage = p.complete_with_usage("s", "u")
+    assert usage == Usage(4 + 5000 + 30000, 11519)
+
+
+def test_claude_cli_provider_tolerates_envelope_without_cache_fields():
+    """Envelopes lacking the cache fields (older CLI versions / cache-free
+    calls) must still parse: absent fields count as 0."""
+    from crucible.providers_ext import ClaudeCLIProvider
+
+    p = ClaudeCLIProvider(run=lambda *a, **k: _FakeProc(
+        stdout=_cli_envelope("t", 12, 5)))
+    _, usage = p.complete_with_usage("s", "u")
+    assert usage == Usage(12, 5)
 
 
 def test_claude_cli_provider_error_paths(monkeypatch):

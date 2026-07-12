@@ -102,7 +102,17 @@ class ClaudeCLIProvider(Provider):
     `_extract_result` below unwraps that array and pulls the result event;
     a bare object is still accepted for forward-compatibility with CLI
     versions that might drop the wrapping. `--system-prompt` was accepted
-    without error by CLI 2.1.207, so it is the flag used here."""
+    without error by CLI 2.1.207, so it is the flag used here.
+
+    USAGE ACCOUNTING (gate-7 live fix): the result event's `input_tokens`
+    EXCLUDES cache tokens -- the CLI session preload rides
+    `cache_read_input_tokens`/`cache_creation_input_tokens`, so the first
+    live run recorded in=4 for a call whose out=11519. Input is therefore
+    counted as input_tokens + cache_creation_input_tokens +
+    cache_read_input_tokens. Shadow-pricing stance, stated honestly: cache
+    READS are cheaper than fresh input at real API rates, so pricing the
+    summed figure at standard rates makes the shadow input cost an UPPER
+    BOUND -- conservative and disclosed, never an undercount."""
 
     name = "claude-cli"
     lineage = "anthropic"
@@ -146,7 +156,12 @@ class ClaudeCLIProvider(Provider):
         if data.get("is_error"):
             raise RuntimeError(f"claude -p reported an error: {data.get('result', '')[:800]}")
         u = data.get("usage") or {}
-        usage = Usage(int(u.get("input_tokens") or 0), int(u.get("output_tokens") or 0))
+        # input = prompt + cache writes + cache reads (see class docstring:
+        # upper-bound-at-standard-rates shadow pricing, disclosed)
+        usage_in = (int(u.get("input_tokens") or 0)
+                    + int(u.get("cache_creation_input_tokens") or 0)
+                    + int(u.get("cache_read_input_tokens") or 0))
+        usage = Usage(usage_in, int(u.get("output_tokens") or 0))
         return data.get("result", ""), usage
 
 

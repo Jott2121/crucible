@@ -54,6 +54,29 @@ def test_cli_harden_missing_module_clean_error_nonzero_exit(tmp_path, capsys):
     assert "Traceback" not in out
 
 
+def test_cli_harden_refuses_runs_dir_inside_subject(tmp_path, capsys):
+    """Gate-7 live defect 1: a runs-dir inside the subject repo makes
+    crucible's own receipt writes (meta.json et al.) trip its own add-only
+    guardrail mid-run ('?? .crucible-runs/...meta.json'). _cmd_run must
+    refuse fail-loud BEFORE preflight or any model call: clean error naming
+    the failure, nonzero exit. Proof no work started: the subject is not
+    even a git repo (preflight would raise) and the fake provider has no
+    replies (any model call would raise) -- a clean rc-2 return means
+    neither was reached."""
+    from crucible import cli
+
+    (tmp_path / "mypkg").mkdir()
+    (tmp_path / "mypkg" / "mod.py").write_text("X = 1\n")
+    rc = cli.main(["harden", str(tmp_path), "--module", "mypkg/mod.py",
+                   "--tester", "fake", "--critic", "fake",
+                   "--runs-dir", str(tmp_path / ".crucible-runs")])
+    out = capsys.readouterr().out
+    assert rc == 2
+    assert "runs-dir" in out
+    assert "inside the subject" in out
+    assert "Traceback" not in out
+
+
 def test_cli_scope_help_states_honest_limitation(capsys):
     """Spec §6: the honest limitation ('heuristics target well-formed Python
     repos with pytest; a repo the gate cannot validate is refused, not
