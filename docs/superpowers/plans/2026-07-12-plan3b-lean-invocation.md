@@ -2,140 +2,44 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Cut the ~439,230 input tokens per hardened module (inherited session preload) by an order of magnitude by isolating the `claude -p` subprocess config, proven on an apples-to-apples re-harden of `rag_guard/guard.py`.
+**Goal:** Cut the input tokens per hardened module by an order of magnitude via `--tools ""` (which removes the built-in tool schemas AND collapses `claude -p`'s agent loop to one turn), proven on an apples-to-apples re-harden of `rag_guard/guard.py` that still kills its baseline survivors.
 
-**Architecture:** A new `src/crucible/lean.py` holds a `LeanProfile` (isolation intent as a simple interface) whose `build()` turns intent into the concrete `(argv, env, cwd)` triple — a deep-module seam that hides the CLI-flag mechanics. `ClaudeCLIProvider` gains an optional `lean_profile`, defaulting to the probe-chosen rung, with a `CRUCIBLE_LEAN=0` escape hatch and one bounded auth-class fallback. `meta.json` records the isolation rung. `loop.py`, `guardrails.py`, `RoundRecord`, and `receipt.jsonl` are untouched.
+**Architecture:** A new `src/crucible/lean.py` holds a `LeanProfile` (isolation intent as a simple interface) whose `build()` turns intent into `(argv, cwd)` — a deep-module seam hiding the CLI-flag mechanics. `ClaudeCLIProvider` gains an optional `lean_profile`, defaulting to the lean rung, with a `CRUCIBLE_LEAN=0` escape hatch. `meta.json` records the rung. `loop.py`, `guardrails.py`, `RoundRecord`, and `receipt.jsonl` are untouched.
 
-**Tech Stack:** Python 3.11+ stdlib only (subprocess); pytest; Claude Code headless (`claude -p`).
+**Tech Stack:** Python 3.11+ stdlib only (subprocess); pytest; Claude Code headless (`claude -p`, CLI 2.1.207).
 
-**Spec:** `docs/superpowers/specs/2026-07-12-plan3b-lean-invocation-design.md`
+**Spec:** `docs/superpowers/specs/2026-07-12-plan3b-lean-invocation-design.md` (read the 2026-07-12 AMENDMENT — it is the authority; sections 3-6 are superseded).
 
 ## Global Constraints
 
-- **Base branch: `feat/lean-invocation` off `28c58fc`** (the gate-7-fixed state, which sums cache tokens in `providers_ext.py`). NOT `f6d058b` — that squash predates the gate-7 fixes and would reintroduce the cache-token undercount, making the whole measurement meaningless.
+- **Base branch: `feat/lean-invocation` off `28c58fc`** (gate-7 cache-token summing). NOT `f6d058b`.
 - Stdlib only; no new pip dependencies.
-- TDD every code task; full suite green under `.venv/bin/python -m pytest -q -W error` at every commit (`timeout` is absent on this macOS shell — do not wrap pytest in it).
-- **No paid or Max-billed model call in any test (fakes only).** The ONLY sanctioned live calls are Task 1's isolation probe and Task 6's proof run.
+- TDD every code task; full suite green under `.venv/bin/python -m pytest -q -W error` at every commit (no `timeout` wrapper — absent on this shell).
+- **No paid or Max-billed model call in any test (fakes only).** The only sanctioned live calls are Task 1 (done) and Task 5 (proof run).
 - `loop.py`, `guardrails.py` untouched. `experiments/` frozen. `RoundRecord`/`receipt.jsonl` schema unchanged — one new `meta.json` field with a legacy-safe default (`"ambient"`).
-- **PROBE-VALIDATED tokens:** the exact CLI flag tokens in `LeanProfile.build()` and the chosen default/fallback rungs are pinned by Task 1's probe table — the probe is the source of truth. The code below uses candidate tokens (`--strict-mcp-config`, `--setting-sources`, `CLAUDE_CONFIG_DIR`); if Task 1 shows a token differs or a rung fails auth, adjust `build()`, the profile constants, and their tests to match, and note the change in the commit.
+- **The flags are probe-validated (Task 1):** `--tools ""` (disable all built-in tools) is the primary lever; `--setting-sources ""` and `--strict-mcp-config` are cheap add-ons. `CLAUDE_CONFIG_DIR` is NOT used (dropped). No retry/fallback machinery (the auth instability was a harness artifact, retracted).
 - Comments state constraints, not narration. Plain-ASCII CLI output.
 - Commit messages: conventional, one task's files per commit, `git add` specific paths only.
 
 ---
 
-### Task 1: Isolation probe (the spike — mechanism-check before any code)
+### Task 1: Isolation probe — DONE (2026-07-12, commits 090706d / b656065)
 
-**Files:**
-- Create: `scripts/isolation_probe.py` (throwaway-grade; NOT imported by the package)
-- Create: `docs/superpowers/PROBE-RESULTS-3b.md` (the recorded rung table + decision)
+Recorded in `docs/superpowers/PROBE-RESULTS-3b.md`. Outcome that drives Tasks 2-5:
 
-**Interfaces:**
-- Consumes: the `claude` CLI on PATH (logged in to Max).
-- Produces: a printed rung table `(rung -> auth_ok, completion_ok, input_tokens)` and a recorded DECISION: the chosen **default** rung (lowest input tokens with `auth_ok`), the **fallback** rung (safest `auth_ok` rung), and the exact argv/env each uses. These feed Tasks 2-5. No package code depends on this script.
-
-- [ ] **Step 1: Ground the flag names (do not trust memory).** Run and read:
-
-```bash
-claude --help 2>&1 | grep -iE "mcp|setting|config|system-prompt" || claude --help 2>&1 | head -60
+```
+baseline (no flags):        num_turns=4   in=119,229   out=10,371   valid test
+lean (--tools "" et al.):   num_turns=1   in=  1,593   out= 6,172   valid test   => ~75x
 ```
 
-Record in `docs/superpowers/PROBE-RESULTS-3b.md` which of these actually exist in this CLI version: `--strict-mcp-config`, `--mcp-config`, `--setting-sources`, `--settings`, and whether `CLAUDE_CONFIG_DIR` is documented. If a candidate flag is absent, substitute the real one the help text shows before Step 3.
-
-- [ ] **Step 2: Write `scripts/isolation_probe.py`:**
-
-```python
-#!/usr/bin/env python3
-"""Isolation probe (Plan 3b.1 Task 1, mechanism-check). Measures input-token
-cost and auth survival of `claude -p` under escalating config isolation.
-Throwaway grade: run it, read the table, record the winning rung in
-docs/superpowers/PROBE-RESULTS-3b.md. Not imported by the package. $0 metered
-(Max plan); a handful of trivial calls."""
-import json
-import os
-import subprocess
-import tempfile
-
-MODEL = "claude-sonnet-5"
-SYSTEM = "You are a probe. Reply with exactly: OK"
-USER = "Reply with exactly: OK"
-
-AUTH_MARKERS = ("login", "unauthor", "authenticat", "not logged in", "invalid api key")
-
-
-def _run(extra_argv, env_overrides, cwd):
-    cmd = ["claude", "-p", "--output-format", "json", "--model", MODEL,
-           "--system-prompt", SYSTEM] + extra_argv
-    env = dict(os.environ)
-    env.update(env_overrides)
-    try:
-        proc = subprocess.run(cmd, input=USER, capture_output=True, text=True,
-                              timeout=300, env=env, cwd=cwd)
-    except Exception as exc:  # missing binary, timeout
-        return {"auth_ok": False, "done": False, "input": None, "note": repr(exc)[:70]}
-    if proc.returncode != 0:
-        tail = (proc.stderr or "")[-300:]
-        is_auth = any(m in tail.lower() for m in AUTH_MARKERS)
-        return {"auth_ok": not is_auth, "done": False, "input": None,
-                "note": ("AUTH-FAIL " if is_auth else "") + tail[:60]}
-    try:
-        parsed = json.loads(proc.stdout)
-        events = parsed if isinstance(parsed, list) else [parsed]
-        event = next(e for e in events if isinstance(e, dict) and e.get("type") == "result")
-    except Exception as exc:
-        return {"auth_ok": True, "done": False, "input": None, "note": f"parse: {exc}"[:60]}
-    u = event.get("usage") or {}
-    tot_in = sum(int(u.get(k) or 0) for k in
-                 ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"))
-    return {"auth_ok": not event.get("is_error"),
-            "done": "OK" in (event.get("result") or ""),
-            "input": tot_in, "note": ""}
-
-
-def main():
-    neutral = tempfile.mkdtemp(prefix="probe-cwd-")
-    mincfg = tempfile.mkdtemp(prefix="probe-cfg-")  # empty; learn if auth survives
-    mcp_off = ["--strict-mcp-config"]               # candidate: drops all MCP servers
-    no_settings = mcp_off + ["--setting-sources", ""]  # candidate: drop skills/settings
-    rungs = [
-        ("0 baseline",       [],          {},                              None),
-        ("1 strict-mcp",     mcp_off,     {},                              None),
-        ("2 +neutral-cwd",   mcp_off,     {},                              neutral),
-        ("3 +no-settings",   no_settings, {},                              neutral),
-        ("4 +isolated-cfg",  no_settings, {"CLAUDE_CONFIG_DIR": mincfg},   neutral),
-    ]
-    print(f"{'rung':18} {'auth':6} {'done':6} {'input_tokens':>13}  note")
-    print("-" * 70)
-    for name, argv, env, cwd in rungs:
-        r = _run(argv, env, cwd)
-        print(f"{name:18} {str(r['auth_ok']):6} {str(r['done']):6} "
-              f"{str(r['input']):>13}  {r['note']}")
-
-
-if __name__ == "__main__":
-    main()
-```
-
-- [ ] **Step 3: Run the probe and record the table.**
-
-Run: `.venv/bin/python scripts/isolation_probe.py`
-Expected: rung 0 shows a large `input_tokens` (the ~439k-class preload); higher rungs drop it. Paste the full table into `docs/superpowers/PROBE-RESULTS-3b.md`.
-
-- [ ] **Step 4: Record the DECISION in `docs/superpowers/PROBE-RESULTS-3b.md`.** State explicitly:
-  - **DEFAULT rung** = the lowest `input_tokens` rung with `auth_ok` AND `done` true, plus its exact argv/env.
-  - **FALLBACK rung** = the safest (least aggressive) rung with `auth_ok` true — used when the default hits an auth error at runtime.
-  - Whether rung 4 (`CLAUDE_CONFIG_DIR`) authenticated; if not, DEFAULT falls to rung 3 and the ephemeral-config-dir helper in Task 2 is dropped (YAGNI).
-  - The **auth-error signature** (exit code + stderr markers) that Task 4's `_is_auth_error` will match.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add scripts/isolation_probe.py docs/superpowers/PROBE-RESULTS-3b.md
-git commit -m "spike: isolation probe + measured rung table (Task 1, mechanism-check)"
-```
+- **DEFAULT lean profile** = `--tools ""  --setting-sources ""  --strict-mcp-config`, no cwd override, no `CLAUDE_CONFIG_DIR`.
+- `--tools ""` removes built-in tool schemas (the ~20k bulk) AND collapses the agent to 1 turn.
+- No auth-class fallback needed (the "Not logged in" failures were a bash-harness artifact, not real).
+- `scripts/isolation_probe.py` and `scripts/measure_tester.py` are the throwaway probes; leave them in `scripts/` as evidence, not imported by the package.
 
 ---
 
-### Task 2: LeanProfile + build() factory (the deep-module seam)
+### Task 2: LeanProfile + build() (the deep-module seam)
 
 **Files:**
 - Create: `src/crucible/lean.py`
@@ -144,117 +48,85 @@ git commit -m "spike: isolation probe + measured rung table (Task 1, mechanism-c
 **Interfaces:**
 - Consumes: nothing (pure stdlib).
 - Produces:
-  - `LeanProfile` frozen dataclass: `strict_mcp: bool = False`, `setting_sources: str | None = None`, `config_dir: Path | None = None`, `cwd: Path | None = None`, `name: str = "ambient"`.
-  - `LeanProfile.build() -> tuple[list[str], dict[str, str], str | None]` returning `(argv_extension, env_overrides, cwd_or_None)`.
-  - Module constants set from Task 1's decision: `AMBIENT` (all defaults), `DEFAULT_PROFILE` (the chosen rung), `FALLBACK_PROFILE` (the safest auth-ok rung).
-  - `make_min_config_dir() -> str` — creates an ephemeral minimal config dir and returns its path (ONLY if Task 1 showed the config-dir rung authenticates; otherwise omit this function and skip its test).
+  - `LeanProfile` frozen dataclass: `tools: str | None = None`, `setting_sources: str | None = None`, `strict_mcp: bool = False`, `cwd: Path | None = None`, `name: str = "ambient"`.
+  - `LeanProfile.build() -> tuple[list[str], str | None]` returning `(argv_extension, cwd_or_None)`.
+  - Constants: `AMBIENT = LeanProfile(name="ambient")` and `DEFAULT_LEAN = LeanProfile(tools="", setting_sources="", strict_mcp=True, name="tools-off")`.
 
-- [ ] **Step 1: Write the failing tests** (`tests/test_lean.py`, new file). Use the exact argv tokens Task 1 validated:
+- [ ] **Step 1: Write the failing tests** (`tests/test_lean.py`, new):
 
 ```python
 from pathlib import Path
 
-from crucible.lean import AMBIENT, LeanProfile
+from crucible.lean import AMBIENT, DEFAULT_LEAN, LeanProfile
 
 
-def test_ambient_profile_adds_nothing():
-    argv, env, cwd = AMBIENT.build()
-    assert argv == [] and env == {} and cwd is None
-    assert AMBIENT.name == "ambient"
+def test_ambient_adds_nothing():
+    argv, cwd = AMBIENT.build()
+    assert argv == [] and cwd is None and AMBIENT.name == "ambient"
 
 
-def test_strict_mcp_adds_flag():
-    argv, env, cwd = LeanProfile(strict_mcp=True, name="strict-mcp").build()
-    assert "--strict-mcp-config" in argv
-    assert env == {} and cwd is None
+def test_default_lean_disables_tools_and_settings():
+    argv, cwd = DEFAULT_LEAN.build()
+    # --tools "" is the primary lever; order: tools, strict-mcp, setting-sources
+    assert argv == ["--tools", "", "--strict-mcp-config", "--setting-sources", ""]
+    assert cwd is None and DEFAULT_LEAN.name == "tools-off"
 
 
-def test_setting_sources_and_cwd():
-    p = LeanProfile(strict_mcp=True, setting_sources="", cwd=Path("/tmp/x"), name="r3")
-    argv, env, cwd = p.build()
-    assert argv == ["--strict-mcp-config", "--setting-sources", ""]
+def test_tools_empty_string_is_emitted_not_skipped():
+    # "" is a real value (disable all tools); None means "don't pass the flag"
+    argv, _ = LeanProfile(tools="").build()
+    assert argv == ["--tools", ""]
+    argv2, _ = LeanProfile(tools=None).build()
+    assert "--tools" not in argv2
+
+
+def test_cwd_passthrough():
+    _, cwd = LeanProfile(cwd=Path("/tmp/x")).build()
     assert cwd == "/tmp/x"
-
-
-def test_config_dir_becomes_env_override():
-    p = LeanProfile(strict_mcp=True, config_dir=Path("/tmp/cfg"), name="r4")
-    argv, env, cwd = p.build()
-    assert env == {"CLAUDE_CONFIG_DIR": "/tmp/cfg"}
 ```
 
 - [ ] **Step 2: Run to verify failure** — `.venv/bin/python -m pytest -q tests/test_lean.py -v`. Expected: `ModuleNotFoundError: crucible.lean`.
 
-- [ ] **Step 3: Implement `src/crucible/lean.py`** (adjust the token strings and the three profile constants to Task 1's validated decision):
+- [ ] **Step 3: Implement `src/crucible/lean.py`:**
 
 ```python
 """Isolation intent for a claude -p subprocess, expressed as a simple interface
-over hidden CLI-flag mechanics (deep-module seam). A claude -p call inherits the
-operator's whole ~/.claude by default -- MCP tool schemas, skills, CLAUDE.md --
-which is pure overhead for a call that only writes a test file (~439k input
-tokens per module, gate-7 receipt). A LeanProfile strips that: build() turns
-four plain questions into the (argv, env, cwd) the provider passes to the
-subprocess. Rungs and tokens are validated by scripts/isolation_probe.py;
-docs/superpowers/PROBE-RESULTS-3b.md is the source of truth."""
+over hidden CLI-flag mechanics (deep-module seam). A default claude -p call is an
+AGENT: it inherits the built-in tool schemas (~20k tokens) and runs multiple
+internal turns, each re-reading that cached context -- ~439k across a harden.
+`--tools ""` removes the tool schemas AND collapses the loop to one turn (Task 1:
+119,229 -> 1,593 on the tester call, ~75x). --setting-sources ""/--strict-mcp-config
+are cheap add-ons. Tokens validated by scripts/measure_tester.py; see
+docs/superpowers/PROBE-RESULTS-3b.md."""
 from __future__ import annotations
 
-import os
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
 
 @dataclass(frozen=True)
 class LeanProfile:
+    tools: str | None = None            # "" disables ALL built-in tools (primary lever)
+    setting_sources: str | None = None  # "" loads no setting sources (skills, CLAUDE.md)
     strict_mcp: bool = False
-    setting_sources: str | None = None
-    config_dir: Path | None = None
     cwd: Path | None = None
     name: str = "ambient"
 
-    def build(self) -> tuple[list[str], dict[str, str], str | None]:
+    def build(self) -> tuple[list[str], str | None]:
         argv: list[str] = []
+        if self.tools is not None:
+            argv += ["--tools", self.tools]
         if self.strict_mcp:
-            argv.append("--strict-mcp-config")           # PROBE-VALIDATED token
+            argv.append("--strict-mcp-config")
         if self.setting_sources is not None:
             argv += ["--setting-sources", self.setting_sources]
-        env: dict[str, str] = {}
-        if self.config_dir is not None:
-            env["CLAUDE_CONFIG_DIR"] = str(self.config_dir)
         cwd = str(self.cwd) if self.cwd is not None else None
-        return argv, env, cwd
+        return argv, cwd
 
 
-# Constants set from Task 1's decision. Example shown assumes the config-dir rung
-# authenticates (floor). If it did not, set DEFAULT_PROFILE to the rung-3 shape
-# and drop make_min_config_dir + its test.
 AMBIENT = LeanProfile(name="ambient")
-FALLBACK_PROFILE = LeanProfile(strict_mcp=True, cwd=None, name="strict-mcp")
-
-
-def make_min_config_dir() -> str:
-    """Ephemeral minimal CLAUDE_CONFIG_DIR: only what Task 1 proved auth needs
-    (e.g. a copied 0600 credentials file), no MCP, no skills, no CLAUDE.md.
-    Cleaned up by the caller. Omit entirely if the config-dir rung failed auth."""
-    d = tempfile.mkdtemp(prefix="crucible-leancfg-")
-    # If Task 1 showed auth needs a credential file present, copy ONLY that file
-    # here (path recorded in PROBE-RESULTS-3b.md). If auth is keychain-borne, the
-    # empty dir is sufficient.
-    return d
-
-
-def default_profile() -> LeanProfile:
-    """The chosen default rung, built fresh so cwd/config_dir are per-call temp
-    dirs. Shape per Task 1's decision."""
-    return LeanProfile(
-        strict_mcp=True,
-        setting_sources="",
-        cwd=tempfile.mkdtemp(prefix="crucible-leancwd-"),
-        config_dir=Path(make_min_config_dir()),
-        name="isolated-cfg",
-    )
+DEFAULT_LEAN = LeanProfile(tools="", setting_sources="", strict_mcp=True, name="tools-off")
 ```
-
-Note: `default_profile()` is a function (not a constant) because it mints fresh temp dirs per call. `os` is imported for Task 3's escape-hatch read; keep it.
 
 - [ ] **Step 4: Run** `tests/test_lean.py` then the full suite. Expected: all pass.
 
@@ -262,7 +134,7 @@ Note: `default_profile()` is a function (not a constant) because it mints fresh 
 
 ```bash
 git add src/crucible/lean.py tests/test_lean.py
-git commit -m "feat: LeanProfile — isolation intent behind a build() seam (rungs per Task 1 probe)"
+git commit -m "feat: LeanProfile — --tools '' isolation intent behind a build() seam (Task 1 lever)"
 ```
 
 ---
@@ -271,76 +143,77 @@ git commit -m "feat: LeanProfile — isolation intent behind a build() seam (run
 
 **Files:**
 - Modify: `src/crucible/providers_ext.py` (`ClaudeCLIProvider.__init__` and `complete_with_usage`)
-- Test: `tests/test_providers_ext.py` (append)
+- Test: `tests/test_providers_ext.py` (append; update existing fakes' signatures)
 
 **Interfaces:**
-- Consumes: `crucible.lean.{AMBIENT, default_profile}` (Task 2).
-- Produces: `ClaudeCLIProvider(run=..., lean_profile=None)`. When `lean_profile is None`, the provider resolves it: `AMBIENT` if `os.environ.get("CRUCIBLE_LEAN") == "0"`, else `default_profile()`. `complete_with_usage` merges the profile's `build()` output into the subprocess: `cmd = [base...] + argv`, `env = {**os.environ, **env_overrides}` passed as `env=`, and `cwd=` set. The provider exposes `self.isolation_name` (the configured profile's `name`) and `self.served_isolation` (updated per call; == `isolation_name` unless Task 4's fallback fires).
+- Consumes: `crucible.lean.{AMBIENT, DEFAULT_LEAN}` (Task 2).
+- Produces: `ClaudeCLIProvider(run=..., lean_profile=None)`. When `lean_profile is None`: `AMBIENT` if `os.environ.get("CRUCIBLE_LEAN") == "0"`, else `DEFAULT_LEAN`. `complete_with_usage` appends `build()`'s argv to the base command and passes `cwd=`. Exposes `self.isolation_name` (the profile's `name`). Cache-token summing (gate-7) is preserved.
 
-- [ ] **Step 1: Write the failing tests** (append to `tests/test_providers_ext.py`):
+- [ ] **Step 1: Write the failing tests** (append to `tests/test_providers_ext.py`; add `import os` if absent):
 
 ```python
-def test_claude_cli_applies_lean_profile_argv_env_cwd(monkeypatch):
+def test_claude_cli_applies_lean_argv_and_cwd():
     from crucible.lean import LeanProfile
     from crucible.providers_ext import ClaudeCLIProvider
     calls = {}
 
-    def fake_run(cmd, input=None, capture_output=True, text=True, timeout=None, env=None, cwd=None):
-        calls["cmd"], calls["env"], calls["cwd"] = cmd, env, cwd
-        return _FakeProc(stdout=_cli_envelope("hi", 10, 2))
-
-    prof = LeanProfile(strict_mcp=True, config_dir=Path("/tmp/cfg"), cwd=Path("/tmp/cwd"),
-                       name="r4")
-    p = ClaudeCLIProvider(run=fake_run, lean_profile=prof)
-    p.complete_with_usage("SYS", "USER", model="claude-sonnet-5")
-    assert "--strict-mcp-config" in calls["cmd"]
-    assert calls["cwd"] == "/tmp/cwd"
-    assert calls["env"]["CLAUDE_CONFIG_DIR"] == "/tmp/cfg"
-    assert calls["env"]["PATH"] == os.environ["PATH"]   # ambient env preserved, then overridden
-    assert p.isolation_name == "r4" and p.served_isolation == "r4"
-
-
-def test_claude_cli_escape_hatch_forces_ambient(monkeypatch):
-    from crucible.providers_ext import ClaudeCLIProvider
-    monkeypatch.setenv("CRUCIBLE_LEAN", "0")
-    calls = {}
-
-    def fake_run(cmd, input=None, capture_output=True, text=True, timeout=None, env=None, cwd=None):
+    def fake_run(cmd, input=None, capture_output=True, text=True, timeout=None, cwd=None):
         calls["cmd"], calls["cwd"] = cmd, cwd
         return _FakeProc(stdout=_cli_envelope("hi", 10, 2))
 
-    p = ClaudeCLIProvider(run=fake_run)   # no profile -> resolves from env
-    p.complete_with_usage("SYS", "USER")
-    assert "--strict-mcp-config" not in calls["cmd"]
+    prof = LeanProfile(tools="", strict_mcp=True, name="tools-off")
+    p = ClaudeCLIProvider(run=fake_run, lean_profile=prof)
+    p.complete_with_usage("SYS", "USER", model="claude-sonnet-5")
+    assert "--tools" in calls["cmd"] and "--strict-mcp-config" in calls["cmd"]
+    assert calls["cmd"][calls["cmd"].index("--tools") + 1] == ""   # disable all tools
     assert calls["cwd"] is None
-    assert p.isolation_name == "ambient"
+    assert p.isolation_name == "tools-off"
+
+
+def test_claude_cli_defaults_to_lean_and_escape_hatch(monkeypatch):
+    from crucible.providers_ext import ClaudeCLIProvider
+    seen = {}
+
+    def fake_run(cmd, input=None, capture_output=True, text=True, timeout=None, cwd=None):
+        seen["cmd"] = cmd
+        return _FakeProc(stdout=_cli_envelope("hi", 10, 2))
+
+    # default (no profile, no env) -> lean
+    monkeypatch.delenv("CRUCIBLE_LEAN", raising=False)
+    p = ClaudeCLIProvider(run=fake_run)
+    p.complete_with_usage("S", "U")
+    assert "--tools" in seen["cmd"] and p.isolation_name == "tools-off"
+
+    # escape hatch -> ambient
+    monkeypatch.setenv("CRUCIBLE_LEAN", "0")
+    p2 = ClaudeCLIProvider(run=fake_run)
+    p2.complete_with_usage("S", "U")
+    assert "--tools" not in seen["cmd"] and p2.isolation_name == "ambient"
 ```
 
-Add `import os` and `from pathlib import Path` to the test file's imports if absent.
+Update the EXISTING `fake_run` in `test_claude_cli_provider_parses_text_and_usage` (and any other `ClaudeCLIProvider` fake in the file) to accept `cwd=None` in its signature, so the new `cwd=` argument at the call site does not break it.
 
-- [ ] **Step 2: Run to verify failure** — `.venv/bin/python -m pytest -q tests/test_providers_ext.py -k "lean_profile or escape_hatch" -v`. Expected: FAIL (`__init__` takes no `lean_profile`; `env`/`cwd` not passed).
+- [ ] **Step 2: Run to verify failure** — `.venv/bin/python -m pytest -q tests/test_providers_ext.py -k "lean or escape or parses_text" -v`. Expected: FAIL (`__init__` takes no `lean_profile`; `cwd` not passed).
 
-- [ ] **Step 3: Implement.** In `providers_ext.py`, add `import os` at top; extend `ClaudeCLIProvider`:
+- [ ] **Step 3: Implement.** In `providers_ext.py` add `import os` at top; change `ClaudeCLIProvider`:
 
 ```python
     def __init__(self, run=subprocess.run, lean_profile=None):
         self._run = run
         if lean_profile is None:
-            from crucible.lean import AMBIENT, default_profile
-            lean_profile = AMBIENT if os.environ.get("CRUCIBLE_LEAN") == "0" else default_profile()
+            from crucible.lean import AMBIENT, DEFAULT_LEAN
+            lean_profile = AMBIENT if os.environ.get("CRUCIBLE_LEAN") == "0" else DEFAULT_LEAN
         self._profile = lean_profile
         self.isolation_name = lean_profile.name
-        self.served_isolation = lean_profile.name
 
     def complete_with_usage(self, system, user, model=None):
         model = model or self.default_model
-        argv, env_overrides, cwd = self._profile.build()
+        argv, cwd = self._profile.build()
         cmd = ["claude", "-p", "--output-format", "json",
                "--model", model, "--system-prompt", system] + argv
-        env = {**os.environ, **env_overrides} if env_overrides else None
         try:
             proc = self._run(cmd, input=user, capture_output=True, text=True,
-                             timeout=self.request_timeout, env=env, cwd=cwd)
+                             timeout=self.request_timeout, cwd=cwd)
         except FileNotFoundError as exc:
             raise RuntimeError(
                 "claude CLI not found on PATH; install Claude Code or use an API provider"
@@ -358,7 +231,7 @@ Add `import os` and `from pathlib import Path` to the test file's imports if abs
         return data.get("result", ""), Usage(usage_in, int(u.get("output_tokens") or 0))
 ```
 
-Note: the existing test `test_claude_cli_provider_parses_text_and_usage` passes `fake_run` WITHOUT `env`/`cwd` params — update that fake's signature to accept `env=None, cwd=None` (and any other `ClaudeCLIProvider` fake in the file) so the new call site does not break it.
+Update the class docstring's opening to note the lean-by-default behavior and the `CRUCIBLE_LEAN=0` escape hatch (keep the existing envelope/usage notes).
 
 - [ ] **Step 4: Run** the provider tests then the full suite `.venv/bin/python -m pytest -q -W error`. Expected: all pass.
 
@@ -366,135 +239,34 @@ Note: the existing test `test_claude_cli_provider_parses_text_and_usage` passes 
 
 ```bash
 git add src/crucible/providers_ext.py tests/test_providers_ext.py
-git commit -m "feat: ClaudeCLIProvider applies LeanProfile (argv/env/cwd) + CRUCIBLE_LEAN=0 escape hatch"
+git commit -m "feat: ClaudeCLIProvider lean-by-default (--tools '') + CRUCIBLE_LEAN=0 escape hatch"
 ```
 
 ---
 
-### Task 4: Bounded auth-class fallback
+### Task 4: Record the isolation rung in meta.json + report
 
 **Files:**
-- Modify: `src/crucible/providers_ext.py` (`_is_auth_error` helper + one retry in `complete_with_usage`)
-- Test: `tests/test_providers_ext.py` (append)
-
-**Interfaces:**
-- Consumes: `crucible.lean.FALLBACK_PROFILE` (Task 2).
-- Produces: on an auth-class failure (exit code + stderr markers per Task 1's recorded signature), when the current profile is not already the fallback, `complete_with_usage` retries EXACTLY ONCE with `FALLBACK_PROFILE`, sets `self.served_isolation = FALLBACK_PROFILE.name`, and prints one loud line. A non-auth error still fails loud. Auth failure even at the fallback fails loud with an actionable message.
-
-- [ ] **Step 1: Write the failing tests** (append):
-
-```python
-def test_claude_cli_auth_fallback_retries_once_and_records(capsys):
-    from crucible.lean import LeanProfile
-    from crucible.providers_ext import ClaudeCLIProvider
-    seq = iter([
-        _FakeProc(returncode=1, stderr="Error: not logged in (run `claude login`)"),  # floor: auth-fail
-        _FakeProc(stdout=_cli_envelope("hi", 10, 2)),                                  # fallback: ok
-    ])
-
-    def fake_run(cmd, input=None, capture_output=True, text=True, timeout=None, env=None, cwd=None):
-        return next(seq)
-
-    floor = LeanProfile(strict_mcp=True, config_dir=Path("/tmp/cfg"), name="isolated-cfg")
-    p = ClaudeCLIProvider(run=fake_run, lean_profile=floor)
-    reply, usage = p.complete_with_usage("SYS", "USER")
-    assert reply == "hi"
-    assert p.served_isolation == "strict-mcp"   # FALLBACK_PROFILE.name
-    assert "fallback" in capsys.readouterr().out.lower()
-
-
-def test_claude_cli_auth_fail_even_at_fallback_raises(capsys):
-    from crucible.lean import FALLBACK_PROFILE
-    from crucible.providers_ext import ClaudeCLIProvider
-
-    def fake_run(cmd, input=None, capture_output=True, text=True, timeout=None, env=None, cwd=None):
-        return _FakeProc(returncode=1, stderr="not logged in")
-
-    p = ClaudeCLIProvider(run=fake_run, lean_profile=FALLBACK_PROFILE)
-    with pytest.raises(RuntimeError, match="CRUCIBLE_LEAN=0"):
-        p.complete_with_usage("SYS", "USER")
-
-
-def test_claude_cli_non_auth_error_still_fails_loud():
-    from crucible.lean import LeanProfile
-    from crucible.providers_ext import ClaudeCLIProvider
-
-    def fake_run(cmd, input=None, capture_output=True, text=True, timeout=None, env=None, cwd=None):
-        return _FakeProc(returncode=1, stderr="segfault in model runtime")
-
-    p = ClaudeCLIProvider(run=fake_run, lean_profile=LeanProfile(name="isolated-cfg"))
-    with pytest.raises(RuntimeError, match="segfault"):
-        p.complete_with_usage("SYS", "USER")
-```
-
-- [ ] **Step 2: Run to verify failure** — the floor auth-fail currently raises instead of retrying.
-
-- [ ] **Step 3: Implement.** Add the helper and refactor the call. Add near the top of `providers_ext.py`:
-
-```python
-# Auth-class failure signature (Task 1 probe, docs/superpowers/PROBE-RESULTS-3b.md).
-_AUTH_MARKERS = ("not logged in", "login", "unauthor", "authenticat", "invalid api key")
-
-
-def _is_auth_error(returncode: int, stderr: str) -> bool:
-    return returncode != 0 and any(m in (stderr or "").lower() for m in _AUTH_MARKERS)
-```
-
-Refactor `complete_with_usage` so the subprocess call + parse live in a private `_one_call(system, user, model, profile)` returning `(text, Usage)` and raising on non-zero/malformed (the Task 3 body, minus the profile-resolution). Then:
-
-```python
-    def complete_with_usage(self, system, user, model=None):
-        from crucible.lean import FALLBACK_PROFILE
-        try:
-            return self._one_call(system, user, model, self._profile)
-        except _AuthError as exc:
-            if self._profile.name == FALLBACK_PROFILE.name:
-                raise RuntimeError(
-                    "claude -p auth failed even at the fallback isolation rung; "
-                    "re-run scripts/isolation_probe.py or set CRUCIBLE_LEAN=0"
-                ) from exc
-            print(f"LEAN FALLBACK: auth failed at rung {self._profile.name!r}, "
-                  f"retrying at {FALLBACK_PROFILE.name!r}")
-            self.served_isolation = FALLBACK_PROFILE.name
-            return self._one_call(system, user, model, FALLBACK_PROFILE)
-```
-
-where `_one_call` raises a private `_AuthError(RuntimeError)` when `_is_auth_error(...)` is true (carrying the stderr), and a plain `RuntimeError` otherwise. Define `class _AuthError(RuntimeError): pass` at module level. Keep the existing `is_error` / malformed-envelope / FileNotFoundError paths inside `_one_call` unchanged.
-
-- [ ] **Step 4: Run** the provider tests then the full suite. Expected: all pass.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add src/crucible/providers_ext.py tests/test_providers_ext.py
-git commit -m "feat: bounded auth-class fallback to the safest isolation rung (one retry, recorded)"
-```
-
----
-
-### Task 5: Record the isolation rung in meta.json + report
-
-**Files:**
-- Modify: `src/crucible/cli.py` (`_cmd_run` meta dict; post-run served-rung patch)
+- Modify: `src/crucible/cli.py` (`_cmd_run` meta dict)
 - Modify: `src/crucible/report.py` (`summarize`)
 - Test: `tests/test_receipts.py`, `tests/test_report.py` (append)
 
 **Interfaces:**
-- Consumes: `getattr(provider, "isolation_name", "ambient")` and `getattr(provider, "served_isolation", ...)` (Tasks 3-4).
-- Produces: `meta.json` gains `"lean_isolation"` (configured rung, `"ambient"` default for legacy/non-CLI providers) and, after the run, `"lean_isolation_served"` (the rung actually used; equals `lean_isolation` unless the fallback fired). `summarize(run)` surfaces `"lean_isolation": meta.get("lean_isolation", "ambient")`.
+- Consumes: `getattr(provider, "isolation_name", "ambient")` (Task 3).
+- Produces: `meta.json` gains `"lean_isolation"` (`"ambient"` default for legacy/non-CLI providers). `summarize(run)` surfaces `"lean_isolation": meta.get("lean_isolation", "ambient")`. No served/fallback field — there is no fallback.
 
 - [ ] **Step 1: Write the failing tests.** Append to `tests/test_report.py`:
 
 ```python
-def test_summarize_surfaces_lean_isolation_default_and_value():
+def test_summarize_surfaces_lean_isolation():
     base = {"meta": {"arm": "harden"}, "rounds": [],
             "result": {"verdict": "dry", "total_cost_usd": 0.0, "baseline_survivors": []}}
-    assert summarize(base)["lean_isolation"] == "ambient"          # legacy meta
-    lean = dict(base, meta={"arm": "harden", "lean_isolation": "isolated-cfg"})
-    assert summarize(lean)["lean_isolation"] == "isolated-cfg"
+    assert summarize(base)["lean_isolation"] == "ambient"
+    lean = dict(base, meta={"arm": "harden", "lean_isolation": "tools-off"})
+    assert summarize(lean)["lean_isolation"] == "tools-off"
 ```
 
-Append to `tests/test_receipts.py` (mirror the existing CLI-meta test added in Plan 3a Task 2; a `fake` provider has no `isolation_name`, so it defaults to `"ambient"`):
+Append to `tests/test_receipts.py` (mirror the Plan 3a Task 2 CLI-meta test; a `fake` provider has no `isolation_name`, so it defaults to `"ambient"`):
 
 ```python
 def test_cli_meta_records_lean_isolation(tmp_path, subject_clone):
@@ -507,9 +279,10 @@ def test_cli_meta_records_lean_isolation(tmp_path, subject_clone):
               "--runs-dir", str(tmp_path / "runs")])
     run_dir = next((tmp_path / "runs").iterdir())
     meta = json.loads((run_dir / "meta.json").read_text())
-    assert meta["lean_isolation"] == "ambient"          # fake has no isolation_name
-    assert meta["lean_isolation_served"] == "ambient"
+    assert meta["lean_isolation"] == "ambient"   # fake has no isolation_name
 ```
+
+(If the `subject_clone` fixture / `oneshot` invocation differs, mirror the existing `test_cli_meta_records_billing` test added in Plan 3a Task 2 — same pattern, new key.)
 
 - [ ] **Step 2: Run to verify failure** — `KeyError: 'lean_isolation'`.
 
@@ -519,17 +292,7 @@ def test_cli_meta_records_lean_isolation(tmp_path, subject_clone):
         "lean_isolation": getattr(tester, "isolation_name", "ambient"),
 ```
 
-After the loop finishes and before the function returns (where `run_dir` and `tester` are in scope), patch the served rung:
-
-```python
-    meta_path = run_dir / "meta.json"
-    m = json.loads(meta_path.read_text())
-    m["lean_isolation_served"] = getattr(tester, "served_isolation",
-                                         m.get("lean_isolation", "ambient"))
-    meta_path.write_text(json.dumps(m, indent=2))
-```
-
-(If `_cmd_run` uses a single tester/critic and the critic is a distinct CLI provider, prefer the tester's rung for the headline field; both share one config in practice. `json` is already imported in `cli.py`.) In `report.py`'s `summarize`, add to the returned dict:
+In `report.py`'s `summarize`, add to the returned dict:
 
 ```python
         "lean_isolation": run["meta"].get("lean_isolation", "ambient"),
@@ -541,33 +304,31 @@ After the loop finishes and before the function returns (where `run_dir` and `te
 
 ```bash
 git add src/crucible/cli.py src/crucible/report.py tests/test_receipts.py tests/test_report.py
-git commit -m "feat: record lean_isolation rung (configured + served) in meta and summarize"
+git commit -m "feat: record lean_isolation rung in meta and surface it in summarize"
 ```
 
 ---
 
-### Task 6: Proof run — re-harden guard.py, compare receipt (gate, orchestrator drives)
+### Task 5: Proof run — re-harden guard.py, prove tokens AND efficacy (gate, orchestrator drives)
 
-**Files:** none in this repo (receipts land in rag-guard's `.crucible-runs/`; generated tests on its local branch — discarded after the number is read).
+**Files:** none in this repo (receipts land in rag-guard's `.crucible-runs/`; generated tests on its local branch — discarded after the numbers are read).
 
-**Interfaces:** consumes the whole chain end to end; produces the apples-to-apples token comparison that closes item 1.
+**Interfaces:** consumes the whole chain end to end; produces both the token comparison and the mutation-kill comparison that close item 1.
 
-- [ ] **Step 1:** Confirm `feat/lean-invocation` is on `28c58fc`'s lineage and the full suite is green (`.venv/bin/python -m pytest -q -W error` -> 251+ passed). Confirm `docs/superpowers/PROBE-RESULTS-3b.md` records a DEFAULT rung with a real order-of-magnitude token drop at rung 0->default.
-- [ ] **Step 2:** On a THROWAWAY branch of rag-guard, run the loop against `rag_guard/guard.py` exactly as the acceptance did (the `harden-tests` skill or `crucible harden ... --tester claude-cli --critic claude-cli`), lean invocation active (default profile; do NOT set `CRUCIBLE_LEAN=0`).
-- [ ] **Step 3:** Read the new receipt's per-round `usage_in` (now cache-summed) and `meta.json` `lean_isolation`/`lean_isolation_served`. Verify: total input tokens are an order of magnitude below 439,230 (target `< ~44,000`); guard.py baseline survivors still killed (a real harden); `billing: max-plan`, $0 metered.
-- [ ] **Step 4:** Independent reviewer (opus) verifies the receipt numbers against the 439,230 baseline receipt (`~/.crucible-runs/rag-guard/20260712T050833Z-rag-guard-harden`) — same module, same loop, only isolation changed.
-- [ ] **Step 5:** Discard the rag-guard throwaway branch (PR is Jeff's separate call). Record the before/after numbers + run dir in the memory file and the wiki build log. Jeff approves the gate by name; item 1 complete.
+- [ ] **Step 1:** Confirm `feat/lean-invocation` full suite green (`.venv/bin/python -m pytest -q -W error`).
+- [ ] **Step 2:** On a THROWAWAY branch of rag-guard, run the loop against `rag_guard/guard.py` (the `harden-tests` skill or `crucible harden ... --tester claude-cli --critic claude-cli`), lean default active (do NOT set `CRUCIBLE_LEAN=0`).
+- [ ] **Step 3: TOKENS.** Read the new receipt's per-round `usage_in` (cache-summed) and `meta.json` `lean_isolation == "tools-off"`. Verify total input is an order of magnitude below the 439,230 baseline (`~/.crucible-runs/rag-guard/20260712T050833Z-rag-guard-harden`).
+- [ ] **Step 4: EFFICACY (the real risk).** Verify the lean run still KILLS the module's baseline survivors comparably to the ambient gate-7 run (which killed 25: tester 23 + critic 2). If kills drop materially, STOP and report — the single-turn tool-less tester may need 2 turns; bring the tradeoff to Jeff rather than shipping a cheaper-but-weaker loop.
+- [ ] **Step 5:** Confirm `billing: max-plan`, $0 metered. Independent reviewer (opus) verifies tokens + kills against the baseline receipt. Discard the rag-guard throwaway branch (PR is Jeff's separate call). Record before/after numbers + run dir in the memory file and wiki build log. Jeff approves the gate by name; item 1 complete.
 
 ---
 
 ## Self-Review Notes
 
-**Spec coverage:** §2 acceptance -> Task 6; §3 isolation ladder + probe -> Task 1; §4 provider knobs (LeanProfile seam, ephemeral config dir, neutral cwd) -> Tasks 2-3; §5 lean-as-default + escape hatch + bounded fallback -> Tasks 3-4; §6 meta records the rung -> Task 5; §7 testing -> per-task TDD + Task 6 live proof; §8 risks -> Task 1 resolves the auth HIGH, Task 4 the runtime blip; §9 YAGNI (no multi-rung cascade, ephemeral config dir, loop.py/RoundRecord untouched, one meta field) -> respected across Tasks 2-5.
+**Spec coverage (post-amendment):** amendment lever (`--tools ""`) -> Tasks 2-3; LeanProfile seam -> Task 2; provider wiring + escape hatch -> Task 3; meta recording -> Task 4; token proof + efficacy -> Task 5; §7 testing -> per-task TDD + Task 5 live proof. Dropped by amendment (and absent here): CLAUDE_CONFIG_DIR, ephemeral config dir, bounded auth fallback, retry-with-backoff.
 
-**Probe-first dependency (recorded):** Tasks 2-5 are expressed entirely through the `LeanProfile` seam, so only two things depend on Task 1's live results — the exact argv tokens in `build()` and the field values of `DEFAULT_PROFILE`/`FALLBACK_PROFILE`. Everything else (wiring, escape hatch, fallback, meta) is rung-agnostic. If rung 4 fails auth, `default_profile()` drops `config_dir` and `make_min_config_dir` is deleted (YAGNI); no other task changes.
+**Placeholder scan:** none — every code step is complete; Task 4's fixture caveat names the exact existing test to mirror.
 
-**Placeholder scan:** none — every code step is complete; the two probe-validated substitution points are called out explicitly, not left vague.
+**Type consistency:** `LeanProfile` fields and `build() -> (argv, cwd)` 2-tuple consistent across Tasks 2/3; `isolation_name` attr and `AMBIENT`/`DEFAULT_LEAN` constants consistent across Tasks 2/3/4; `lean_isolation` meta key and `"ambient"` default consistent across Task 4's cli/report/tests. `build()` returns a 2-tuple (argv, cwd) — no env — because no flag needs an env override after dropping CLAUDE_CONFIG_DIR.
 
-**Type consistency:** `LeanProfile` field names and `.build()` return shape match across Tasks 2/3/4; `isolation_name`/`served_isolation` attrs consistent across Tasks 3/4/5; `lean_isolation`/`lean_isolation_served` meta keys and the `"ambient"` default consistent across Tasks 5's cli/report/tests; `FALLBACK_PROFILE.name` used identically in Task 4's code and tests.
-
-**Base-branch guard (recorded):** this plan MUST build on `28c58fc` (gate-7 fixes: cache-token summing). The gate-7 fixes are not yet in `origin/main` (`f6d058b` squash predates them) — reconciling main is Jeff's call at PR time (recommended: land the gate-7 delta as its own small PR first, then 3b off corrected main).
+**Efficacy is the one open risk (recorded):** the token win is proven (Task 1, ~75x); whether single-turn tool-less generation kills mutants as well as multi-turn is unproven and is Task 5 Step 4's job. crucible's mutation loop is the external verifier, so the model needs no self-verify tools — the hypothesis is that efficacy holds — but it is a live gate, not an assumption.

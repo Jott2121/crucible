@@ -7,6 +7,41 @@ Build model: sonnet implementers / opus reviewers / opus orchestrator (Jeff rule
 the son+opus standing default; Fable only via an `ask-fable` consult if a fork needs a frontier read).
 Repo: github.com/Jott2121/ai-agentic-code-testing (private until the flip cycle).
 
+## AMENDMENT 2026-07-12 (post-probe, Jeff-approved) — the lever changed
+
+Task 1's isolation probe (`docs/superpowers/PROBE-RESULTS-3b.md`, commits 090706d/b656065) falsified
+this spec's original premise and found a bigger, different lever. **Sections 3-6 below are superseded
+by this amendment; read it as the authority. Sections 1-2, 7-9 hold with the noted edits.**
+
+**Measured, confirmed (`scripts/measure_tester.py`, stdin like the real provider):**
+
+```
+baseline (no flags):        num_turns=4   in=119,229   out=10,371   valid test
+lean (--tools "" et al.):   num_turns=1   in=  1,593   out= 6,172   valid test   => ~75x input
+```
+
+- **Wrong premise:** the ~439k was NOT a config/MCP-heavy per-call preload. Per-call preload is ~30k;
+  `--strict-mcp-config` saved 212 tokens (MCP is not the bulk). The 439k = 2 **agentic** calls whose
+  `num_turns` re-read the ~30k cache several times.
+- **The lever is `--tools ""`.** It (1) removes the built-in tool schemas (the real ~20k preload bulk
+  — Bash/Read/Edit/Write, not MCP) and (2) collapses the agent loop to a single turn. ~75x on the
+  tester call. `--setting-sources ""` and `--strict-mcp-config` are kept as cheap, no-risk add-ons but
+  are largely subsumed once `--tools ""` collapses the preload to ~1.6k.
+- **RETRACTED:** the auth-instability finding and the bounded-fallback / retry-with-backoff design —
+  those failures were a bash-harness artifact corrupting the payload, not real. **`CLAUDE_CONFIG_DIR`
+  isolation is DROPPED entirely** (errored, auth-risky, unnecessary).
+- **The `LeanProfile` seam survives** — it just gains a `tools: str | None` field; the default profile
+  is `tools="", setting_sources="", strict_mcp=True`. Provider wiring, the `CRUCIBLE_LEAN=0` escape
+  hatch, and meta recording are unchanged in intent.
+- **New primary risk = EFFICACY, not tokens.** The token win is proven; the open question is whether a
+  single-turn, tool-less tester still KILLS mutants as well as the multi-turn baseline (which may have
+  self-verified via tools). crucible's mutation loop is the external verifier, so the model needs no
+  self-verify tools — but Task 6's re-harden of guard.py must confirm the 25 baseline survivors still
+  die under lean. If kills drop materially, reconsider (e.g. allow 2 turns).
+
+The implementation plan (`docs/superpowers/plans/2026-07-12-plan3b-lean-invocation.md`) is the
+authority for tasks; it was revised to this 4-task reality.
+
 ## 1. What this is
 
 Every model call crucible makes shells out to `claude -p` (the `ClaudeCLIProvider`,
