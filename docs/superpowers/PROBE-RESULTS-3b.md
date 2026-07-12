@@ -2,11 +2,32 @@
 
 Date: 2026-07-12. CLI: Claude Code 2.1.207. Model: claude-sonnet-5. Billing: max-plan ($0 metered).
 
-## Headline: the spec's premise was wrong (this is why we probe first)
+## Headline: the spec's premise was wrong; the real lever is ~75x (CONFIRMED)
 
 The spec assumed the ~439,230 input tokens per hardened module was a large per-call **session
 preload** dominated by MCP tool schemas, cuttable an order of magnitude by config isolation.
-**Measurement falsified all three claims.**
+**Measurement falsified that and found a bigger, different lever.**
+
+**CONFIRMED (clean Python harness, `scripts/measure_tester.py`, stdin like the real provider):**
+
+```
+baseline (no flags):   num_turns=4   in=119,229   out=10,371   -> valid test, 6911 chars
+lean (--tools ""...):  num_turns=1   in=  1,593   out= 6,172   -> valid test, 5207 chars
+```
+
+**~75x input reduction (119,229 -> 1,593), still producing a real test file.** `--tools ""` does
+TWO things: (1) removes the built-in tool definitions (the ~20k "stable preload" was
+Bash/Read/Edit/Write schemas, NOT MCP), and (2) collapses the agent loop from 4 turns to 1. Baseline
+~= turns x ~30k; the receipt's 325,834 was simply more turns.
+
+### Correction: the "auth instability" was a measurement artifact, not real
+
+The earlier "Not logged in" failures were NOT an auth/throttle problem. They came from an earlier
+BASH harness that interpolated guard.py (a RAG-guard full of backticks/`$`/quotes) through a
+double-quoted shell variable, corrupting the payload; `claude` rejected the garbage with a
+misleading "Not logged in". The Python harness (subprocess stdin, no shell -- exactly how the
+provider calls) succeeds every time. **The "provider needs auth retry-with-backoff" requirement is
+RETRACTED** -- there was no real instability. Lesson: measure the way the code actually calls.
 
 ## What the numbers actually show
 
@@ -60,28 +81,19 @@ only needs text out) should collapse to a single completion — num_turns 1, inp
 ~325k. That is where an order of magnitude lives; **config isolation is a secondary ~22% on top.**
 Combined single-turn + `--setting-sources ""` projects a tester call at ~23k vs 325,834 (~14x).
 
-**Status: STRONGLY INFERRED, NOT YET CONFIRMED LIVE** — see the blocker below.
-
-## Blocker discovered: auth/throttle instability under load
-
-After ~12-14 rapid `claude -p` calls, every **tester-payload** call began returning
-`is_error=true, result="Not logged in · Please run /login"` in ~41ms (pre-flight reject), while
-**trivial** calls interleaved successfully (29,991 tokens, is_error=false). So it is not a hard
-logout — it is a heavy/rapid-call throttle surfacing as an auth error. This blocked live
-confirmation of the `--tools ""` collapse.
-
-**This is itself a first-class finding:** the harden loop fires sequential heavy `claude -p` calls,
-and the current provider has **no retry** — it fails loud on the first error. A real run can hit this
-(the gate-7 run happened to succeed). Retry-with-backoff on transient/auth-class errors belongs in
-the design regardless.
+**Status: CONFIRMED** (see the headline; `--tools ""` collapses num_turns 4->1 and input 119,229->1,593).
 
 ## Decisions recorded
 
-- **DROP** `CLAUDE_CONFIG_DIR` isolation (rung 5): errored, auth-risky, unnecessary — the win is not
-  there. The spec's "go for the floor via config isolation" is retired by evidence.
-- **NEW primary lever:** `--tools ""` to collapse num_turns (pending one live confirmation).
-- **Secondary lever:** `--setting-sources ""` (+ harmless `--strict-mcp-config`) for ~22%/turn.
-- **New requirement:** transient/auth-class retry-with-backoff in the provider.
-- **NEXT (needs fresh auth):** one clean tester-payload call with `--tools "" --setting-sources "" --strict-mcp-config`
-  measuring num_turns + summed input, vs the 325,834 baseline. Confirm the collapse before finalizing
-  the revised spec.
+- **`--tools ""` is the primary lever:** removes built-in tool schemas AND collapses the agent turn
+  loop. ~75x on the tester call. This is the design, not config isolation.
+- **`--setting-sources ""`** (+ harmless `--strict-mcp-config`) is a minor add-on; with `--tools ""`
+  already collapsing the preload to ~1.6k, its ~22% is largely subsumed. Keep both (cheap, no risk).
+- **DROP** `CLAUDE_CONFIG_DIR` isolation (rung 5): errored, auth-risky, and completely unnecessary —
+  the win is entirely in `--tools ""`.
+- **RETRACTED:** the "auth instability / provider needs retry" requirement — it was a bash-harness
+  artifact, not real (see correction above).
+- **OPEN (Task 6 proof):** the token win is proven; the remaining question is EFFICACY — does the
+  single-turn, tool-less tester still KILL mutants as well as the multi-turn baseline? crucible's
+  mutation loop is the external verifier, so the model does not need self-verification tools, but the
+  full harden re-run on guard.py must confirm the 25 baseline survivors still die under lean.
