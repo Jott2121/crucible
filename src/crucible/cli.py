@@ -1,7 +1,10 @@
 """crucible CLI. Subcommands: oneshot, harden, report, experiment, scope.
 
 Plain-ASCII output. Exit codes: 0 = clean/dry/cap/oneshot; 2 = harden/oneshot
-refused before any work (e.g. the named module does not exist in the subject);
+refused before any work (e.g. the named module does not exist in the subject,
+or preflight/the run itself raised a RuntimeError refusal -- dirty clone, red
+pristine suite, non-git dir, broken scope -- printed as "REFUSING: {exc}",
+never a raw traceback);
 3 = aborted/rejected; 4 = scope's canary probe refused -- a RuntimeError or
 FileNotFoundError from detect/apply/canary_probe (single refusal path, printed
 as "REFUSING: {exc}", no traceback leak) or a proven kills-did-not-increase
@@ -86,31 +89,40 @@ def _cmd_run(args, mode):
                      module_path=args.module, scope=run_scope)
     cfg = LoopConfig(max_rounds=args.rounds, dry_rounds=args.dry_rounds, arm=mode)
 
-    # hard stop (dirty clone / red suite / non-git dir) before any token is spent;
-    # also writes+commits the [tool.mutmut] scope for --module inside the clone
-    head_sha = env.preflight(module_path=args.module)
+    try:
+        # hard stop (dirty clone / red suite / non-git dir) before any token is
+        # spent; also writes+commits the [tool.mutmut] scope for --module inside
+        # the clone. A RuntimeError here (or from the run itself, e.g. a broken
+        # mutation scope) is an operator-state refusal, not a programming error --
+        # mirror the scope subcommand's clean REFUSING/exit path rather than
+        # letting it escape as a raw traceback (a dirty clone is the default
+        # first-hour state for a stranger).
+        head_sha = env.preflight(module_path=args.module)
 
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    run_dir = runs_dir / f"{stamp}-{subject.name}-{mode}"
-    writer = ReceiptWriter(run_dir, {
-        "subject": str(subject), "module": args.module, "head_sha": head_sha,
-        "arm": mode, "tester_model": args.tester_model, "critic_model": args.critic_model,
-        "tester_provider": args.tester, "critic_provider": args.critic,
-        "tester_billing": getattr(tester, "billing", "api"),
-        "critic_billing": getattr(critic, "billing", "api"),
-        "lean_isolation": getattr(tester, "isolation_name", "ambient"),
-        "max_rounds": args.rounds, "dry_rounds": args.dry_rounds, "started_at": stamp,
-        "crucible_version": crucible.__version__,
-        "oracle_gate_version": importlib.metadata.version("oracle-gate"),
-        "mutmut_version": importlib.metadata.version("mutmut"),
-    })
-    # Gate-7 live defect 3: rejected/salvaged test files are evidence, never
-    # discarded (spec posture). run_arm already wires this; the CLI path must
-    # too, before any round runs so a round-0 rejection has somewhere to land.
-    env.set_artifact_dir(run_dir)
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        run_dir = runs_dir / f"{stamp}-{subject.name}-{mode}"
+        writer = ReceiptWriter(run_dir, {
+            "subject": str(subject), "module": args.module, "head_sha": head_sha,
+            "arm": mode, "tester_model": args.tester_model, "critic_model": args.critic_model,
+            "tester_provider": args.tester, "critic_provider": args.critic,
+            "tester_billing": getattr(tester, "billing", "api"),
+            "critic_billing": getattr(critic, "billing", "api"),
+            "lean_isolation": getattr(tester, "isolation_name", "ambient"),
+            "max_rounds": args.rounds, "dry_rounds": args.dry_rounds, "started_at": stamp,
+            "crucible_version": crucible.__version__,
+            "oracle_gate_version": importlib.metadata.version("oracle-gate"),
+            "mutmut_version": importlib.metadata.version("mutmut"),
+        })
+        # Gate-7 live defect 3: rejected/salvaged test files are evidence, never
+        # discarded (spec posture). run_arm already wires this; the CLI path must
+        # too, before any round runs so a round-0 rejection has somewhere to land.
+        env.set_artifact_dir(run_dir)
 
-    run_fn = oneshot if mode == "oneshot" else harden
-    result = run_fn(env, cfg, on_round=writer.append)
+        run_fn = oneshot if mode == "oneshot" else harden
+        result = run_fn(env, cfg, on_round=writer.append)
+    except RuntimeError as exc:
+        print(f"REFUSING: {exc}")
+        return 2
     writer.finish(result.verdict, result.total_cost_usd, extra={
         "baseline_survivors": result.baseline_survivors,
         "baseline_all_mutants": result.baseline_all_mutants,

@@ -55,6 +55,45 @@ def test_cli_harden_missing_module_clean_error_nonzero_exit(tmp_path, capsys):
     assert "Traceback" not in out
 
 
+def test_cmd_run_refuses_cleanly_on_non_git_subject(tmp_path, capsys):
+    """Finding #3: env.preflight raises RuntimeError ('not inside a git work
+    tree') for a plain (non-git) subject dir; _cmd_run must catch it and print
+    a clean REFUSING/exit-2 refusal -- never let the RuntimeError escape as a
+    raw traceback, mirroring the scope subcommand's refusal style."""
+    from crucible import cli
+
+    (tmp_path / "mypkg").mkdir()
+    (tmp_path / "mypkg" / "mod.py").write_text("X = 1\n")
+    rc = cli.main(["oneshot", str(tmp_path), "--module", "mypkg/mod.py",
+                   "--tester", "fake", "--critic", "fake"])
+    out = capsys.readouterr().out
+    assert rc == 2
+    assert "REFUSING:" in out
+    assert "Traceback" not in out
+
+
+def test_cmd_run_refuses_cleanly_on_dirty_subject(tmp_path, capsys):
+    """Same refusal path for a dirty (uncommitted changes) subject clone."""
+    import subprocess
+
+    from crucible import cli
+
+    (tmp_path / "mypkg").mkdir()
+    (tmp_path / "mypkg" / "mod.py").write_text("X = 1\n")
+    for cmd in (["git", "init", "-q"], ["git", "add", "-A"],
+                ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "seed"]):
+        subprocess.run(cmd, cwd=tmp_path, check=True)
+    (tmp_path / "stray.txt").write_text("uncommitted")
+
+    rc = cli.main(["oneshot", str(tmp_path), "--module", "mypkg/mod.py",
+                   "--tester", "fake", "--critic", "fake"])
+    out = capsys.readouterr().out
+    assert rc == 2
+    assert "REFUSING:" in out
+    assert "dirty" in out
+    assert "Traceback" not in out
+
+
 def test_cli_harden_refuses_runs_dir_inside_subject(tmp_path, capsys):
     """Gate-7 live defect 1: a runs-dir inside the subject repo makes
     crucible's own receipt writes (meta.json et al.) trip its own add-only
