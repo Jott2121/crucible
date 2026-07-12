@@ -35,6 +35,19 @@ def _provider(name, fake_replies):
 
 def _cmd_run(args, mode):
     subject = Path(args.subject).resolve()
+
+    # Gate-7 live defect 1: a runs-dir INSIDE the subject repo makes crucible's
+    # own receipt writes (meta.json, receipt.jsonl) show up as untracked files
+    # in the subject clone and trip crucible's own add-only guardrail mid-run
+    # ('?? .crucible-runs/...meta.json' rejected round 0 on the first live
+    # run). Refuse fail-loud before preflight or any model call.
+    runs_dir = Path(args.runs_dir).resolve()
+    if runs_dir.is_relative_to(subject):
+        print(f"ERROR: --runs-dir {runs_dir} is inside the subject repo {subject}; "
+              "crucible's receipt writes would trip its own add-only guardrail "
+              "mid-run. Use a runs dir outside the repo, e.g. ~/.crucible-runs/<repo-name>")
+        return 2
+
     tester = _provider(args.tester, args.fake_replies)
     critic = tester if args.critic == args.tester else _provider(args.critic, args.fake_replies)
 
@@ -62,7 +75,7 @@ def _cmd_run(args, mode):
     head_sha = env.preflight(module_path=args.module)
 
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    run_dir = Path(args.runs_dir) / f"{stamp}-{subject.name}-{mode}"
+    run_dir = runs_dir / f"{stamp}-{subject.name}-{mode}"
     writer = ReceiptWriter(run_dir, {
         "subject": str(subject), "module": args.module, "head_sha": head_sha,
         "arm": mode, "tester_model": args.tester_model, "critic_model": args.critic_model,
@@ -74,6 +87,10 @@ def _cmd_run(args, mode):
         "oracle_gate_version": importlib.metadata.version("oracle-gate"),
         "mutmut_version": importlib.metadata.version("mutmut"),
     })
+    # Gate-7 live defect 3: rejected/salvaged test files are evidence, never
+    # discarded (spec posture). run_arm already wires this; the CLI path must
+    # too, before any round runs so a round-0 rejection has somewhere to land.
+    env.set_artifact_dir(run_dir)
 
     run_fn = oneshot if mode == "oneshot" else harden
     result = run_fn(env, cfg, on_round=writer.append)
