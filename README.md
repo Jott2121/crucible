@@ -11,7 +11,7 @@ injected defects no test caught — and a **Critic** agent is handed the named s
 writes tests to kill exactly those. Every verdict is mechanical: pytest kills the mutant or
 it survives. **No model ever grades model output.**
 
-## First win — free, no model, no keys (~10 minutes)
+## Quickstart — the free first win (no model, no keys, ~10 minutes)
 
 Find out what your existing tests miss, on your own repo:
 
