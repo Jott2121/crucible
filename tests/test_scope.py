@@ -84,6 +84,29 @@ def test_apply_writes_scope_and_shim(tmp_path):
     assert (repo / "conftest.py").read_text() == SHIM
 
 
+def test_apply_refuses_to_overwrite_existing_differing_conftest(tmp_path):
+    """Finding #4: apply() must never silently clobber a subject's existing
+    root conftest.py (fixtures destroyed, downstream red-suite blame lands on
+    the subject). Existing content that differs from SRC_SHIM -> RuntimeError
+    naming the file, and the file must be left untouched."""
+    repo = _mk(tmp_path, {"src/mod.py": "X = 1\n"})
+    existing = "import pytest\n\n@pytest.fixture\ndef thing():\n    return 1\n"
+    (repo / "conftest.py").write_text(existing)
+    with pytest.raises(RuntimeError, match="conftest.py"):
+        apply(repo, detect(repo, "src/mod.py"))
+    assert (repo / "conftest.py").read_text() == existing
+
+
+def test_apply_is_a_noop_when_existing_conftest_is_identical_to_shim(tmp_path):
+    """Identical content is a genuine no-op: apply() must proceed (not raise)
+    and leave the file byte-identical."""
+    repo = _mk(tmp_path, {"src/mod.py": "X = 1\n"})
+    (repo / "conftest.py").write_text(SHIM)
+    apply(repo, detect(repo, "src/mod.py"))  # must not raise
+    assert (repo / "conftest.py").read_text() == SHIM
+    assert 'source_paths = ["src/mod.py"]' in (repo / "pyproject.toml").read_text()
+
+
 def test_canary_probe_passes_when_kills_increase(tmp_path, monkeypatch):
     """killed=0 baseline (empty/weak suite) -- exercises the STRICT branch:
     write canary, pristine-check, measure again, require a strict increase."""

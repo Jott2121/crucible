@@ -75,7 +75,16 @@ def detect(subject_dir: Path, module: str) -> ScopePlan:
 def apply(subject_dir: Path, plan: ScopePlan) -> None:
     subject_dir = Path(subject_dir)
     if plan.needs_src_shim:
-        (subject_dir / "conftest.py").write_text(SRC_SHIM)
+        conftest = subject_dir / "conftest.py"
+        if conftest.exists() and conftest.read_text() != SRC_SHIM:
+            raise RuntimeError(
+                f"{conftest} already exists and differs from crucible's src/ sys.path "
+                "shim; subject has a root conftest.py -- crucible will not overwrite it. "
+                "Merge the src/ sys.path shim yourself or move your conftest."
+            )
+        if not conftest.exists():
+            conftest.write_text(SRC_SHIM)
+        # identical content: no-op, proceed
     write_scope(subject_dir / "pyproject.toml", [plan.module],
                 also_copy=plan.also_copy,
                 pytest_args=plan.pytest_args or None,

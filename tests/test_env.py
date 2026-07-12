@@ -180,6 +180,42 @@ def test_preflight_writes_extra_files_and_commits_them_with_the_scope(tmp_path):
     assert subject_line == "crucible: scope mutmut to subject_pkg/calc.py (+shims)"
 
 
+def test_preflight_refuses_to_overwrite_subjects_existing_differing_conftest(tmp_path):
+    """Finding #4: preflight's extra_files write has the same clobber hazard
+    as scope.apply() for conftest.py specifically -- a subject that already
+    has its own root conftest.py (real fixtures) must never be silently
+    overwritten by the src-shim. Existing+differing -> RuntimeError naming the
+    file, file left untouched; nothing committed."""
+    import shutil
+    import subprocess
+    from pathlib import Path
+
+    import pytest
+
+    subject = tmp_path / "subject"
+    shutil.copytree(Path(__file__).parent / "fixtures" / "subject", subject)
+    existing = "import pytest\n\n@pytest.fixture\ndef thing():\n    return 1\n"
+    (subject / "conftest.py").write_text(existing)
+    for cmd in (["git", "init", "-q"], ["git", "add", "-A"],
+                ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "seed"]):
+        subprocess.run(cmd, cwd=subject, check=True)
+    conftest_body = "import sys, pathlib\nsys.path.insert(0, str(pathlib.Path(__file__).parent / \"src\"))\n"
+    p = FakeProvider([])
+    env = SubjectEnv(
+        subject_dir=subject, tester_provider=p, tester_model="fake-model",
+        critic_provider=p, critic_model="fake-model", module_path="subject_pkg/calc.py",
+        scope={"extra_files": {"conftest.py": conftest_body}},
+    )
+    with pytest.raises(RuntimeError, match="conftest.py"):
+        env.preflight(module_path="subject_pkg/calc.py")
+    assert (subject / "conftest.py").read_text() == existing
+    head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=subject,
+                          capture_output=True, text=True, check=True).stdout.strip()
+    committed = subprocess.run(["git", "show", f"{head}:conftest.py"], cwd=subject,
+                               capture_output=True, text=True, check=True).stdout
+    assert committed == existing  # nothing committed on top of the seed
+
+
 def test_preflight_commit_message_has_no_shims_suffix_without_extra_files(tmp_path):
     env = _env(tmp_path, [])
     env.preflight(module_path="subject_pkg/calc.py")
