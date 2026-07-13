@@ -1,0 +1,165 @@
+name: "Crucible — mutation score"
+description: "Your tests pass and coverage is green. How many real bugs would they actually catch? Runs mutation testing on a PR, comments the number, and can fail the build below a floor. No model, no API key, $0."
+author: "Jeff Otterson"
+branding:
+  icon: "shield"
+  color: "red"
+
+inputs:
+  module:
+    description: "Path to the module to mutate, e.g. yourpkg/yourmodule.py"
+    required: true
+  install-command:
+    description: "How to install your project and its test deps."
+    required: false
+    default: 'pip install -e ".[dev]"'
+  fail-under:
+    description: "Fail the build if the mutation score is below this percentage. Empty = report only, never fail."
+    required: false
+    default: ""
+  comment:
+    description: "Post the result as a PR comment (true/false)."
+    required: false
+    default: "true"
+  badge-file:
+    description: "Write a shields.io endpoint JSON to this path. Empty = don't."
+    required: false
+    default: ""
+  python-version:
+    description: "Python version to run under."
+    required: false
+    default: "3.12"
+
+outputs:
+  score:
+    description: "Mutation score, percent (killed / total mutants)."
+    value: ${{ steps.score.outputs.score }}
+  killed:
+    description: "Injected defects the suite caught."
+    value: ${{ steps.score.outputs.killed }}
+  survived:
+    description: "Injected defects that walked straight through. This is the number that matters."
+    value: ${{ steps.score.outputs.survived }}
+  total:
+    description: "Total defects injected."
+    value: ${{ steps.score.outputs.total }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install your project
+      shell: bash
+      # This input IS a command by definition -- it is how you install your own
+      # project. It runs with whatever the calling workflow passes, which is the
+      # calling repo's own code either way.
+      run: ${{ inputs.install-command }}
+
+    - name: Install crucible
+      shell: bash
+      run: pip install "crucible @ git+https://github.com/Jott2121/crucible@main"
+
+    - name: Score the suite
+      id: score
+      shell: bash
+      # Inputs reach the shell through env, never through ${{ }} interpolation
+      # into the script body: a module path is data, and data spliced into a
+      # command line is a script-injection surface. This is a public action; it
+      # does not get to be sloppy about that.
+      env:
+        MODULE: ${{ inputs.module }}
+      run: |
+        set -o pipefail
+        # $0 diagnose. No model is called; no API key exists in this job.
+        crucible score . --module "$MODULE" --json > crucible-score.json
+
+        python - <<'PY' >> "$GITHUB_OUTPUT"
+        import json
+        d = json.load(open("crucible-score.json"))
+        c = d["counts"]
+        print(f"score={d['score']}")
+        print(f"killed={c['killed']}")
+        print(f"survived={c['survived']}")
+        print(f"total={c['total']}")
+        PY
+
+    - name: Write badge
+      if: inputs.badge-file != ''
+      shell: bash
+      run: |
+        python - <<'PY'
+        import json, os
+        d = json.load(open("crucible-score.json"))
+        s = d["score"]
+        color = ("brightgreen" if s >= 90 else "green" if s >= 75
+                 else "yellow" if s >= 60 else "orange" if s >= 40 else "red")
+        json.dump({"schemaVersion": 1, "label": "mutation",
+                   "message": f"{s:.0f}%", "color": color},
+                  open(os.environ["BADGE_FILE"], "w"))
+        PY
+      env:
+        BADGE_FILE: ${{ inputs.badge-file }}
+
+    - name: Comment on the PR
+      if: github.event_name == 'pull_request' && inputs.comment == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+      run: |
+        python - <<'PY' > comment.md
+        import json
+        d = json.load(open("crucible-score.json"))
+        c = d["counts"]
+        survivors = d["survivors"]
+        score = d["score"]
+
+        print("### 🧪 Mutation score: **{:.0f}%**".format(score))
+        print()
+        print(f"Crucible injected **{c['total']}** real defects into `{d['module']}`. "
+              f"This suite killed **{c['killed']}** of them.")
+        print()
+        if c["survived"]:
+            print(f"> **{c['survived']} defects survived** — real bugs this suite would not catch.")
+            print()
+            print("<details><summary>Show the survivors</summary>")
+            print()
+            print("```")
+            for s in survivors[:25]:
+                print(s)
+            if len(survivors) > 25:
+                print(f"... and {len(survivors) - 25} more")
+            print("```")
+            print("</details>")
+        else:
+            print("> **Every injected defect was killed.** This suite actually catches bugs.")
+        print()
+        print("<sub>Coverage measures what *ran*. This measures what would be *caught*. "
+              "[crucible](https://github.com/Jott2121/crucible) · no model, no API key, $0</sub>")
+        PY
+
+        # one comment per PR, updated in place -- a bot that spams a new comment
+        # on every push is a bot people mute
+        gh pr comment "$PR_NUMBER" --body-file comment.md --edit-last --create-if-none
+
+    - name: Enforce the floor
+      if: inputs.fail-under != ''
+      shell: bash
+      run: |
+        python - <<'PY'
+        import json, os, sys
+        d = json.load(open("crucible-score.json"))
+        floor = float(os.environ["FAIL_UNDER"])
+        score = d["score"]
+        if score < floor:
+            print(f"::error::Mutation score {score:.0f}% is below the floor of {floor:.0f}%. "
+                  f"{d['counts']['survived']} injected defects survived this suite.")
+            sys.exit(1)
+        print(f"Mutation score {score:.0f}% meets the floor of {floor:.0f}%.")
+        PY
+      env:
+        FAIL_UNDER: ${{ inputs.fail-under }}
