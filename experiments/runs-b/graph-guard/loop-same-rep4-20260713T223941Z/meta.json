@@ -1,0 +1,22 @@
+{
+  "phase": "run",
+  "arm": "loop-same",
+  "subject": "/Users/jeffreyotterson/crucible-subjects/graph-guard",
+  "module": "graph_guard/ppr.py",
+  "head_sha": "78ab121e4bcebf0d8d34b5e4d3de520d3ff39fb7",
+  "protocol_b_version": 1,
+  "tester_provider": "anthropic",
+  "tester_model": "claude-sonnet-5",
+  "critic_provider": "anthropic",
+  "critic_model": "claude-sonnet-5",
+  "critic_billing": "api",
+  "seed": {
+    "seed_dir": "/Users/jeffreyotterson/ai-agentic-code-testing/experiments/seeds/graph-guard/rep4",
+    "test_sha256": "2a574f71c41133090e26ba2a1e8c62a9bcc864fb76f318fb3543cf47c3ec329b",
+    "seed_head_sha": "78ab121e4bcebf0d8d34b5e4d3de520d3ff39fb7",
+    "rep": 4
+  },
+  "started_at": "20260713T223941Z",
+  "max_rounds": 4,
+  "dry_rounds": 2
+}

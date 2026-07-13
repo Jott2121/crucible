@@ -1,0 +1,75 @@
+import pytest
+
+from graph_guard.ppr import personalized_pagerank
+
+
+def _self_loop_and_dangling_after(steps, alpha):
+    """Independently compute PPR for a -> a and dangling b, seeded at a."""
+    a = 0.5
+    b = 0.5
+    for _ in range(steps):
+        next_a = alpha * a + (1.0 - alpha) + alpha * b
+        next_b = alpha * a
+        a, b = next_a, next_b
+    return a, b
+
+
+def test_duplicate_seeds_are_aggregated_into_a_normalized_teleport_distribution():
+    result = personalized_pagerank(
+        {"only": {}},
+        ["only", "only"],
+        alpha=0.85,
+        iters=1,
+        tol=0.0,
+    )
+
+    assert result["only"] == pytest.approx(1.0, rel=1e-12)
+
+
+def test_default_iteration_count_and_tolerance_perform_fifty_diffusion_steps():
+    adjacency = {"a": {"a": 1.0}, "b": {}}
+
+    result = personalized_pagerank(adjacency, ["a"])
+    expected_a, expected_b = _self_loop_and_dangling_after(50, 0.85)
+
+    assert result["a"] == pytest.approx(expected_a, rel=1e-10)
+    assert result["b"] == pytest.approx(expected_b, rel=1e-10)
+
+
+def test_strict_tolerance_comparison_stops_only_after_delta_is_below_tolerance():
+    adjacency = {"a": {"a": 1.0}, "b": {}}
+
+    result = personalized_pagerank(
+        adjacency,
+        ["a"],
+        alpha=0.5,
+        iters=3,
+        tol=0.5,
+    )
+
+    # First iteration has L1 delta exactly 0.5, so strict "<" must continue.
+    assert result["a"] == pytest.approx(0.625, rel=1e-12)
+    assert result["b"] == pytest.approx(0.375, rel=1e-12)
+
+
+class _DefaultSensitiveAdjacency(dict):
+    """A dict subclass that requires callers to provide a mapping fallback."""
+
+    def get(self, key, default=None):
+        if default is None:
+            return None
+        return super().get(key, default)
+
+
+def test_adjacency_lookup_uses_an_empty_mapping_fallback_for_outgoing_edges():
+    adjacency = _DefaultSensitiveAdjacency({"a": {"a": 1.0}})
+
+    result = personalized_pagerank(
+        adjacency,
+        ["a"],
+        alpha=0.5,
+        iters=1,
+        tol=0.0,
+    )
+
+    assert result["a"] == pytest.approx(1.0, rel=1e-12)

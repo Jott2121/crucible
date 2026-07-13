@@ -1,0 +1,51 @@
+```python
+import inspect
+
+import pytest
+
+from graph_guard.ppr import personalized_pagerank
+
+
+def test_default_parameter_values():
+    """Guards the documented defaults: iters=50, tol=1e-9.
+
+    Mutants that change the default `iters` (e.g. to 51) or the default
+    `tol` (e.g. to ~1.0) are caught directly via introspection of the
+    function signature, independent of any particular graph's dynamics.
+    """
+    sig = inspect.signature(personalized_pagerank)
+    assert sig.parameters["iters"].default == 50
+    assert sig.parameters["tol"].default == pytest.approx(1e-9, rel=1e-6)
+
+
+def test_duplicate_seeds_are_accumulated_in_teleport_vector():
+    """Two dangling, seed-only nodes make nxt == teleport vector exactly
+    on every iteration (mass always collapses to 1.0), so the final
+    result must equal the teleport distribution built from the seed
+    list, including duplicates accumulating extra teleport mass.
+
+    seeds = ["A", "A", "B"] with 3 total seed slots -> A should get 2/3
+    of the teleport mass, B only 1/3. A mutant that fails to accumulate
+    weight per seed (looks up a constant key instead of the current
+    seed) would instead give A and B equal (and non-normalized) shares.
+    """
+    adj = {"A": {}, "B": {}}
+    result = personalized_pagerank(adj, ["A", "A", "B"])
+    assert result["A"] == pytest.approx(2.0 / 3.0, rel=1e-6)
+    assert result["B"] == pytest.approx(1.0 / 3.0, rel=1e-6)
+    assert result["A"] + result["B"] == pytest.approx(1.0, rel=1e-6)
+
+
+def test_loose_tolerance_stops_after_one_iteration():
+    """A 4-node chain A->B->C->D (D dangling), seeded on A, with alpha=0.85.
+
+    After exactly one iteration (computed by hand):
+      mass  = (1-alpha) + alpha*dangling = 0.15 + 0.85*0.25 = 0.3625
+      A_new = mass                       = 0.3625
+      B_new = alpha * 0.25               = 0.2125
+      C_new = alpha * 0.25               = 0.2125
+      D_new = alpha * 0.25               = 0.2125
+      delta = |0.3625-0.25| + 3*|0.2125-0.25| = 0.1125 + 0.1125 = 0.225
+
+    With tol=0.3, since 0.225 < 0.3 the loop must break after the first
+    

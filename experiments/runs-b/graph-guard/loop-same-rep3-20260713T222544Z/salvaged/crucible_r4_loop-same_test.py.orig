@@ -1,0 +1,59 @@
+import pytest
+from graph_guard.ppr import personalized_pagerank
+
+
+def test_ppr_dangling_node_analytic_fixed_point():
+    # a -> b (weight 1), b has NO outgoing edges (dangling), and 'b' is not
+    # even a key in adj (only appears as a neighbor value).
+    adj = {"a": {"b": 1.0}}
+    result = personalized_pagerank(adj, seeds=["a"], alpha=0.85, iters=50, tol=1e-9)
+
+    alpha = 0.85
+    expected_a = 1.0 / (1.0 + alpha)      # 20/37
+    expected_b = alpha / (1.0 + alpha)    # 17/37
+
+    assert result["a"] == pytest.approx(expected_a, rel=1e-5)
+    assert result["b"] == pytest.approx(expected_b, rel=1e-5)
+    assert sum(result.values()) == pytest.approx(1.0, rel=1e-6)
+
+
+def test_ppr_missing_key_matches_explicit_empty_dict():
+    # Omitting a dangling node's key from adj must behave identically to
+    # explicitly giving it an empty neighbor dict.
+    adj_omitted = {"a": {"b": 1.0}}
+    adj_explicit = {"a": {"b": 1.0}, "b": {}}
+
+    r1 = personalized_pagerank(adj_omitted, seeds=["a"], alpha=0.85, iters=50, tol=1e-9)
+    r2 = personalized_pagerank(adj_explicit, seeds=["a"], alpha=0.85, iters=50, tol=1e-9)
+
+    assert r1["a"] == pytest.approx(r2["a"], rel=1e-9)
+    assert r1["b"] == pytest.approx(r2["b"], rel=1e-9)
+
+
+def test_ppr_symmetric_graph_uniform_teleport_is_exact_fixed_point():
+    # Symmetric bidirectional graph with equal weights, no valid seeds ->
+    # uniform teleport. Since the algorithm starts at the uniform
+    # distribution 1/n, and this distribution is already the exact fixed
+    # point here, the result must stay exactly balanced.
+    adj = {"a": {"b": 1.0}, "b": {"a": 1.0}}
+    result = personalized_pagerank(adj, seeds=[], alpha=0.85, iters=50, tol=1e-9)
+
+    assert result["a"] == pytest.approx(0.5, abs=1e-9)
+    assert result["b"] == pytest.approx(0.5, abs=1e-9)
+    assert sum(result.values()) == pytest.approx(1.0, rel=1e-9)
+
+
+def test_ppr_dangling_node_receives_zero_weight_edge_correctly():
+    # 'b' has an outgoing edge but with total weight 0 (still a dangling
+    # node in effect, since out_sum <= 0). This exercises the same
+    # "s <= 0" / dangling-mass branch as the pure-missing-key case, and
+    # should give identical numeric results to the case where 'b' is
+    # omitted entirely, since it contributes 0 to any other node.
+    adj_zero_weight = {"a": {"b": 1.0}, "b": {"c": 0.0}}
+    adj_omitted = {"a": {"b": 1.0}}
+
+    r1 = personalized_pagerank(adj_zero_weight, seeds=["a"], alpha=0.85, iters=50, tol=1e-9)
+    r2 = personalized_pagerank(adj_omitted, seeds=["a"], alpha=0.85, iters=50, tol=1e-9)
+
+    assert r1["a"] == pytest.approx(r2["a"], rel=1e-6)
+    assert r1["b"] == pytest.approx(r2["b"], rel=1e-6)
