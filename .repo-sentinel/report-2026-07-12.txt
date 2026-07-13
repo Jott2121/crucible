@@ -1,0 +1,61 @@
+========================================================================
+REPO SENTINEL REPORT  ·    ·  2026-07-12
+========================================================================
+
+LEGIBILITY CHECKLIST
+  [ -- ] clone_fresh          no upstream configured — cannot compare to GitHub
+  [FAIL] readme               README.md has no quickstart/usage/install section
+  [PASS] license              LICENSE
+  [PASS] tests_exist          tests/ directory present
+  [PASS] ci                   GitHub Actions workflow present
+  [FAIL] description_topics   missing topics
+
+FINDINGS (10) — ranked by what a hiring manager sees first
+------------------------------------------------------------------------
+1. [HIGH/drift/VISIBLE] Shipping skill hardcodes ~/ai-agentic-code-testing/.venv paths (breaks for strangers AND post-rename)
+     where: .claude/skills/harden-tests/SKILL.md:24
+     why:   3 occurrences instruct invoking ~/ai-agentic-code-testing/.venv/bin/crucible; wrong for anyone else and for Jeff after the rename to crucible.
+     fix:   Use bare `crucible` (on PATH after pip install -e) or cwd-relative .venv phrasing.
+
+2. [MED/security/VISIBLE] 43 committed receipts leak absolute /Users/<name> paths (frozen tree)
+     where: experiments/runs/**/meta.json
+     why:   VERIFIED: git grep counts 43 meta.json files recording subject: /Users/jeffreyotterson/crucible-subjects/<repo>. Frozen experiments/ tree -- disposition is Jeff's call.
+     fix:   Owner-gated mechanical scrub: rewrite to ~/crucible-subjects/<repo> across the 43 files as a disclosed, non-scientific freeze amendment (numbers untouched); or accept and ship as-is.
+
+3. [MED/correctness/VISIBLE] oneshot/harden dump raw tracebacks on dirty tree / non-git dir / red suite (REPRODUCED)
+     where: src/crucible/cli.py:91
+     why:   preflight RuntimeErrors escape uncaught to a stack trace; scope subcommand handles the same class cleanly. Dirty clone = the default first-hour state.
+     fix:   try/except RuntimeError in _cmd_run -> print REFUSING one-liner, return 2 (mirror scope path).
+
+4. [MED/correctness/VISIBLE] src-layout apply() silently OVERWRITES the subject's existing root conftest.py (REPRODUCED: fixtures destroyed)
+     where: src/crucible/scope.py:77
+     why:   write_text(SRC_SHIM) unconditional; a subject conftest with fixtures is reduced to the 2-line shim; downstream red-suite blame lands on the subject.
+     fix:   Refuse if a root conftest.py exists and differs (clear note), or append the shim; never silent-replace.
+
+5. [MED/legibility/VISIBLE] Legibility: readme failed
+     where: -
+     why:   README.md has no quickstart/usage/install section
+
+6. [MED/legibility/VISIBLE] Legibility: description_topics failed
+     where: -
+     why:   missing topics [staged: Task 9 sets topics at flip]
+
+7. [LOW/correctness/internal] _zero_test_baseline pristine pytest has no timeout (every other invocation caps at 300s)
+     where: src/crucible/engine.py:218
+     why:   Hanging subject suite hangs crucible unbounded on this one path.
+     fix:   timeout=300 + TimeoutExpired -> refusal, matching runner/canary.
+
+8. [LOW/correctness/internal] All-private/empty module routes to misleading 'the probe is wrong' refusal
+     where: src/crucible/scope.py:369
+     why:   Empty _public_top_level_names -> canary fails pristine -> blame text points at the probe.
+     fix:   Pre-check: refuse with 'module exposes no public top-level symbols to probe'.
+
+9. [LOW/correctness/internal] FakeProvider passes the metered-API billing gate (defaults to 'api'), then crashes confusingly
+     where: src/crucible/experiment.py:93
+     why:   getattr(prov,'billing','api') clears fake; first call raises 'FakeProvider exhausted'.
+     fix:   FakeProvider.billing='fake' so the gate rejects it with the clear message.
+
+10. [LOW/drift/internal] Historical build-log docs reference old repo name + absolute paths (frozen-history convention)
+     where: docs/superpowers/
+     why:   ~15 hits across dated plans/specs; project convention already treats docs/superpowers/ as frozen build log (stale-claims test exempts it).
+     fix:   Optional: add a 3-line docs/superpowers/README.md labeling it a dated build log, mirroring experiments/ framing.

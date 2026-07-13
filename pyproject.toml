@@ -43,6 +43,7 @@ show_missing = true
 [tool.mutmut]
 source_paths = [
     "src/crucible/loop.py",
+    "src/crucible/score.py",
     "src/crucible/guardrails.py",
     "src/crucible/report.py",
     "src/crucible/meter.py",

@@ -159,6 +159,99 @@ def _cmd_report(args) -> int:
     return 0
 
 
+def _has_mutmut_scope(subject: Path) -> bool:
+    """True when the repo already configured [tool.mutmut] itself.
+
+    If it did, that scope is the author's decision about what is worth grading,
+    and `crucible score` uses it rather than overwriting it. Auto-detection is a
+    convenience for repos that have no opinion -- not a licence to replace one.
+    """
+    pyproject = subject / "pyproject.toml"
+    if not pyproject.exists():
+        return False
+    return "[tool.mutmut]" in pyproject.read_text()
+
+
+def _cmd_score(args) -> int:
+    """$0 diagnose: scope the module, run mutmut, report what the suite misses.
+
+    No model is called. This is the command the GitHub Action runs, and the one
+    a stranger runs on their own repo before they trust anything else here.
+    """
+    import json
+    import shutil
+
+    from crucible.engine import MutmutEngine
+    from crucible.score import (
+        EmptyMutantSet,
+        badge_payload,
+        below_threshold,
+        mutation_score,
+        shock_line,
+        stale_artifacts,
+    )
+
+    subject = Path(args.subject).resolve()
+    try:
+        if args.module:
+            # An explicit module means "scope it for me" -- we detect the layout
+            # and WRITE [tool.mutmut]. That overwrites whatever was there.
+            plan = scope_mod.detect(subject, args.module)
+            scope_mod.apply(subject, plan)
+        elif not _has_mutmut_scope(subject):
+            print(
+                "REFUSING: no [tool.mutmut] scope in pyproject.toml and no --module given.\n"
+                "  Pass --module yourpkg/yourmodule.py and I'll detect the scope for you,\n"
+                "  or configure [tool.mutmut] yourself and re-run without --module.",
+                file=sys.stderr,
+            )
+            return 4
+        # else: the repo already told mutmut what to mutate. Honour it. Silently
+        # rewriting a scope someone hand-tuned is how you grade the wrong thing
+        # and hand them a confident number about it.
+
+        # mutmut grades the copy of the tests inside mutants/. Left over from an
+        # earlier run, that copy silently produces yesterday's score -- always in
+        # the flattering direction, because the leftovers are usually hardened.
+        for stale in stale_artifacts(subject):
+            shutil.rmtree(stale) if stale.is_dir() else stale.unlink()
+        outcome = MutmutEngine(subject).measure()
+        score = mutation_score(outcome.counts)
+    except EmptyMutantSet as exc:
+        # a scope with no mutants grades nothing; refusing beats printing a 0%
+        # or a 100% that both happen to be false
+        print(f"REFUSING: {exc}", file=sys.stderr)
+        return 4
+    except (RuntimeError, FileNotFoundError) as exc:
+        # stderr, not stdout: --json redirects stdout to a file, and a refusal
+        # that lands in the JSON file is a refusal nobody ever reads
+        print(f"REFUSING: {exc}", file=sys.stderr)
+        return 4
+
+    if args.badge:
+        Path(args.badge).write_text(json.dumps(badge_payload(outcome.counts)) + "\n")
+
+    if args.json:
+        print(json.dumps({
+            "score": round(score, 2),
+            "counts": outcome.counts,
+            "survivors": outcome.survivors,
+            "module": args.module or "[tool.mutmut] scope",
+        }, indent=2))
+    else:
+        print(shock_line(outcome.counts, coverage=args.coverage))
+        print(f"\nsurvivors ({len(outcome.survivors)}):")
+        for s in outcome.survivors[:10]:
+            print(f"  {s}")
+        if len(outcome.survivors) > 10:
+            print(f"  ... and {len(outcome.survivors) - 10} more")
+
+    if below_threshold(score, args.fail_under):
+        print(f"\nFAIL: mutation score {score:.0f}% is below the floor of {args.fail_under:.0f}%")
+        return 1
+    return 0
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="crucible")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -194,9 +287,30 @@ def main(argv=None) -> int:
     )
     sp.add_argument("subject")
     sp.add_argument("--module", required=True)
+    scp = sub.add_parser(
+        "score",
+        help="$0 diagnose: what fraction of injected defects does your suite kill? "
+             "(no model calls, no API key)",
+        description="Scope one module, inject defects with mutmut, and report how many "
+                    "your existing suite actually catches. No model is called and no key "
+                    "is needed -- the number that embarrasses a coverage badge is free.",
+    )
+    scp.add_argument("subject")
+    scp.add_argument("--module", default=None,
+                     help="module to scope, e.g. yourpkg/yourmodule.py. Omit it to grade the "
+                          "[tool.mutmut] scope the repo already configured.")
+    scp.add_argument("--json", action="store_true", help="machine-readable output")
+    scp.add_argument("--badge", metavar="PATH",
+                     help="write a shields.io endpoint JSON here (serverless badge)")
+    scp.add_argument("--fail-under", type=float, metavar="PCT",
+                     help="exit 1 if the mutation score is below this floor")
+    scp.add_argument("--coverage", type=float, metavar="PCT",
+                     help="your line-coverage number, to print alongside the real one")
     args = parser.parse_args(argv)
     if args.cmd == "report":
         return _cmd_report(args)
+    if args.cmd == "score":
+        return _cmd_score(args)
     if args.cmd == "experiment":
         from crucible.experiment import assert_protocol_committed, load_protocol, run_arm
         # repo root = cwd; the protocol must live in the crucible repo checkout
