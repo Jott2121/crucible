@@ -61,7 +61,11 @@ runs:
 
     - name: Install crucible
       shell: bash
-      run: pip install "crucible @ git+https://github.com/Jott2121/crucible@main"
+      # From the action's OWN checkout, not from a branch name. Whatever ref you
+      # pinned this action to (@v1, @sha) is the crucible you get -- the tool and
+      # the action can never drift apart, and there is no network fetch that
+      # could hand you a different version than the one you reviewed.
+      run: pip install "$GITHUB_ACTION_PATH"
 
     - name: Score the suite
       id: score
