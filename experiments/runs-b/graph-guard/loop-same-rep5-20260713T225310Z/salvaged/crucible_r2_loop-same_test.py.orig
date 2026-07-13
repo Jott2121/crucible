@@ -1,0 +1,65 @@
+import pytest
+from graph_guard.ppr import personalized_pagerank
+
+
+def test_pagerank_single_dangling_node_converges_to_analytic_fixed_point():
+    # A -> B with weight 1.0; B has no outgoing edges (not a key in adj at all),
+    # so B is a "dangling" node whose rank mass must be redistributed via teleport.
+    adj = {"A": {"B": 1.0}}
+    result = personalized_pagerank(adj, seeds=["A"], alpha=0.85, iters=50, tol=1e-9)
+
+    # Analytic fixed point derived from:
+    #   b = alpha * a
+    #   a = (1 - alpha) + alpha * b   (all teleport mass returns to seed A)
+    # => a * (1 - alpha**2) = (1 - alpha)  => a = 20/37, b = 17/37
+    expected_a = 20.0 / 37.0
+    expected_b = 17.0 / 37.0
+
+    assert result["A"] == pytest.approx(expected_a, abs=1e-6)
+    assert result["B"] == pytest.approx(expected_b, abs=1e-6)
+    # total probability mass must be conserved
+    assert sum(result.values()) == pytest.approx(1.0, abs=1e-6)
+
+
+def test_pagerank_multiple_dangling_nodes_converges_to_analytic_fixed_point():
+    # A splits weight equally to two dangling nodes B and C (neither is a key in adj).
+    adj = {"A": {"B": 2.0, "C": 2.0}}
+    result = personalized_pagerank(adj, seeds=["A"], alpha=0.85, iters=50, tol=1e-9)
+
+    # By symmetry b == c, and the same fixed-point equation as the single-dangling
+    # case governs 'a' since alpha * a is fully returned as dangling mass regardless
+    # of how it is split between B and C:
+    #   a = 20/37 ,  b = c = (1 - a) / 2 = 17/74
+    expected_a = 20.0 / 37.0
+    expected_bc = 17.0 / 74.0
+
+    assert result["A"] == pytest.approx(expected_a, abs=1e-6)
+    assert result["B"] == pytest.approx(expected_bc, abs=1e-6)
+    assert result["C"] == pytest.approx(expected_bc, abs=1e-6)
+    assert sum(result.values()) == pytest.approx(1.0, abs=1e-6)
+
+
+def test_pagerank_trivial_single_dangling_node_returns_full_mass():
+    # A single node with no outgoing edges at all: all mass must dangle then be
+    # fully returned via teleport back onto itself (its own seed).
+    adj = {"A": {}}
+    result = personalized_pagerank(adj, seeds=["A"], alpha=0.85, iters=50, tol=1e-9)
+
+    assert result == {"A": pytest.approx(1.0, abs=1e-9)}
+
+
+def test_pagerank_mass_conserved_with_mixed_dangling_and_normal_nodes():
+    # Mix of a normal edge (A->B) and a dangling node C reachable from B, to
+    # exercise dangling-mass handling across multiple hops while checking that
+    # total probability mass always sums to ~1.
+    adj = {
+        "A": {"B": 1.0},
+        "B": {"C": 1.0},
+    }
+    result = personalized_pagerank(adj, seeds=["A"], alpha=0.85, iters=50, tol=1e-9)
+
+    assert set(result.keys()) == {"A", "B", "C"}
+    assert sum(result.values()) == pytest.approx(1.0, abs=1e-6)
+    # every node must receive a strictly positive, finite share of rank
+    for v in ("A", "B", "C"):
+        assert result[v] > 0.0
