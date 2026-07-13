@@ -30,6 +30,18 @@ from crucible.guardrails import GuardrailViolation
 from crucible.providers_ext import TruncatedOutput
 
 
+class ReproductionMismatch(RuntimeError):
+    """A PROTOCOL-B seeded continuation failed to reproduce the frozen seed's
+    measurement (baseline drift, post-round-0 survivor drift, injection-time
+    validation failure, or a resurrected mutant). The replicate is instrument-
+    invalid and must never be scored; `rounds` carries whatever rounds were
+    already receipted so the caller can cost them honestly."""
+
+    def __init__(self, msg: str, rounds: list | None = None):
+        super().__init__(msg)
+        self.rounds = list(rounds or [])
+
+
 @dataclass(frozen=True)
 class RoundReply:
     text: str
@@ -169,25 +181,106 @@ def _run(env, cfg, rounds_budget, on_round=None) -> LoopResult:
         # a run whose tester round never produced valid tests measured nothing;
         # "clean" must be impossible here
         return _result(first.status)
-    survivors = first.survivors_after
+    return _critic_phase(env, cfg, rounds, first.survivors_after, rounds_budget,
+                         on_round, _result, forbid_resurrection=False)
 
+
+def _critic_phase(env, cfg, rounds, survivors, rounds_budget, on_round, result,
+                  forbid_resurrection):
+    """Rounds 1..N (shared by the fresh-round-0 and seeded paths — behavior of the
+    fresh path is unchanged by the extraction). With forbid_resurrection (PROTOCOL-B
+    §4), a mutant reappearing after it was measured killed is an instrument failure:
+    the round is receipted first (evidence), then the run fails loud, never scored."""
     dry = 0
     for n in range(1, rounds_budget + 1):
         if not survivors:
-            return _result("clean")
+            return result("clean")
         rec = _round(env, cfg, n, "critic", survivors)
         rounds.append(rec)
         if on_round is not None:
             on_round(rec)
+        if forbid_resurrection:
+            resurrected = set(rec.survivors_after) - set(survivors)
+            if resurrected:
+                raise ReproductionMismatch(
+                    f"round {n} resurrected mutants {sorted(resurrected)}: a mutant "
+                    "measured killed came back, so a non-deterministic test is in "
+                    "play; the replicate is instrument-invalid (PROTOCOL-B §4)",
+                    rounds=rounds)
         if rec.status == "aborted":
-            return _result("aborted")
+            return result("aborted")
         survivors = rec.survivors_after
         dry = dry + 1 if not rec.kills else 0
         if dry >= cfg.dry_rounds:
-            return _result("dry")
+            return result("dry")
 
     verdict = "clean" if not survivors else ("cap" if rounds_budget else "oneshot")
-    return _result(verdict)
+    return result(verdict)
+
+
+def seeded_run(env, cfg: LoopConfig, seed_text: str, expected_baseline, expected_post,
+               on_round=None, seed_model: str = "", seed_prompt_sha256: str = "") -> LoopResult:
+    """PROTOCOL-B seeded continuation: round 0 installs the frozen seed file instead
+    of calling the Tester (zero marginal cost), verifies the frozen measurement
+    reproduces exactly, then runs Critic rounds as in `harden`. Any reproduction
+    failure raises ReproductionMismatch — the cell fails loud and is never scored."""
+    rounds: list[RoundRecord] = []
+    pre = env.measure()
+    if set(pre.survivors) != set(expected_baseline):
+        raise ReproductionMismatch(
+            "pristine baseline differs from the frozen seed's: measured "
+            f"{sorted(pre.survivors)} != frozen {sorted(expected_baseline)} "
+            "(PROTOCOL-B §4 reproduction check)")
+
+    def _result(verdict: str) -> LoopResult:
+        return LoopResult(rounds, verdict, _cost(rounds),
+                          baseline_survivors=list(pre.survivors),
+                          baseline_all_mutants=pre.all_mutants,
+                          baseline_counts=dict(pre.counts))
+
+    rec = RoundRecord(round=0, role="tester", survivors_before=list(pre.survivors),
+                      model=seed_model, prompt_sha256=seed_prompt_sha256,
+                      note="frozen seed injected; zero marginal cost (PROTOCOL-B)")
+    path = env.write_test_file(0, cfg.arm, seed_text)
+    rec.test_file = path
+    try:
+        dropped = env.validate(path)
+    except GuardrailViolation as exc:
+        raise ReproductionMismatch(
+            f"frozen seed failed pristine validation at injection: {exc} "
+            "(PROTOCOL-B §4 seed re-validation)") from exc
+    if dropped:
+        raise ReproductionMismatch(
+            f"injection-time salvage dropped {list(dropped)}: the frozen seed no "
+            "longer passes pristine as frozen (PROTOCOL-B §4 seed re-validation)")
+    try:
+        after = env.measure()
+    except SandboxStatsFailure as exc:
+        raise ReproductionMismatch(
+            f"frozen seed crashed the measurement sandbox at injection: {exc} "
+            "(measured clean at freeze time, so the instrument changed)") from exc
+    try:
+        env.assert_clean()
+    except GuardrailViolation as exc:
+        # executing the frozen seed touched the tree: the shared starting state
+        # is corrupt, the same instrument-failure class as a reproduction
+        # mismatch -- never a raw crash that would leave the cell unreceipted
+        raise ReproductionMismatch(
+            f"tree integrity failed after seed injection: {exc} (PROTOCOL-B §4)") from exc
+    if set(after.survivors) != set(expected_post):
+        raise ReproductionMismatch(
+            "post-round-0 survivors differ from the frozen seed's: measured "
+            f"{sorted(after.survivors)} != frozen {sorted(expected_post)} "
+            "(PROTOCOL-B §4 reproduction check)")
+    rec.survivors_after = list(after.survivors)
+    rec.kills = [m for m in pre.survivors if m not in set(after.survivors)]
+    rec.all_mutants = after.all_mutants
+    rec.counts = dict(after.counts)
+    rounds.append(rec)
+    if on_round is not None:
+        on_round(rec)
+    return _critic_phase(env, cfg, rounds, rec.survivors_after, cfg.max_rounds,
+                         on_round, _result, forbid_resurrection=True)
 
 
 def _cost(rounds) -> float:
