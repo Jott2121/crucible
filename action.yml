@@ -1,5 +1,5 @@
 name: "Crucible — mutation score"
-description: "Your tests pass and coverage is green. How many real bugs would they actually catch? Runs mutation testing on a PR, comments the number, and can fail the build below a floor. No model, no API key, $0."
+description: "How many real bugs would your tests actually catch? Posts a mutation score on every PR. No model, no API key, $0."
 author: "Jeff Otterson"
 branding:
   icon: "shield"
