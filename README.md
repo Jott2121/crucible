@@ -5,7 +5,7 @@
 [![ci](https://github.com/Jott2121/crucible/actions/workflows/ci.yml/badge.svg)](https://github.com/Jott2121/crucible/actions/workflows/ci.yml)
 [![codeql](https://github.com/Jott2121/crucible/actions/workflows/codeql.yml/badge.svg)](https://github.com/Jott2121/crucible/actions/workflows/codeql.yml)
 [![mutation score](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/Jott2121/crucible/badges/mutation.json&labelColor=0F172A)](docs/MUTATION.md)
-[![tests](https://img.shields.io/badge/tests-323-38BDF8?labelColor=0F172A)](tests/)
+[![tests](https://img.shields.io/badge/tests-330-38BDF8?labelColor=0F172A)](tests/)
 [![H1](https://img.shields.io/badge/H1-supported_p%3D4.9e--32-818CF8?labelColor=0F172A)](experiments/RESULTS.md)
 [![H2](https://img.shields.io/badge/H2-not_supported_p%3D0.0625-FBBF24?labelColor=0F172A)](experiments/RESULTS.md)
 [![metered spend](https://img.shields.io/badge/metered_spend-%240-34D399?labelColor=0F172A)](#receipts-are-the-product)
