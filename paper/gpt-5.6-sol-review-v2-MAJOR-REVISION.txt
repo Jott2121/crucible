@@ -1,0 +1,100 @@
+## MUST-FIX
+
+1. **Stop calling Experiment 2 a resolved lineage effect. It estimates a difference between two named model–provider–harness configurations.**  
+   The manuscript correctly concedes in Sections 3.10, 4.8, and 5.4 that “lineage” bundles model identity, provider behavior, formatting compatibility, verbosity, and truncation policy. Elsewhere it reverses that qualification:
+   - Abstract: “the cross-lineage question … resolved to a positive pilot signal”
+   - Section 3.2: tier matching “isolates lineage”
+   - Section 2.6: “controlled cross-lineage versus same-lineage critic measurement”
+   - Section 4.8: “resolve a signal”
+   - Title and Section 5.4: “A null resolved by design”
+   
+   Price-tier matching does not isolate lineage, and the largest observed gap explicitly includes a same-lineage truncation and formatting failure.  
+   **Concrete fix:** Rename the estimand throughout as a comparison of the two specified critic configurations. Replace “lineage effect,” “isolates lineage,” and “resolved” with “configuration-level pilot difference.” Reserve “cross-lineage” as a descriptive label for the arms, not the inferred cause. A lineage claim would require multiple models per lineage/provider and symmetric resource and parsing policies.
+
+2. **The operational failure is disclosed prominently but then counted in the very lineage signal the paper says it no longer launders. Resolve this contradiction.**  
+   Section 4.8 says the corrected instrument “records it as data instead of laundering it into a lineage effect,” but the truncation produces `Delta_same = 0`, enlarges the reported cross-minus-same gap, and is included in the “positive cross-lineage pilot signal.” Detection makes the cause visible; it does not remove it from the estimate. The corrected result is defensible only as deployed-pipeline performance under the configured caps and validators—not as critic capability or lineage diversity.  
+   **Concrete fix:** Define two estimands:
+   - **Primary operational estimand:** all pre-registered failures count, estimating end-to-end deployability under the specified harness.
+   - **Capability-oriented sensitivity analysis:** report results excluding the truncation-affected replicate, excluding all rejected-round cells, or under a symmetric explicit output budget and parser policy.
+   
+   Report how the pooled gap and interval change under each analysis. Do not call the operational estimate a lineage effect.
+
+3. **“A null resolved by design” is not supported. Experiment 2 changed replication and spend as well as pairing.**  
+   Experiment 1 had one run per subject; Experiment 2 has five replicates per subject. Experiment 2’s receipted total is $15.47, versus approximately $4.23 across Experiment 1’s counted valid cells. The paper therefore did not hold sample size or spend fixed while changing only the frozen-round-0 design. Statements such as “same-sized comparison,” “similar spend,” “nothing … changed … [except] the design’s noise floor,” and “variance removal, not sample growth” are false or unestablished. Moreover, Experiment 1’s \(p=0.0625\) was an inconclusive, confounded comparison—not evidence for a null that Experiment 2 subsequently resolved.  
+   **Concrete fix:** Retitle Section 5.4 and the paper. State that Experiment 2 combined shared baselines with fivefold replication and greater spend, yielding a more informative pilot estimate. Do not attribute the changed result solely to variance removal without an analysis that separates pairing from replication.
+
+4. **The Experiment 2 bootstrap intervals do not support the inferential weight placed on them.**  
+   The pooled percentile bootstrap resamples only four subject means. With four clusters, percentile cluster-bootstrap coverage is unreliable and highly discrete. It also treats each estimated subject mean as fixed and does not propagate the sampling variation from only five replicates within each subject. The cross-lineage table reports no subject-level values, so readers cannot see whether the interval excluding zero is robust or merely a consequence of all four empirical cluster means being nonnegative. Pre-registration and bit-for-bit reproducibility do not make this interval statistically reliable.  
+   **Concrete fix:**  
+   - Publish the 20 replicate-level values for `Delta_same`, `rho_same`, \(D\), and `rho_gap`.
+   - Report all four subject means and their replicate distributions for the critic comparison.
+   - Use a hierarchical/two-stage bootstrap that resamples subjects and replicates within subjects, while acknowledging that four subjects remain inadequate for population-level inference.
+   - Add leave-one-subject-out and leave-the-truncation-replicate-out analyses.
+   - Treat intervals as descriptive uncertainty for this subject set, not confirmation that a general effect is above zero.
+
+5. **There is an internal numerical contradiction in the graph-guard Experiment 2 results.**  
+   Section 4.6 says graph-guard’s round-0 draws killed 11 to 12 of 22 mutants, leaving 10 to 11 survivors. Section 4.7 says `Delta_same = 5` in every replicate and reports `rho_same = 0.50 [0.50, 0.50]`. If any replicate left 11 survivors, its rate was \(5/11 \approx 0.455\), so neither the mean nor its interval can be exactly 0.50 with zero variation. The prose explicitly says “10 or 11 remaining survivors,” confirming the contradiction. This may also alter the pooled 0.783 estimate and interval.  
+   **Concrete fix:** Recompute the graph-guard rates, its bootstrap interval, the pooled rate, and every downstream claim using those values. Include the replicate table so the correction is auditable.
+
+6. **Experiment 1 still retains the invalid inferential rhetoric identified in the prior review.**  
+   Experiment 2 genuinely answers the prior H1 design criticism. However, the paper continues to designate Experiment 1’s pooled mutant-level McNemar test as “confirmatory,” declare “H1 SUPPORTED,” and say the pipeline “confirmed” or “dominated.” Mutants are clustered within only four subjects, and the arms use independent stochastic initial suites. Pre-registration does not validate the unit of analysis. Most seriously, Section 4.2 retains the previously rejected claim:
+   > “The defect worked against H1’s own hypothesis, so the true effect could only be as large or larger than the defect-affected data showed.”
+   
+   The corrected cells are new stochastic runs. Their outcomes do not establish a monotonic relationship to the counterfactual result of the original truncated calls.  
+   **Concrete fix:** Delete the “could only be” sentence. Recast Experiment 1 as a historical, descriptive pipeline comparison and instrumentation incident. Report its pre-registered McNemar result for completeness, but explicitly label the pooled inference statistically invalid for subject-level generalization and remove “confirmatory,” “H1 SUPPORTED,” and unqualified “dominated.” Make Experiment 2 the sole causal H1 result.
+
+7. **Scope the Experiment 2 causal claim more narrowly.**  
+   Shared frozen state does identify the incremental score gain from running the configured add-only Critic pipeline rather than stopping after round 0. It does not establish a broad effect of “the adversarial loop” across models, repositories, or test-generation settings. Further, non-negativity is engineered by retaining the seed suite and rejecting unusable additions. “Positive on all twenty replicates” is therefore much less probative than it sounds; the outcome can be zero but cannot be negative under the scoring construction.  
+   **Concrete fix:** State the estimand as: “the incremental mutation kills produced by this guarded, add-only continuation, conditional on these frozen seeds, subjects, models, and stopping rules.” Retain “magnitude, not sign” consistently. Remove language presenting directional consistency as independent evidence, and discuss cost and operational failures as the channels through which the continuation can still be harmful.
+
+8. **Provide the missing sensitivity analysis for the single 39-kill packaging gap.**  
+   One replicate contributes 39 of the total 66 additional cross-over-same kills. That is 59% of the total kill gap and is tied directly to formatting and truncation failures. Reporting only the pooled interval conceals this leverage.  
+   **Concrete fix:** Report:
+   - all subject means;
+   - all replicate gaps;
+   - the estimate without that replicate;
+   - the estimate without packaging;
+   - leave-one-subject-out intervals or ranges;
+   - a decomposition into accepted-test kills, formatting rejection, truncation, and stopping behavior.
+
+9. **Remove the unsupported Experiment 1 cost comparison and causal cost attribution.**  
+   Section 4.5 still says loop-cross is “about 3.4 times cheaper per kill” immediately after admitting that the arms cover different subject sets. That comparison is invalid, exactly as the prior review explained. “Verbosity, not lineage capability, is the dominant cost variable” also exceeds the design because verbosity was not independently manipulated. Experiment 2 supplies a valid like-for-like configuration comparison, so the invalid Experiment 1 ratio is unnecessary.  
+   **Concrete fix:** Delete the 3.4× comparative conclusion from Experiment 1. In Experiment 2, say that token receipts show output length and rejected rounds account arithmetically for much of the observed billing difference between these configurations; do not infer what would happen under capability- or budget-matched models.
+
+10. **Remove the remaining priority claims.**  
+    The manuscript still claims “the first of its kind” cost accounting and a controlled measurement not found in prior work. The expanded related work is not a systematic search, and the reference list itself includes unchecked entries.  
+    **Concrete fix:** Use the formulation requested in the prior review: “We report cost per mutation kill, a normalization not found in the studies reviewed here.” Remove “first” and equivalent priority language unless a documented systematic search is added.
+
+11. **The reference list is not publication-ready and still omits directly requested work.**  
+    Entries marked `[VERIFY]` cannot remain in a submitted manuscript. The revision added the oracle, mutation, LLM-judge, and Defects4J literature, but omitted several directly relevant systems identified in the prior review, including TOGA, Fuzz4All, and TitanFuzz. Infrastructure nondeterminism, flaky tests, and experimental-tool validation also remain weakly covered despite being central to the paper.  
+    **Concrete fix:** Verify every bibliographic entry, remove all `[VERIFY]` markers, and add the missing test-oracle, execution-feedback, fuzzing, flaky-test, and experimental-infrastructure literature or explain its exclusion.
+
+## NICE-TO-HAVE
+
+1. **Shorten the manuscript substantially.** The same truncation incident, \(p=9.5\times10^{-66}\), and “review loop” narrative are repeated in the abstract, introduction, contributions, Results, Discussion, and Threats. A rigorous workshop version should report the incident once in Results and interpret it once in Discussion.
+
+2. **Neutralize the manifesto tone.** Phrases such as “It would have been easy, and wrong,” “the paper’s central/durable contribution,” “stated plainly,” and repeated claims about honesty continue to seek credit for disclosure. Use incident-report language and let the audit trail establish transparency.
+
+3. **Reduce the contribution list from five items to three.** The “review-to-experiment loop” is process history, not a scientific contribution on the same level as a causal estimate or instrument finding.
+
+4. **Clarify the target population for pooled subject means.** An unweighted mean over two author projects and two third-party modules is a descriptive average over these four subjects, not an estimate of a naturally defined population without a sampling model.
+
+5. **Separate counted experimental cost from total research cost.** The paper discusses invalidated spend, counted spend, and Experiment 2 spend in different places. A single accounting table would prevent ambiguity.
+
+6. **Use “confidence interval” cautiously for pre-registered bootstrap output.** Given four subjects, “bootstrap interval” is the more accurate label unless inferential assumptions and target population are explicitly defended.
+
+7. **Clarify whether frozen seeds were merely committed locally or also pushed before continuations.** A local Git commit is mutable in the practical audit sense. The receipts should identify immutable public hashes or an external timestamp for each seed if temporal freezing is part of the claim.
+
+## VERDICT: MAJOR REVISION
+
+The revision **genuinely answers PART A’s central H1 design criticism**: Experiment 2 freezes one round-0 state per replicate and runs both continuations from byte-identical suites and survivor sets. That supports a within-replicate causal estimate of incremental mutation kills for the configured add-only pipeline.
+
+The paper is not yet acceptable because it converts the cross-critic result into a “null resolved” narrative that the design and statistics do not support. The result is based on four subjects, five replicates each, a fragile four-cluster bootstrap, greater replication and spend than Experiment 1, and a large operational-failure contribution that is simultaneously disclosed and marketed as a cross-lineage signal. Experiment 1 also retains several claims explicitly rejected in PART A, including the invalid pooled “confirmatory” framing and the “true effect could only be larger” sentence.
+
+The operational-fragility disclosure is prominent rather than buried. Its interpretation is the problem: the paper must decide whether it measures deployed configurations, in which case truncation and formatting failures legitimately count, or critic lineage/capability, in which case they are unresolved confounds. It cannot claim both.
+
+## Top three changes
+
+1. **Reframe H2 everywhere as a pilot comparison of two named model–provider–harness configurations, not a resolved lineage effect.**
+2. **Reanalyze Experiment 2 with raw subject/replicate results, hierarchical and leave-one-out sensitivities, and correction of the graph-guard rate inconsistency.**
+3. **Demote Experiment 1 to descriptive historical evidence, remove its invalid confirmatory rhetoric and cost comparison, and delete the “true effect could only be larger” claim.**
