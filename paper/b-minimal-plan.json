@@ -1,0 +1,48 @@
+{
+  "title": "B-minimal: frozen round-0 rerun to make H1 a clean causal finding",
+  "target": "isolate the loop's incremental effect; H2 stays honest pilot; autopsy stays headline",
+  "meta": [
+    {"text": "reuses the whole existing engine", "tone": "good"},
+    {"text": "~1 focused week", "tone": "info"},
+    {"text": "~$15-45 API spend", "tone": "info"},
+    {"text": "does NOT fix H2 power (that's B-full)", "tone": "muted"},
+    {"text": "instrument already fixed", "tone": "good"}
+  ],
+  "intent": "GPT's valid core hit: because each arm draws its own round-0, H1 compares two independently-sampled pipelines, not the loop's isolated effect. B-minimal fixes exactly that: generate one round-0 Tester suite per replicate, FREEZE it, and run all three continuations (no-critic / same-lineage critic / cross-lineage critic) from that identical frozen state. Repeat over K independent round-0 draws per subject to average out the huge draw variance (you saw 69/168/50/62/65 on one subject). H1 becomes a within-replicate paired comparison on the identical starting suite -- a true causal isolation. The hard 80% (engine, providers, receipts, the fixed fail-loud instrument, analysis scaffold) already exists and is NOT rebuilt. H2's ceiling/power problem is out of scope (needs new harder subjects = B-full); it stays a pilot observation, and the autopsy stays the paper's contribution.",
+  "steps": [
+    {"id": "1", "label": "Re-pre-register the frozen-round-0 design (commit protocol vN BEFORE any paid run)", "owner": "Opus draft -> Jeff gate", "kind": "gate", "tag": "PREREG"},
+    {"id": "2", "label": "Harness change: freeze round-0 suite + inject it as the seed for all 3 continuations; add replicate loop", "owner": "Opus build + tests", "kind": "pending"},
+    {"id": "3", "label": "Free model-free dry-run validation (validate_scopes-style, $0) before spending", "owner": "Opus", "kind": "pending"},
+    {"id": "4", "label": "Run K replicates x subjects (one frozen round-0 shared across the 3 continuations)", "owner": "Opus run -> Jeff spend-gate", "kind": "gate", "tag": "SPEND"},
+    {"id": "5", "label": "New analysis: per-replicate paired kill-delta + subject-clustered effect sizes & intervals (not pooled mutant McNemar)", "owner": "Opus", "kind": "pending"},
+    {"id": "6", "label": "Revise paper: H1 now causal, + fold GPT's other valid fixes (tone, surveys, cost-3.4x, power language, temper pre-reg) -> Fable + optional GPT re-review", "owner": "Opus draft -> Jeff lock", "kind": "pending"}
+  ],
+  "decision": {
+    "question": "\"How many replicates (K) and which subjects -- the scope knob that sets cost and power?\"",
+    "rejected": {"label": "K=5 on all 5 subjects", "detail": "25 replicates x 3 continuations = ~75 runs, ~$30-45, includes the deadlock-prone attrition subject; more power but more cost + flake risk"},
+    "chosen": {"label": "K=5 on the 4 clean subjects (drop flaky attrition)", "detail": "20 replicates x 3 = ~60 runs, ~$15-30; matches the ~5-draw variance you already observed; sidesteps the attrition deadlock; H1 stats span the same 4 subjects the paper already reports"},
+    "verdict": "Recommend K=5 on the 4 clean subjects for B-minimal; attrition (the degenerate + deadlock-prone one) is where the least is gained and the most can go wrong. Your call on K (3 = cheaper/less power, 5 = the sweet spot) and whether to keep attrition."
+  },
+  "roles": [
+    ["Re-pre-registration", "Opus drafts, Jeff approves", "committed protocol vN (frozen-round-0 design)"],
+    ["Harness + dry-run", "Opus", "seed-injection loop + $0 validation"],
+    ["Paid reruns", "Opus runs, Jeff spend-gates", "K x subjects x 3 receipted cells"],
+    ["Re-analysis", "Opus", "per-replicate deltas + clustered effect sizes/CIs"],
+    ["Paper revision + review", "Opus drafts, Fable/GPT review, Jeff locks", "revised Results/Method + honest H1"]
+  ],
+  "artifacts": [
+    {"kind": "edit", "label": "crucible.loop / crucible.experiment -- seed-suite injection + replicate loop"},
+    {"kind": "new", "label": "experiments/PROTOCOL vN -- frozen-round-0 pre-registration"},
+    {"kind": "edit", "label": "experiments/analyze.py -- per-replicate clustered analysis"},
+    {"kind": "new", "label": "experiments/runs -- fresh receipted cells (K x subjects x 3)"},
+    {"kind": "edit", "label": "paper Results/Method/Discussion -- H1 causal + GPT's valid fixes"},
+    {"kind": "keep", "label": "engine, providers, fixed fail-loud instrument, subjects -- UNTOUCHED, reused"}
+  ],
+  "risks": [
+    {"sev": "med", "body": "Doing this RIGHT means H1's effect could come back SMALLER than 105-0, because you're now measuring the loop's true incremental effect, not the confounded one. That is the honest point of the exercise -- but be ready for a more modest H1. (The observed c=0 pattern suggests the loop still dominates, but a clean design can shrink it.)", "ask": "Comfortable that a causally-clean H1 might be a smaller, honest effect?"},
+    {"sev": "med", "body": "attrition-risk-ml is the deadlock-prone subject that ate 4 failed rerun attempts last time. Including it risks re-suffering that. Recommended: drop it from B-minimal.", "ask": "Keep attrition, or run B-minimal on the 4 clean subjects?"},
+    {"sev": "lo", "body": "B-minimal does NOT resolve H2 (ceiling/power). H2 stays an honest underpowered pilot; the frozen-round-0 rerun for a REAL H2 (more, harder subjects) is B-full, deliberately out of scope here.", "ask": null},
+    {"sev": "lo", "body": "Scope-creep pull toward B-full (adding subjects to chase H2 power). Hold the line unless you decide to commit to the bigger study.", "ask": null}
+  ],
+  "footer": true
+}

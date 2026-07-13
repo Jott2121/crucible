@@ -1,0 +1,80 @@
+{
+  "protocol_b_version": 1,
+  "base_protocol_version": 11,
+  "tester": {
+    "provider": "anthropic",
+    "model": "claude-sonnet-5"
+  },
+  "rounds": {
+    "max_rounds": 4,
+    "dry_rounds": 2
+  },
+  "replicates": {
+    "k": 5,
+    "max_seed_draws_per_replicate": 3,
+    "max_total_seed_draws_per_subject": 7
+  },
+  "seeds_dir": "experiments/seeds",
+  "runs_dir": "experiments/runs-b",
+  "analysis": {
+    "bootstrap_draws": 10000,
+    "rng_seed": 20260713
+  },
+  "arms": {
+    "no-critic": {
+      "mode": "seed-only"
+    },
+    "loop-same": {
+      "mode": "seeded-harden",
+      "critic": {
+        "provider": "anthropic",
+        "model": "claude-sonnet-5"
+      }
+    },
+    "loop-cross": {
+      "mode": "seeded-harden",
+      "critic": {
+        "provider": "openai",
+        "model": "gpt-5.6-terra"
+      }
+    }
+  },
+  "subjects": {
+    "graph-guard": {
+      "module": "graph_guard/ppr.py",
+      "also_copy": [
+        "graph_guard"
+      ],
+      "pytest_args": [
+        "--ignore=tests/test_sparql_vs_ppr.py",
+        "--ignore=tests/test_eval.py",
+        "--ignore=tests/test_real_vault_lift.py"
+      ],
+      "canary": "import pytest\n\nfrom graph_guard.ppr import personalized_pagerank\n\n\ndef test_canary_ppr_two_node_symmetric_graph_converged_scores():\n    adj = {\"a\": {\"b\": 1.0}, \"b\": {\"a\": 1.0}}\n    r = personalized_pagerank(adj, [\"a\"])\n    assert r[\"a\"] == pytest.approx(0.5405285500812008, abs=1e-6)\n    assert r[\"b\"] == pytest.approx(0.4594714499187992, abs=1e-6)\n"
+    },
+    "rag-guard": {
+      "module": "rag_guard/guard.py",
+      "also_copy": [
+        "rag_guard"
+      ],
+      "pytest_args": [
+        "--ignore=tests/test_hook.py"
+      ],
+      "canary": "from rag_guard.guard import should_refuse\n\n\ndef test_canary_should_refuse_high_score_is_not_refused():\n    assert should_refuse([{\"score\": 0.5}]) is False\n"
+    },
+    "packaging": {
+      "module": "src/packaging/_elffile.py",
+      "also_copy": [
+        "src/packaging"
+      ],
+      "canary": "\"\"\"Free canary (crucible v6 amendment): a hand-built minimal ELF32-LSB header\nwith a known e_machine field, parsed by ELFFile -- exercises the struct-unpack\nheader path _elffile.py exists to implement.\"\"\"\nimport io\nimport struct\n\nfrom packaging._elffile import ELFFile, EMachine\n\n_IDENT = bytes([0x7F, ord(\"E\"), ord(\"L\"), ord(\"F\"), 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0])\n_HEADER = struct.pack(\n    \"<HHIIIIIHHH\",\n    2,      # e_type\n    62,     # e_machine = EM_X86_64\n    1,      # e_version\n    0x1000, # e_entry\n    0,      # e_phoff\n    0,      # e_shoff\n    0,      # e_flags\n    52,     # e_ehsize\n    32,     # e_phentsize\n    0,      # e_phnum\n)\n\n\ndef test_canary_elf32_lsb_header_reports_x86_64_machine():\n    f = ELFFile(io.BytesIO(_IDENT + _HEADER))\n    assert f.capacity == 1\n    assert f.encoding == 1\n    assert f.machine == EMachine.X8664\n"
+    },
+    "idna": {
+      "module": "idna/cli.py",
+      "also_copy": [
+        "idna"
+      ],
+      "canary": "\"\"\"Free canary (crucible v6 amendment): a known-ACE-prefixed label must be\ndetected by _looks_like_alabel, a plain ASCII label must not.\"\"\"\nfrom idna.cli import _looks_like_alabel\n\n\ndef test_canary_looks_like_alabel_detects_xn_prefix():\n    assert _looks_like_alabel(\"xn--nxasmq6b\") is True\n    assert _looks_like_alabel(\"example.com\") is False\n"
+    }
+  }
+}

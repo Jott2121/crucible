@@ -1,0 +1,324 @@
+## Summary judgment
+
+This paper has an unusually candid failure narrative, but it mistakes candor for evidential strength. The core experimental comparisons do not identify the effects they claim to test. The paper itself discloses the fatal issue—“**Each arm independently regenerates its own round 0**”—then continues to treat mutant-level McNemar tests as confirmatory evidence for a loop effect (H1) and a critic-lineage effect (H2). That is not defensible.
+
+The autopsy is potentially workshop-worthy as a short, sharply scoped case study in evaluation-harness failure. It is not, in its current form, a “durable contribution” sufficient to carry a full empirical paper whose main causal claims are confounded and whose statistical unit is wrong.
+
+---
+
+## 1. Overclaiming
+
+### H1 is not a clean replication of the loop effect
+
+The paper repeatedly calls H1 “**a clean replication of a known effect**,” “**a replication**,” and says that the loop “**strictly dominates one-shot generation**.” Those are stronger claims than the design supports.
+
+The decisive design sentence is in Section 3.2:
+
+> “**Each arm independently regenerates its own round 0, so the tester suite and its resulting survivor set are not held fixed between loop-same and loop-cross.**”
+
+The authors frame that as an H2 limitation, but it applies just as directly to H1. `oneshot` and `loop-same` also independently generate round-0 Tester suites. Thus H1 compares:
+
+- one random Tester output, versus
+- another random Tester output plus Critic rounds.
+
+It does **not** isolate the incremental effect of the loop. The apparent 105–0 discordance can partly or entirely reflect a favorable initial Tester draw in `loop-same`. The manuscript even supplies evidence that this is not hypothetical:
+
+> “**the same tester producing round-0 kill counts of 69, 168, 50, 62, and 65 across repeated attempts on one subject**.”
+
+That range is enormous. Once you show that initial Tester generation has such variance, you cannot claim that an arm with a different initial Tester output causally “replicates” the value of Critic hardening.
+
+The phrase:
+
+> “**The defect worked against H1's own hypothesis, so the true effect could only be as large or larger than the defect-affected data showed.**”
+
+is especially indefensible. The corrected cells were reruns of stochastic model calls, not a controlled restoration of exactly the original missing output. The “true effect” need not be monotone under a new model draw. The paper later acknowledges “real run-to-run variance,” which directly contradicts the “could only be” language.
+
+**Required correction:** H1 must be described as an observational comparison of two independently sampled pipelines, not a causal replication of the loop effect. To claim a loop effect, generate one round-0 suite per replicate, freeze it, and apply the loop continuation to that same state; repeat this across independently sampled initial suites.
+
+### H2 is not a critic-lineage experiment
+
+The paper is admirably explicit that H2 is confounded:
+
+> “**The two critic arms therefore differ in both the round-0 tester draw and the critic lineage.**”
+
+That admission should end the causal claim. Yet the paper still labels H2:
+
+> “**a controlled cross-lineage versus same-lineage critic measurement**”
+
+and repeatedly calls it a test of “critic-generator lineage diversity.”
+
+It is not controlled. It compares two entire pipelines, each involving a different initial suite, survivor set, provider API, model behavior, output-length distribution, parser interaction, and possibly undocumented provider-side limits. “Lineage” is not independently manipulated; it is bundled with a particular model and provider. Matching listed token prices is not capability matching, nor does it “isolate lineage rather than confounding it with model capability tier.”
+
+At most, this is a comparison of `claude-sonnet-5` and `gpt-5.6-terra` in one particular harness configuration. It does not estimate a lineage effect.
+
+### “Underpowered null” is rhetorically convenient but statistically incomplete
+
+The paper says:
+
+> “**H2 is a pre-declared, underpowered null.**”
+
+and:
+
+> “**This is an underpowered null, not a demonstration of no effect.**”
+
+The second sentence is better; the first is sloppy. A non-significant result is not inherently an “underpowered null,” and the manuscript ran **no a priori power analysis**. The stated basis—ceiling effects and only five discordant pairs—is sensible, but it supports “the design yielded too little discriminating information,” not a quantified claim about power.
+
+Moreover, \(p=0.0625\) with 5–0 discordant pairs is not merely “non-significant.” It is the smallest possible two-sided exact McNemar p-value for five discordant pairs all going in one direction. The issue is not that the data gave a null result in any meaningful evidential sense; the issue is that the study was structurally incapable of crossing the arbitrary \(0.05\) cutoff unless it obtained at least six unidirectional discordances. The correct interpretation is: suggestive direction in one subject, no reliable cross-subject evidence, and no meaningful causal interpretation because the initial suite was not shared.
+
+The phrase:
+
+> “**no effect detectable at this design's power**”
+
+overstates what is known, since no power curve, minimally relevant effect, or interval estimate is reported. Report an effect size and uncertainty, not merely a thresholded p-value.
+
+### The “central/durable contribution” is oversold
+
+The paper repeatedly claims:
+
+> “**The paper's central contribution is neither of those results. It is an account of how this study's own measurement instrument manufactured a large false result**”
+
+and:
+
+> “**As the durable contribution, a fully receipted autopsy**”
+
+This is potentially useful, but “durable contribution” is too self-congratulatory for what is, fundamentally, a basic harness defect: the system set `max_tokens = 16000`, failed to inspect the provider’s truncation signal or the obvious equality-to-cap condition, and then misclassified malformed output. That is an engineering bug in the authors’ own experiment, caught before publication. A hostile reviewer can—and will—summarize this as: *you forgot to detect truncated API output, then fixed it.*
+
+The paper has not shown that this failure mode is prevalent, that the proposed repair is sufficient across providers, or that the repair prevents a broad class of cross-model evaluation artifacts. Indeed, it admits:
+
+> “**The truncation check exists only where a mechanical ceiling is declared**”
+
+and:
+
+> “**If that provider ever truncated a reply against a server-side limit, this instrumentation would launder it exactly the way the original defect did.**”
+
+That is not a durable solution; it is a partial patch.
+
+The defensible claim is narrower: this is a **case study** of how a token-cap truncation failure can create a provider-correlated artifact in an LLM evaluation harness, accompanied by an auditable remediation pattern. That can be publishable at a workshop if the paper stops claiming general validation of a broad lesson it has not tested.
+
+### “First” claims are not supported by a literature review
+
+The phrase:
+
+> “**the first of its kind in the LLM test-generation literature**”
+
+and later:
+
+> “**the first per-outcome cost figure reported in LLM test generation**”
+
+are classic overclaims. The related-work section cites a handful of systems and says “to our knowledge,” but provides no systematic search protocol, no inclusion/exclusion criteria, and no survey table distinguishing cost per generated test, cost per accepted test, cost per coverage gain, cost per mutation kill, and cost per detected bug.
+
+“First” is particularly dangerous in a fast-moving LLM4SE area full of arXiv systems, industrial reports, and papers reporting efficiency in nonuniform terms. The authors should say: **“We report cost per mutation kill, a normalization not found in the studies reviewed here.”** Remove priority language unless they conduct and document a systematic search.
+
+---
+
+## 2. Statistical soundness
+
+### The exact two-sided McNemar calculations are mechanically fine; their inferential use is not
+
+For the displayed tables, the exact two-sided binomial version of McNemar is appropriate **if** the discordant pairs are exchangeable independent paired binary observations under the null. The numerical claims such as \(p=0.0625\) for 5–0 and \(p=4.93\times10^{-32}\) for 105–0 are consistent with the stated doubled-tail calculation.
+
+But the test is answering the wrong inferential question because the individual mutants are not independent experimental replicates. A single generated suite frequently kills many related mutants together. Mutants in the same function or code region are mechanically and semantically correlated; a single boundary test may kill dozens. The paper admits this:
+
+> “**The pooled test treats individual mutants as the unit of analysis, which assumes independence across mutants; in fact mutants are clustered by subject.**”
+
+Then it nevertheless designates that pooled p-value as:
+
+> “**the confirmatory statistic.**”
+
+Pre-registering an invalid analysis does not make it valid. Reporting per-subject tables “alongside” the pooled result does not repair the problem. The paper has four scorable subjects. At the subject level, H1 has four directional wins, but only two individual subject-level McNemar tests clear 0.05; there is no credible basis for a pooled mutant-level \(10^{-32}\)-style evidential claim.
+
+A hierarchical model would be better than pooled McNemar, but with four subjects and one generated run per arm it will not salvage the design. The actual fix is replication: multiple independently sampled frozen round-0 suites per subject, both critics applied to each suite, then a clustered or mixed-effects analysis with subject and initial-suite replicate accounted for.
+
+### “Paired mutant-for-mutant” does not solve stochastic treatment assignment
+
+The paper states:
+
+> “**Because every arm runs against the same pinned subject clone, kill outcomes are paired mutant-for-mutant across arms.**”
+
+This is misleading. Mutants may be aligned across arms, but the **intervention inputs are not paired** because the initial generated suites differ. Pairing items does not make treatments paired when each treatment receives a different stochastic starting state.
+
+For H2 in particular, the baseline survivor sets may differ because each arm starts from a different Tester output. Scoring both arms against the same universe of pristine baseline survivors does not remove that confound; it merely makes the denominator look aligned.
+
+### The pooled H1 result is mostly two subjects, not four independent confirmations
+
+The paper correctly notes that idna contributes 64 of the 105 H1 discordances and packaging contributes 32. This should not be a parenthetical caveat attached to a giant p-value; it should determine the conclusion. The evidence is two large mutant clusters and two small directional clusters. With only four subjects, generalizing to “the adversarial loop” is not credible.
+
+### No effect sizes or confidence intervals
+
+The paper reports p-values and raw discordances, but no uncertainty intervals for:
+
+- per-subject mutation-score differences;
+- incremental critic kills conditional on a fixed initial suite;
+- H2’s cross-minus-same difference;
+- cost per kill;
+- the artifact-induced shift before versus after repair.
+
+For H2, “5–0 discordant pairs” is not an effect estimate. The manuscript needs paired risk differences and uncertainty intervals, preferably at the subject/replicate level rather than mutation level. It should also report a Bayesian or frequentist hierarchical sensitivity analysis if it insists on inference from these data—while clearly labeling it exploratory due to the tiny number of subjects.
+
+### The post-discovery reruns weaken the “confirmatory” rhetoric
+
+The paper calls its analysis pre-registered, but four counted cells were reclassified after a completed analysis revealed the headline result, and those cells were rerun under a changed instrument and, apparently, a raised output cap. That may be the correct engineering response, but it means the final analysis is not simply the originally pre-registered experiment. It is a corrected, amended experiment with outcome-relevant post hoc reruns.
+
+The paper should distinguish:
+
+1. the original pre-registered design;
+2. the discovered failure;
+3. the instrument amendment;
+4. the replacement-cell policy;
+5. the corrected analysis.
+
+“Pre-registered” is not a blanket warranty for every result after ten numbered amendments, a prompt-template amendment, invalidated paid cells, and post-analysis reruns. A standalone paper also cannot establish temporal pre-registration merely by asserting that the protocol was “committed before any paid run.” A repository HEAD check is not an immutable timestamped registration mechanism; one can commit a modified protocol before invoking the command. Give immutable commit hashes, timestamps, archived protocol versions, and a table mapping every cell to the protocol/instrument version in force.
+
+### H2’s \(p=0.0625\) is not evidence of a null
+
+The authors are mostly careful here, but reviewers will demand stronger wording. The conclusion should be:
+
+- all observed discordances favor cross-lineage in one subject;
+- the result does not meet the pre-specified threshold;
+- the study has near-zero cross-subject discrimination due to ceilings;
+- the comparison is confounded by independently regenerated initial suites;
+- therefore the data are inconclusive.
+
+Do not call this a “null result” in the title or contribution list without qualification. “Null result” invites readers to infer that a legitimate test of the hypothesis was performed and found no detectable effect. It was not.
+
+---
+
+## 3. Is the instrument autopsy publishable?
+
+Yes, but only if radically repositioned.
+
+As written, it invites dismissal as “you found and fixed your own bug,” because that is exactly what happened. The manuscript’s current framing makes the problem worse by insisting that this is “**the paper's central contribution**,” “**the durable contribution**,” and “**the load-bearing finding**.” Those phrases announce that the paper’s main scientific result is a self-inflicted instrumentation failure.
+
+There is a workshop paper here if it becomes a methodological case study with concrete reusable value:
+
+1. **Demote the H1/H2 causal claims.** Present them as motivating observations, not the paper’s evidence of model or lineage effects.
+2. **Name the contribution accurately:** an auditable incident report on silent truncation-induced treatment-correlated missingness in LLM experimentation.
+3. **Provide a harness-audit framework**, not only one patch:
+   - explicit request limits;
+   - provider finish/truncation reason capture;
+   - token-count-at-limit checks;
+   - raw-response retention;
+   - parser/validator error taxonomy;
+   - per-provider timeout/retry/rate-limit parity;
+   - output-budget and dollar-budget parity;
+   - canary tests;
+   - fault injection showing each gate fails closed.
+4. **Demonstrate the framework** by injecting truncation, malformed completion, collection failure, timeout, retry, and provider-side error conditions into both wrappers. Right now the paper merely claims a repair prevented recurrence; it does not validate that claim.
+5. **Do not generalize from one bug to “what it takes to catch” cross-model bias.** It shows one way an asymmetry can matter, not a general adequacy result.
+
+The strongest paper would be titled and structured as an evaluation-harness case study, perhaps with a reusable “cross-provider evaluation audit checklist” artifact. The current paper tries to be a replication study, a cross-lineage study, a cost study, a preregistration manifesto, and an incident report. The incident report is the only potentially distinctive component, and it needs much more methodological abstraction.
+
+---
+
+## 4. Missing prior work I would expect
+
+The related work is too narrow and oddly focused on a recent LLM-test-generation lineage. At minimum, I would expect the following specific, established work.
+
+### Test oracles and mutation validity
+
+- **Barr, Harman, McMinn, Shahbaz, and Yoo, “The Oracle Problem in Software Testing: A Survey” (IEEE TSE, 2015).** This is essential. The manuscript repeatedly treats pass-on-pristine plus mutant kills as if that settles test validity, while admitting “wrong-oracle” tests and mutation-harness gaming.
+- **Papadakis et al., “Mutation Testing Advances: An Analysis and Survey” (Advances in Computers, 2019).** Essential for equivalent mutants, mutation-score interpretation, mutant coupling, and the non-independence of mutants.
+- **Just, Jalali, Ernst, “Defects4J: A Database of Existing Faults to Enable Controlled Testing Studies for Java Programs” (ISSTA 2014).** Relevant to the gap between mutation kills and real-fault detection, even if this study is Python.
+- **Offutt and colleagues’ work on mutation analysis and equivalent mutants** should be represented more seriously than a one-sentence lower-bound caveat.
+
+### LLM-based test/oracle generation beyond the cited systems
+
+- **Dinella et al., “TOGA: A Neural Method for Test Oracle Generation” (ICSE 2022).** Directly relevant to the paper’s concern with weak assertions and “wrong-oracle” generated tests.
+- **Fuzz4All: Universal Fuzzing with Large Language Models (ICSE 2024).** Relevant to LLM-driven, execution-feedback-based test-input generation under mechanical feedback.
+- **TitanFuzz: Fuzzing Deep-Learning Libraries with Large Language Models (ISSTA 2023).** Relevant to iterative LLM-guided testing and the distinction between generated tests and execution-based oracles.
+- The paper should also cover the wider test-amplification literature, not merely Pynguin/EvoSuite as omitted baselines. The question is not only whether an LLM can write tests, but whether feedback-guided augmentation improves fault detection.
+
+### LLM evaluation bias and cross-model evaluation
+
+- **Zheng et al., “Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena” (NeurIPS 2023).** This is standard background for evaluator bias, position bias, and evaluation protocol design. Panickssery et al. alone is not enough.
+- **LLM-Blender: Ensembling Large Language Models with Pairwise Ranking and Generative Fusion (ACL 2023).** Relevant to heterogeneous-model combination claims and the premise that model diversity is beneficial.
+- More generally, the paper needs literature on evaluation infrastructure and reproducibility, not just model self-preference. Its claimed contribution is a harness artifact, yet it barely connects to experimental-software-engineering work on flaky tests, nondeterminism, tool validation, or infrastructure-induced validity threats.
+
+The omission of the oracle-problem and mutation-testing literature is particularly damaging. This paper makes mutation kills the epistemic center of the study while treating equivalent mutants, mutant subsumption/correlation, and artificial-test-oracle behavior as side notes.
+
+---
+
+## 5. Cost claims are not comparable as presented
+
+The cost table is not a valid cross-arm efficiency comparison because the arms cover different subjects:
+
+> “**loop-cross's 556 kills therefore include attrition-risk-ml's 254, which loop-same never reached**”
+
+The paper admits this, then immediately says:
+
+> “**With that caveat, the loop-cross arm is about 3.4 times cheaper per kill than loop-same**”
+
+No. The caveat invalidates the comparison. Do not report a 3.4× comparative conclusion from non-overlapping denominators. Restrict the cost comparison to common valid subjects and, better, compare **incremental cost per incremental kill from the same frozen round-0 suite**. The current total-cost/total-kill ratio is also dominated by subject composition and baseline headroom, not merely critic behavior.
+
+The claim that “verbosity, not lineage capability, is the dominant cost variable” is likewise unsupported as a general conclusion. It is a plausible description of these two named model configurations. You did not manipulate verbosity independently of model/provider, so you cannot attribute causally.
+
+---
+
+## 6. Weakest point and fixability
+
+### Weakest point
+
+The single most rejection-worthy flaw is the failure to hold the initial Tester output and survivor set fixed across comparison arms while claiming causal loop and critic-lineage effects.
+
+The paper says the exact thing that invalidates its own conclusions:
+
+> “**Each arm independently regenerates its own round 0**”
+
+and then claims:
+
+> “**H1 SUPPORTED**”
+
+and frames H2 as a cross-lineage comparison.
+
+That is the point most likely to get the paper rejected or publicly embarrassed in discussion. A reviewer will ask: *Why did you not simply freeze the initial suite and run both Critics from exactly the same state?* There is no good answer, especially because the paper already knows initial Tester variance is substantial.
+
+### Is it fixable?
+
+Not by editing. It requires rerunning the experiment.
+
+The minimum credible redesign is:
+
+1. For each subject, sample multiple independent Tester round-0 suites.
+2. Freeze every generated suite and survivor set.
+3. From each identical frozen state, run:
+   - no continuation;
+   - same-lineage Critic continuation;
+   - cross-lineage Critic continuation.
+4. Use identical explicit resource budgets: output tokens, retries, timeout, dollar cap, parser policy, and truncation detection for every provider.
+5. Analyze paired incremental kills and costs per frozen initial state, with subject as a cluster/random effect.
+6. Report all failed/invalid cells under a predeclared missing-data policy.
+7. Treat the current dataset as pilot evidence and the autopsy as the motivation for the redesigned study.
+
+Without that rerun, the paper should not make causal H1/H2 claims.
+
+---
+
+## 7. Tone and venue fit
+
+The register is often more blog-post/manifesto than academic paper. The technical details are useful, but the prose repeatedly performs honesty rather than simply documenting threats.
+
+Examples that should be cut or neutralized:
+
+- “**caught for free**”
+- “**must not soft-pedal**”
+- “**That the instrument had to throw away paid data is not the embarrassing part; concealing it would be**”
+- “**a degeneracy we disclose rather than smooth over**”
+- “**The paper's payload**”
+- “**load-bearing finding**”
+- “**Stated plainly**”
+- “**It would have been easy, and wrong, to publish**”
+- “**what it takes to catch it**”
+- “**honestly underpowered null**”
+- “**clean replication**”
+
+This rhetoric is not fatal, but it makes the paper read like a postmortem blog essay seeking credit for integrity, rather than a controlled empirical study. It is especially risky because the central incident is an author-created bug. A skeptical reader will react badly to moralized prose around a preventable failure.
+
+Use dry language: “instrumentation incident,” “post hoc cell invalidation,” “provider-correlated truncation,” “corrected analysis,” “remaining detection asymmetry,” “case-study implication.” Let the facts carry the honesty.
+
+---
+
+## Bottom line
+
+The paper’s disclosure is better than the field norm. Its experimental logic is not. The manuscript identifies its own confound, correctly notes clustered mutants and ceiling effects, and then proceeds as if caveats preserve confirmatory conclusions. They do not.
+
+**REJECT — The claimed H1 replication and H2 lineage comparison are invalid because “Each arm independently regenerates its own round 0”; the single most valuable revision is to rerun the study from shared, frozen round-0 suites with repeated replicates, then analyze paired incremental Critic effects at the subject/replicate level rather than pooled mutant-level McNemar p-values.**
