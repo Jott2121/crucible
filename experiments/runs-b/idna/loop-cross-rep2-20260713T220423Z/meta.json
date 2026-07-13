@@ -1,0 +1,22 @@
+{
+  "phase": "run",
+  "arm": "loop-cross",
+  "subject": "/Users/jeffreyotterson/crucible-subjects/idna",
+  "module": "idna/cli.py",
+  "head_sha": "9efc56ffad9ac8a3b38ec75b1659982a5d7f44a2",
+  "protocol_b_version": 1,
+  "tester_provider": "anthropic",
+  "tester_model": "claude-sonnet-5",
+  "critic_provider": "openai",
+  "critic_model": "gpt-5.6-terra",
+  "critic_billing": "api",
+  "seed": {
+    "seed_dir": "/Users/jeffreyotterson/ai-agentic-code-testing/experiments/seeds/idna/rep2",
+    "test_sha256": "942b8c0e3684ae94f7783dd1d6dacb824daf7cec730499d74a2bf80be8a146b9",
+    "seed_head_sha": "9efc56ffad9ac8a3b38ec75b1659982a5d7f44a2",
+    "rep": 2
+  },
+  "started_at": "20260713T220423Z",
+  "max_rounds": 4,
+  "dry_rounds": 2
+}

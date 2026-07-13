@@ -1,0 +1,16 @@
+{
+  "phase": "run",
+  "arm": "no-critic",
+  "subject": "/Users/jeffreyotterson/crucible-subjects/idna",
+  "module": "idna/cli.py",
+  "head_sha": "9efc56ffad9ac8a3b38ec75b1659982a5d7f44a2",
+  "protocol_b_version": 1,
+  "seed": {
+    "seed_dir": "/Users/jeffreyotterson/ai-agentic-code-testing/experiments/seeds/idna/rep1",
+    "test_sha256": "c2df4e003a7c0e7aa94cd46b33c5624c36b1946cf753e096b4fcfcb0d5db7a02",
+    "seed_head_sha": "9efc56ffad9ac8a3b38ec75b1659982a5d7f44a2",
+    "rep": 1
+  },
+  "started_at": "20260713T215431Z",
+  "derived": true
+}

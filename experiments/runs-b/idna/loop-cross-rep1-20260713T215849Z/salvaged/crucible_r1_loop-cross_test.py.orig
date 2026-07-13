@@ -1,0 +1,119 @@
+import sys
+
+import pytest
+
+import idna.cli as cli
+
+
+def test_parser_exposes_documented_description_options_and_help():
+    parser = cli._build_parser()
+
+    expected_description = (
+        "Convert a domain name between its Unicode (U-label) and "
+        "ASCII-compatible (A-label) forms. With no mode flag, the "
+        "direction is chosen from the first input — if it contains "
+        "an xn-- label the stream is decoded, otherwise it is "
+        "encoded — and the same mode is applied to every remaining "
+        "input. UTS #46 mapping is applied by default; pass "
+        "--strict to disable it. When no domains are given on the "
+        "command line and stdin is piped, one domain per line is "
+        "read from stdin."
+    )
+    assert parser.description == expected_description
+
+    actions = {action.dest: action for action in parser._actions}
+    encode_action = actions["mode"]
+    assert encode_action.option_strings == ["-e", "--encode"]
+    assert encode_action.help == "Encode the input to its ASCII A-label form."
+
+    decode_action = next(
+        action for action in parser._actions if "--decode" in action.option_strings
+    )
+    assert decode_action.help == "Decode the input from its ASCII A-label form."
+
+    assert actions["strict"].help == (
+        "Disable the default UTS #46 mapping and apply IDNA 2008 rules verbatim."
+    )
+    assert actions["domain"].help == (
+        "One or more domain names to convert. Omit to read from stdin."
+    )
+
+    assert parser.parse_args(["--encode", "example.com"]).mode == "encode"
+
+
+def test_looks_like_alabel_decodes_the_ace_prefix_as_ascii(monkeypatch):
+    class Prefix:
+        def decode(self, encoding):
+            if encoding == "ascii":
+                return "xn--"
+            return "not-the-ace-prefix"
+
+    monkeypatch.setattr(cli, "_alabel_prefix", Prefix())
+    assert cli._looks_like_alabel("www.XN--BCHER-KVA.example") is True
+
+
+def test_convert_one_encode_passes_uts46_and_uses_ascii_output_codec(monkeypatch, capsys):
+    calls = []
+
+    class EncodedResult:
+        def decode(self, encoding):
+            calls.append(("decode", encoding))
+            return "expected-ascii-domain"
+
+    def fake_encode(domain, *, uts46):
+        calls.append(("encode", domain, uts46))
+        return EncodedResult()
+
+    monkeypatch.setattr(cli, "encode", fake_encode)
+
+    assert cli._convert_one("unicode.example", "encode", True) is True
+    assert capsys.readouterr().out == "expected-ascii-domain\n"
+    assert calls == [
+        ("encode", "unicode.example", True),
+        ("decode", "ascii"),
+    ]
+
+
+def test_convert_one_decode_passes_uts46(monkeypatch, capsys):
+    calls = []
+
+    def fake_decode(domain, *, uts46):
+        calls.append((domain, uts46))
+        return "decoded.example"
+
+    monkeypatch.setattr(cli, "decode", fake_decode)
+
+    assert cli._convert_one("xn--example", "decode", False) is True
+    assert capsys.readouterr().out == "decoded.example\n"
+    assert calls == [("xn--example", False)]
+
+
+def test_main_defaults_to_uts46_and_strict_disables_it(monkeypatch):
+    received = []
+
+    def fake_convert(domain, mode, uts46):
+        received.append((domain, mode, uts46))
+        return True
+
+    monkeypatch.setattr(cli, "_convert_one", fake_convert)
+
+    assert cli.main(["ＦＯＯ.example"]) == 0
+    assert received == [("ＦＯＯ.example", "encode", True)]
+
+    received.clear()
+    assert cli.main(["--strict", "ＦＯＯ.example"]) == 0
+    assert received == [("ＦＯＯ.example", "encode", False)]
+
+
+def test_main_reports_documented_error_when_stdin_is_terminal(monkeypatch, capsys):
+    class TerminalStdin:
+        def isatty(self):
+            return True
+
+    monkeypatch.setattr(sys, "stdin", TerminalStdin())
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main([])
+
+    assert exc_info.value.code == 2
+    assert "a domain argument is required when stdin is a terminal" in capsys.readouterr().err
