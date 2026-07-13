@@ -1,0 +1,13 @@
+{
+  "phase": "seed",
+  "subject": "/Users/jeffreyotterson/crucible-subjects/packaging",
+  "module": "src/packaging/_elffile.py",
+  "rep": 3,
+  "draw": 1,
+  "head_sha": "318f97928d57a92219e0a78e9e477f87d3847d92",
+  "protocol_b_version": 1,
+  "tester_provider": "anthropic",
+  "tester_model": "claude-sonnet-5",
+  "tester_billing": "api",
+  "started_at": "20260713T205637Z"
+}
