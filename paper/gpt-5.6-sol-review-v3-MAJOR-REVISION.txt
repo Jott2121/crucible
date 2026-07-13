@@ -1,0 +1,104 @@
+# Verdict: MAJOR REVISION
+
+v3 is substantially improved, but several claimed fixes are not present in the manuscript. Most importantly, the paper still slips from configuration comparison back into lineage inference, retains the expressly disavowed “null resolved” rhetoric, overstates a graph-guard pattern as a capability difference, and incompletely reports the promised bootstrap sensitivities. There is also an apples-to-oranges spend comparison.
+
+## Verification of the eleven claimed fixes
+
+1. **MF1 — Lineage → configuration: PARTIALLY FIXED.**  
+   The title, abstract qualification, and several estimand statements now use the correct configuration framing. However, inferential lineage language remains:
+   - §2.3: “what our H2 measures, is vary the lineage of the critic”
+   - §3.2: “the effect of critic-generator lineage diversity”
+   - §3.2 labels H2 a “novel claim” about a “cross-lineage Critic”
+   - §4.3 asks whether “a cross-lineage critic” kills more
+   - §2.6 says no prior work measures “the effect of critic-generator lineage”
+   
+   These statements say the study measures a lineage effect, despite the later acknowledgment that model, provider, API behavior, and harness interaction are bundled. “Cross-lineage” may remain as an arm label, but the estimand and novelty claim must consistently be about the two named configurations.
+
+   The tier-matching statement also remains too strong. Similar posted token prices support approximate **price matching**, not “capability-tier matching.” No evidence establishes comparable capability tiers across providers.
+
+2. **MF2 — Operational versus capability: PARTIALLY FIXED.**  
+   §4.8 now clearly defines the pre-registered pilot as operational and correctly counts the packaging truncation as deployability evidence. The truncation-excluded sensitivity is useful.
+
+   The graph-guard interpretation is nevertheless overstated:
+   > “a capability difference on that subject’s numeric-tolerance mutants, at accepted-test parity”
+
+   Eighteen of twenty same-provider rounds being accepted does not establish accepted-test parity between arms, equal effective compute, equal test volume, or a capability effect. The manuscript does not report the corresponding graph-guard acceptance counts, generated-test counts, or token budgets for both configurations. This supports evidence **consistent with** a capability-related difference after many accepted rounds, not an identified capability difference.
+
+3. **MF3 — Unsupported “null resolved by design” claim: NOT FULLY FIXED.**  
+   §5.4 is appropriately cautious, but §5.5 reintroduces the exact forbidden framing:
+   > “resolving a null into a signal”
+
+   That contradicts §5.4’s correct statement that Experiment 1’s \(p=0.0625\) was inconclusive rather than evidence of absence.
+
+   There is also an accounting problem in §5.4: it compares “$15.47 receipted” for Experiment 2 against “$4.23 counted” for Experiment 1. Section 4.9 says the $15.47 includes the invalidated replicate, crashed attempt, and replacement seed, whereas $4.23 is the Experiment 1 counted-cell total. Those are not the same spend basis.
+
+4. **MF4 — Bootstrap weighting and sensitivities: PARTIALLY FIXED.**  
+   The complete \(D\) and \(\rho_{\text{gap}}\) replicate table, four-cluster caveat, fixed-subject-mean limitation, two-stage bootstrap for the cross-configuration estimands, and leave-one-subject-out point estimates are now present.
+
+   The response memo says a two-stage bootstrap is reported “for all four estimands,” but the manuscript gives:
+   - two-stage \(\rho_{\text{same}}\) in §4.7;
+   - two-stage \(D\) and \(\rho_{\text{gap}}\) in §4.8;
+   - no two-stage interval for \(\Delta_{\text{same}}\).
+
+   Thus the claimed fix is incomplete. The text should also distinguish positive leave-one-out **point estimates** from intervals that remain above zero; LOSO intervals are not reported.
+
+5. **MF5 — Graph-guard survivor contradiction: VERIFIED.**  
+   The counted round-0 draws are consistently reported as 12 kills of 22, leaving 10 survivors, and §4.7 reports five of those ten killed by loop-same. The old “11 survivors” contradiction is gone.
+
+6. **MF6 — Experiment 1 rhetoric: NOT FULLY FIXED.**  
+   §4.2 now correctly rejects a monotone counterfactual interpretation and bounds the pooled McNemar result. However, §5.1 still says:
+   > “the adversarial loop, as a pipeline including its own initial draw, dominated one-shot generation”
+
+   This directly contradicts the response memo’s claim that “dominated” was removed from §5.1.
+
+   More seriously, §5.1 ends:
+   > “An effect that persists when you remove the confound working in its favor…”
+
+   The paper has not established that independent round-0 resampling worked in H1’s favor. Experiment 2 also changed replication and spend, and it used different seed draws. This sentence violates both the no-monotone-counterfactual discipline in §4.2 and the multi-change caution in §5.4.
+
+7. **MF7 — Scope of the causal claim: MOSTLY VERIFIED.**  
+   §§3.10 and 4.7 narrowly condition the loop-continuation estimand on the frozen seeds, subjects, models, and stopping rules. The manuscript also correctly says that non-negativity makes sign uninformative. The main remaining problem is the separate reversion to lineage-effect language identified under MF1.
+
+8. **MF8 — Leverage of the 39-kill replicate: VERIFIED.**  
+   §4.8 reports that the replicate supplies 39 of 66 gap kills, or 59%, gives the exclusion estimate, gives leave-one-subject-out ranges, and separates the packaging operational failure from the graph-guard pattern. The leverage is no longer hidden.
+
+9. **MF9 — Experiment 1 cost comparison: VERIFIED, with a separate cost-evidence issue.**  
+   §4.5 explicitly declines to draw a comparative conclusion because the arms cover different subject sets and defers to Experiment 2. That resolves the original denominator problem.
+
+   Separately, §4.9’s assertion that output verbosity and rejected rounds are the “driver” is not demonstrated in the manuscript by token or billing decomposition. Round counts and rejection counts alone do not establish how much of the cost difference each factor explains.
+
+10. **MF10 — Priority claims: NOT FIXED.**  
+    The response says all “first” and “to our knowledge” language was removed, but at least two instances remain:
+    - §3.2: “to our knowledge no prior study measures…”
+    - §3.7: “To our knowledge this per-outcome normalization is not reported…”
+
+    These must either be changed to the scoped formulation used elsewhere—“not found in the studies reviewed here”—or supported as explicit systematic-review claims.
+
+11. **MF11 — References and coverage: PARTIALLY VERIFIED FROM THE TEXT.**  
+    TOGA, TitanFuzz, Fuzz4All, and Luo et al. are now cited, and fuzzing is scoped out explicitly. No VERIFY markers remain. However:
+    - the response says the thin experimental-infrastructure literature is acknowledged, but no clear acknowledgment appears in the manuscript;
+    - several bibliography entries remain incomplete by normal publication standards, including missing titles, authors, years, venue details, or DOI information where the surrounding list otherwise supplies them.
+
+    The claim of primary-source verification cannot itself be verified from manuscript prose, but the bibliography should at least be normalized and complete.
+
+## Remaining MUST-FIX items
+
+1. **Enforce configuration—not lineage—language everywhere.**  
+   Rewrite the passages in §§2.3, 2.6, 3.2, and 4.3 that claim to measure a lineage effect. Preserve “cross-lineage” only as the historical/pre-registered arm label, immediately tied to the two named configurations. Replace “capability-tier matched” with a supportable price-matching statement unless independent evidence for capability-tier equivalence is provided.
+
+2. **Remove the residual null-resolution and unsupported confound rhetoric.**  
+   Delete “resolving a null into a signal” in §5.5. Delete or rewrite the §5.1 sentence claiming the confound worked in H1’s favor. Experiment 1 was inconclusive/confounded; Experiment 2 produced a more informative estimate after three simultaneous design/resource changes.
+
+3. **Do not label the graph-guard result a capability difference.**  
+   Either report enough arm-specific acceptance, test-volume, and token information to support the claimed “accepted-test parity,” or soften the conclusion to evidence compatible with a capability-related difference on one subject. The truncation-excluded estimate is not by itself a capability estimand.
+
+4. **Complete the promised uncertainty reporting.**  
+   Add the missing two-stage bootstrap result for \(\Delta_{\text{same}}\), or correct the response/manuscript claim about “all four estimands.” Clarify that the reported LOSO ranges are point-estimate ranges unless LOSO intervals are also supplied.
+
+5. **Use like-for-like spend accounting.**  
+   Compare counted with counted or all-in with all-in when discussing the resource change between experiments. Do not compare Experiment 2’s $15.47 including invalid/crashed/replacement work against Experiment 1’s $4.23 counted-cell total. If cost drivers are claimed, provide the input-token, output-token, rejected-round, and billed-cost decomposition.
+
+6. **Remove remaining unsupported priority wording and finish the references.**  
+   Replace the surviving “to our knowledge” claims with the paper’s scoped “not found in the studies reviewed here” formulation. Normalize incomplete bibliography entries and explicitly acknowledge the limited review of experimental-infrastructure work if that remains outside scope.
+
+The core Experiment 2 design and the operational sensitivity analysis are potentially workshop-worthy. The current manuscript is not yet internally disciplined enough for acceptance because several of the previous major-revision points are contradicted by surviving text.
