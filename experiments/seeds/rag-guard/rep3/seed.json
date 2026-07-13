@@ -1,0 +1,76 @@
+{
+  "subject": "rag-guard",
+  "rep": 3,
+  "module": "rag_guard/guard.py",
+  "head_sha": "526f2f317a7c364f6ae86be746975ae639e38778",
+  "draw": 1,
+  "baseline_survivors": [
+    "rag_guard.guard.x__content_tokens__mutmut_4",
+    "rag_guard.guard.x__content_tokens__mutmut_5",
+    "rag_guard.guard.x_should_refuse__mutmut_1",
+    "rag_guard.guard.x_should_refuse__mutmut_6",
+    "rag_guard.guard.x_should_refuse__mutmut_8",
+    "rag_guard.guard.x_should_refuse__mutmut_11",
+    "rag_guard.guard.x_should_refuse__mutmut_12",
+    "rag_guard.guard.x_groundedness__mutmut_5",
+    "rag_guard.guard.x_groundedness__mutmut_6",
+    "rag_guard.guard.x_groundedness__mutmut_7",
+    "rag_guard.guard.x_groundedness__mutmut_8",
+    "rag_guard.guard.x_groundedness__mutmut_9",
+    "rag_guard.guard.x_groundedness__mutmut_10",
+    "rag_guard.guard.x_groundedness__mutmut_16",
+    "rag_guard.guard.x_groundedness__mutmut_19",
+    "rag_guard.guard.x_groundedness__mutmut_23",
+    "rag_guard.guard.x_groundedness__mutmut_24",
+    "rag_guard.guard.x_groundedness__mutmut_25",
+    "rag_guard.guard.x_groundedness__mutmut_26",
+    "rag_guard.guard.x_redact_pii__mutmut_6",
+    "rag_guard.guard.x_redact_pii__mutmut_13",
+    "rag_guard.guard.x_redact_pii__mutmut_14",
+    "rag_guard.guard.x_redact_pii__mutmut_20",
+    "rag_guard.guard.x_redact_pii__mutmut_27",
+    "rag_guard.guard.x_redact_pii__mutmut_28"
+  ],
+  "baseline_all_mutants": 71,
+  "baseline_counts": {
+    "killed": 46,
+    "survived": 25,
+    "total": 71,
+    "no_tests": 0,
+    "skipped": 0,
+    "suspicious": 0,
+    "timeout": 0,
+    "check_was_interrupted_by_user": 0,
+    "segfault": 0
+  },
+  "post_survivors": [
+    "rag_guard.guard.x__content_tokens__mutmut_4",
+    "rag_guard.guard.x_groundedness__mutmut_26",
+    "rag_guard.guard.x_redact_pii__mutmut_27",
+    "rag_guard.guard.x_redact_pii__mutmut_28"
+  ],
+  "post_counts": {
+    "killed": 67,
+    "survived": 4,
+    "total": 71,
+    "no_tests": 0,
+    "skipped": 0,
+    "suspicious": 0,
+    "timeout": 0,
+    "check_was_interrupted_by_user": 0,
+    "segfault": 0
+  },
+  "test_sha256": "cbcec31b110065217c3ec1a7f5724b11d60df24e348218668bbfabfc62d07be1",
+  "provenance": {
+    "model": "claude-sonnet-5",
+    "prompt_sha256": "46bc27d1dd7435b400d4d422f516b656c773cd577fbcd3087ce0b70450d9a209",
+    "usage_in": 1439,
+    "usage_out": 4710,
+    "cost_usd": 0.074967,
+    "dropped_tests": [
+      "test_groundedness_partial_support_below_default_threshold",
+      "test_redact_pii_card_number"
+    ],
+    "generated_at": "20260713T204704Z"
+  }
+}
