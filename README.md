@@ -69,18 +69,24 @@ injected defects no test caught — and a **Critic** agent is handed the named s
 writes tests to kill exactly those. Every verdict is mechanical: pytest kills the mutant or
 it survives. **No model ever grades model output.**
 
-## Quickstart — the free first win (no model, no keys, ~10 minutes)
+## Quickstart — the free first win (no model, no keys, one command)
 
-Find out what your existing tests miss, on your own repo:
+Find out what your existing tests actually miss, on your own repo:
 
-    git clone https://github.com/Jott2121/crucible && pip install -e "./crucible[dev]"
+    pip install "crucible @ git+https://github.com/Jott2121/crucible@v1"
+
     cd /path/to/your-repo-clone       # work in a clone: crucible writes scope config
-    crucible scope . --module yourpkg/yourmodule.py
-    mutmut run && mutmut results      # survivors = injected bugs your tests never caught
+    crucible score . --module yourpkg/yourmodule.py --coverage 97
 
-`crucible scope` detects your layout, writes the mutation scope, and **proves** a fresh test
-file is collectable before anything else runs (a canary probe; it refuses — exit 4 — rather
-than guess). No AI is involved yet: the survivor count is plain mutation testing on your suite.
+    97% line coverage, but 25 of 71 injected defects SURVIVED this suite (46 killed, mutation score 65%).
+
+**No model is called and no API key is needed.** `crucible score` detects your layout, writes the
+mutation scope, and **proves** a fresh test file is collectable before anything else runs (a canary
+probe; it refuses — exit 4 — rather than guess). If your repo already configures `[tool.mutmut]`,
+drop `--module` and crucible grades the scope you chose instead of overwriting it.
+
+The survivor count is plain mutation testing on your own suite. No AI is involved yet — the number
+that embarrasses a coverage badge is free to compute.
 
 ## Then harden — the adversarial loop
 
