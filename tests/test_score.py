@@ -33,8 +33,10 @@ def test_perfect_and_zero_suites():
 
 
 def test_empty_mutant_set_refuses_rather_than_reporting_a_number():
-    # 0 mutants is not 0% and it is not 100% -- it is "no answer"
-    with pytest.raises(EmptyMutantSet):
+    # 0 mutants is not 0% and it is not 100% -- it is "no answer".
+    # The message is asserted, not just the type: an exception whose text nobody
+    # checks is an exception whose text can rot into nonsense unnoticed.
+    with pytest.raises(EmptyMutantSet, match="no mutants generated; nothing to score"):
         mutation_score({"killed": 0, "survived": 0, "total": 0})
 
 
@@ -71,14 +73,25 @@ def test_badge_label_is_overridable():
 
 
 def test_shock_line_leads_with_the_survivors_not_the_score():
-    line = shock_line(counts(46, 25))
-    assert line.startswith("25 of 71 injected defects SURVIVED")
-    assert "mutation score 65%" in line
+    # pinned in full: this string is the product. A partial assertion lets any
+    # unchecked word rot -- and mutation testing proved exactly that, by
+    # surviving a mutant in the half of the sentence the old test never read.
+    assert shock_line(counts(46, 25)) == (
+        "25 of 71 injected defects SURVIVED this suite "
+        "(46 killed, mutation score 65%)."
+    )
 
 
 def test_shock_line_pairs_coverage_against_the_score_when_given():
-    line = shock_line(counts(46, 25), coverage=97.0)
-    assert line.startswith("97% line coverage, but 25 of 71 injected defects SURVIVED")
+    assert shock_line(counts(46, 25), coverage=97.0) == (
+        "97% line coverage, but 25 of 71 injected defects SURVIVED this suite "
+        "(46 killed, mutation score 65%)."
+    )
+
+
+def test_shock_line_rounds_the_score_rather_than_truncating_it():
+    # 2/3 = 66.67 -> "67%", not "66%"
+    assert "mutation score 67%" in shock_line(counts(2, 1))
 
 
 def test_shock_line_omits_coverage_when_it_was_not_measured():
