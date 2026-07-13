@@ -1,0 +1,22 @@
+{
+  "phase": "run",
+  "arm": "loop-same",
+  "subject": "/Users/jeffreyotterson/crucible-subjects/rag-guard",
+  "module": "rag_guard/guard.py",
+  "head_sha": "526f2f317a7c364f6ae86be746975ae639e38778",
+  "protocol_b_version": 1,
+  "tester_provider": "anthropic",
+  "tester_model": "claude-sonnet-5",
+  "critic_provider": "anthropic",
+  "critic_model": "claude-sonnet-5",
+  "critic_billing": "api",
+  "seed": {
+    "seed_dir": "/Users/jeffreyotterson/ai-agentic-code-testing/experiments/seeds/rag-guard/rep3",
+    "test_sha256": "cbcec31b110065217c3ec1a7f5724b11d60df24e348218668bbfabfc62d07be1",
+    "seed_head_sha": "526f2f317a7c364f6ae86be746975ae639e38778",
+    "rep": 3
+  },
+  "started_at": "20260713T215515Z",
+  "max_rounds": 4,
+  "dry_rounds": 2
+}
