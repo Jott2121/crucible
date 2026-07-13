@@ -1,0 +1,13 @@
+{
+  "phase": "seed",
+  "subject": "/Users/jeffreyotterson/crucible-subjects/idna",
+  "module": "idna/cli.py",
+  "rep": 4,
+  "draw": 1,
+  "head_sha": "9efc56ffad9ac8a3b38ec75b1659982a5d7f44a2",
+  "protocol_b_version": 1,
+  "tester_provider": "anthropic",
+  "tester_model": "claude-sonnet-5",
+  "tester_billing": "api",
+  "started_at": "20260713T210442Z"
+}
