@@ -1,0 +1,16 @@
+{
+  "phase": "run",
+  "arm": "no-critic",
+  "subject": "/Users/jeffreyotterson/crucible-subjects/packaging",
+  "module": "src/packaging/_elffile.py",
+  "head_sha": "318f97928d57a92219e0a78e9e477f87d3847d92",
+  "protocol_b_version": 1,
+  "seed": {
+    "seed_dir": "/Users/jeffreyotterson/ai-agentic-code-testing/experiments/seeds/packaging/rep1",
+    "test_sha256": "1fa4e56f29398daa770150668fd68aca0da9e464eaa285c7369624c7a9af4612",
+    "seed_head_sha": "318f97928d57a92219e0a78e9e477f87d3847d92",
+    "rep": 1
+  },
+  "started_at": "20260713T215431Z",
+  "derived": true
+}

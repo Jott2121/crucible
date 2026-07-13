@@ -1,0 +1,50 @@
+import io
+import struct
+import pytest
+from packaging._elffile import ELFFile, ELFInvalid
+
+def _elf32(endianness: str) -> io.BytesIO:
+    phoff = 52
+    path_offset = 100
+    data = bytearray(110)
+    data[:16] = b'\x7fELF' + bytes([1, 1 if endianness == '<' else 2]) + b'\xff' + b'\x00' * 9
+    header_format = f'{endianness}HHIIIIIHHH'
+    program_format = f'{endianness}IIIIIIII'
+    struct.pack_into(header_format, data, 16, 2, 32769, 1, 0, phoff, 0, 2147483649, 52, 32, 1)
+    struct.pack_into(program_format, data, phoff, 3, path_offset, 150, 0, 2147483651, 1, 0, 0)
+    data[path_offset:path_offset + 3] = b'/x\x00'
+    return io.BytesIO(data)
+
+def _elf64(endianness: str) -> io.BytesIO:
+    phoff = 64
+    path_offset = 140
+    data = bytearray(150)
+    data[:16] = b'\x7fELF' + bytes([2, 1 if endianness == '<' else 2]) + b'\xff' + b'\x00' * 9
+    header_format = f'{endianness}HHIQQQIHHH'
+    program_format = f'{endianness}IIQQQQQQ'
+    struct.pack_into(header_format, data, 16, 2, 32769, 1, 0, phoff, 0, 2147483649, 64, 56, 1)
+    struct.pack_into(program_format, data, phoff, 3, 99, path_offset, 200, 0, 9223372036854775811, 1, 0)
+    data[path_offset:path_offset + 3] = b'/x\x00'
+    return io.BytesIO(data)
+
+def test_invalid_magic_reports_the_actual_magic():
+    with pytest.raises(ELFInvalid) as exc_info:
+        ELFFile(io.BytesIO(b'NOPE' + b'\x00' * 12))
+    assert str(exc_info.value) == "invalid magic: b'NOPE'"
+
+def test_truncated_identification_has_specific_error_message():
+    with pytest.raises(ELFInvalid) as exc_info:
+        ELFFile(io.BytesIO(b'\x7fELF'))
+    assert str(exc_info.value) == 'unable to parse identification'
+
+def test_unknown_capacity_and_encoding_are_reported():
+    ident = b'\x7fELF' + bytes([9, 9]) + b'\x00' * 10
+    with pytest.raises(ELFInvalid) as exc_info:
+        ELFFile(io.BytesIO(ident))
+    assert str(exc_info.value) == 'unrecognized capacity (9) or encoding (9)'
+
+def test_truncated_elf_header_has_specific_error_message():
+    ident = b'\x7fELF' + bytes([1, 1]) + b'\x00' * 10
+    with pytest.raises(ELFInvalid) as exc_info:
+        ELFFile(io.BytesIO(ident))
+    assert str(exc_info.value) == 'unable to parse machine and section information'

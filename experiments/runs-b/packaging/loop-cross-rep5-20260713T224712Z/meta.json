@@ -1,0 +1,22 @@
+{
+  "phase": "run",
+  "arm": "loop-cross",
+  "subject": "/Users/jeffreyotterson/crucible-subjects/packaging",
+  "module": "src/packaging/_elffile.py",
+  "head_sha": "318f97928d57a92219e0a78e9e477f87d3847d92",
+  "protocol_b_version": 1,
+  "tester_provider": "anthropic",
+  "tester_model": "claude-sonnet-5",
+  "critic_provider": "openai",
+  "critic_model": "gpt-5.6-terra",
+  "critic_billing": "api",
+  "seed": {
+    "seed_dir": "/Users/jeffreyotterson/ai-agentic-code-testing/experiments/seeds/packaging/rep5",
+    "test_sha256": "bdb432d161ca61a5499e33a40ca306565d8fd71784c198ab616740fe0b5fc7d5",
+    "seed_head_sha": "318f97928d57a92219e0a78e9e477f87d3847d92",
+    "rep": 5
+  },
+  "started_at": "20260713T224712Z",
+  "max_rounds": 4,
+  "dry_rounds": 2
+}

@@ -1,0 +1,174 @@
+import io
+import struct
+
+import pytest
+
+from packaging._elffile import ELFFile, ELFInvalid
+
+
+# Correct (non-mutated) format specifications, used to build test inputs.
+E_FMTS = {
+    (1, 1): "<HHIIIIIHHH",
+    (1, 2): ">HHIIIIIHHH",
+    (2, 1): "<HHIQQQIHHH",
+    (2, 2): ">HHIQQQIHHH",
+}
+P_FMTS = {
+    (1, 1): "<IIIIIIII",
+    (1, 2): ">IIIIIIII",
+    (2, 1): "<IIQQQQQQ",
+    (2, 2): ">IIQQQQQQ",
+}
+
+
+def build_header(capacity, encoding, machine, flags, phoff, phentsize, phnum):
+    ident = bytes([0x7F, 0x45, 0x4C, 0x46, capacity, encoding] + [0] * 10)
+    e_fmt = E_FMTS[(capacity, encoding)]
+    header = struct.pack(
+        e_fmt,
+        2,  # e_type
+        machine,  # e_machine
+        1,  # e_version
+        0,  # e_entry
+        phoff,  # e_phoff
+        0,  # e_shoff
+        flags,  # e_flags
+        struct.calcsize(e_fmt) + 16,  # e_ehsize (irrelevant to parsing)
+        phentsize,  # e_phentsize
+        phnum,  # e_phnum
+    )
+    return ident + header
+
+
+def build_full_elf(capacity, encoding, interp_string):
+    e_fmt = E_FMTS[(capacity, encoding)]
+    p_fmt = P_FMTS[(capacity, encoding)]
+    header_size = struct.calcsize(e_fmt) + 16
+    phentsize = struct.calcsize(p_fmt)
+    phoff = header_size
+    phnum = 1
+
+    interp_bytes = interp_string.encode("ascii") + b"\x00"
+    padding = b"NOTPART0123"  # extra non-null bytes to expose wrong-length reads
+    interp_offset = phoff + phentsize
+
+    ident = bytes([0x7F, 0x45, 0x4C, 0x46, capacity, encoding] + [0] * 10)
+    header = struct.pack(
+        e_fmt, 2, 62, 1, 0, phoff, 0, 0, header_size, phentsize, phnum
+    )
+
+    if capacity == 1:
+        # type, offset, vaddr, paddr, filesz, memsz, flags, align
+        fields = (3, interp_offset, 11, 22, len(interp_bytes), 33, 44, 55)
+    else:
+        # type, flags, offset, vaddr, paddr, filesz, memsz, align
+        fields = (3, 44, interp_offset, 11, 22, len(interp_bytes), 33, 55)
+
+    ph = struct.pack(p_fmt, *fields)
+    return ident + header + ph + interp_bytes + padding
+
+
+def test_invalid_magic_message():
+    bad = b"\x00ELF" + bytes(12)
+    f = io.BytesIO(bad)
+    with pytest.raises(ELFInvalid) as excinfo:
+        ELFFile(f)
+    message = str(excinfo.value)
+    assert "invalid magic" in message
+    assert repr(b"\x00ELF") in message
+
+
+def test_unable_to_parse_identification_message():
+    f = io.BytesIO(b"\x7fEL")  # too short for the 16-byte ident read
+    with pytest.raises(ELFInvalid) as excinfo:
+        ELFFile(f)
+    assert "unable to parse identification" in str(excinfo.value)
+
+
+def test_unable_to_parse_machine_message():
+    # Valid 16-byte ident (32-bit, LSB) but nothing after it.
+    ident = bytes([0x7F, 0x45, 0x4C, 0x46, 1, 1] + [0] * 10)
+    f = io.BytesIO(ident)
+    with pytest.raises(ELFInvalid) as excinfo:
+        ELFFile(f)
+    assert "unable to parse machine and section information" in str(excinfo.value)
+
+
+def test_unrecognized_capacity_message():
+    ident = bytes([0x7F, 0x45, 0x4C, 0x46, 9, 9] + [0] * 10)
+    f = io.BytesIO(ident)
+    with pytest.raises(ELFInvalid) as excinfo:
+        ELFFile(f)
+    message = str(excinfo.value)
+    assert "unrecognized capacity" in message
+    assert "9" in message
+
+
+@pytest.mark.parametrize("capacity,encoding", [(1, 1), (1, 2), (2, 1), (2, 2)])
+def test_header_fields_parsed_correctly(capacity, encoding):
+    flags_sentinel = 0xDEADBEEF  # exceeds int32 max -> would be negative if signed
+    if capacity == 1:
+        phoff_sentinel = 0xFFFFFFFE  # exceeds int32 max, fits uint32
+    else:
+        phoff_sentinel = 0xFFFFFFFFFFFFFFFE  # exceeds int64 max, fits uint64
+    machine_sentinel = 62
+
+    data = build_header(
+        capacity,
+        encoding,
+        machine=machine_sentinel,
+        flags=flags_sentinel,
+        phoff=phoff_sentinel,
+        phentsize=0,
+        phnum=0,
+    )
+    f = io.BytesIO(data)
+    ef = ELFFile(f)
+
+    assert ef.capacity == capacity
+    assert ef.encoding == encoding
+    assert ef.machine == machine_sentinel
+    assert ef.flags == flags_sentinel
+    assert ef._e_phoff == phoff_sentinel
+    assert ef.interpreter is None  # phnum == 0, nothing to find
+
+
+@pytest.mark.parametrize("capacity,encoding", [(1, 2), (2, 1)])
+def test_interpreter_field_positions(capacity, encoding):
+    interp_string = "/lib/ld-sentinel.so"
+    data = build_full_elf(capacity, encoding, interp_string)
+    f = io.BytesIO(data)
+    ef = ELFFile(f)
+    assert ef.interpreter == interp_string
+
+
+@pytest.mark.parametrize("capacity,encoding", [(1, 1), (1, 2), (2, 1), (2, 2)])
+def test_interpreter_offset_treated_as_unsigned(capacity, encoding):
+    e_fmt = E_FMTS[(capacity, encoding)]
+    p_fmt = P_FMTS[(capacity, encoding)]
+    header_size = struct.calcsize(e_fmt) + 16
+    phentsize = struct.calcsize(p_fmt)
+    phoff = header_size
+    phnum = 1
+
+    if capacity == 1:
+        huge_offset = 0x90000000  # > INT32_MAX, fits in uint32
+        if encoding == 1:
+            fields = (3, huge_offset, 0, 0, 4, 0, 0, 0)
+        else:
+            fields = (3, huge_offset, 0, 0, 4, 0, 0, 0)
+    else:
+        huge_offset = 0x9000000000000000  # > INT64_MAX, fits in uint64
+        fields = (3, 0, huge_offset, 0, 0, 4, 0, 0)
+
+    ident = bytes([0x7F, 0x45, 0x4C, 0x46, capacity, encoding] + [0] * 10)
+    header = struct.pack(e_fmt, 2, 62, 1, 0, phoff, 0, 0, header_size, phentsize, phnum)
+    ph = struct.pack(p_fmt, *fields)
+    data = ident + header + ph
+
+    f = io.BytesIO(data)
+    ef = ELFFile(f)
+    # The offset must be interpreted as unsigned; seeking far beyond the
+    # (small) file simply yields no bytes, resulting in an empty string,
+    # rather than raising due to a negative seek position.
+    assert ef.interpreter == ""

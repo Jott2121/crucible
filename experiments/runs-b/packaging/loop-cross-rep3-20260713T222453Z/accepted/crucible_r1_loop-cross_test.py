@@ -1,0 +1,62 @@
+import io
+import struct
+import pytest
+from packaging._elffile import ELFFile, ELFInvalid
+
+def make_elf(capacity, encoding, *, machine=62, interpreter=b'/expected-loader\x00', interpreter_offset=160, include_interpreter=True):
+    endian = '<' if encoding == 1 else '>'
+    ident = b'\x7fELF' + bytes([capacity, encoding, 1]) + b'\x00' * 9
+    if capacity == 1:
+        phoff = 52
+        phentsize = 32
+        header = struct.pack(endian + 'HHIIIIIHHH', 2, machine, 1, 0, phoff, 0, 0, 52, phentsize, 1)
+        program_header = struct.pack(endian + 'IIIIIIII', 3, interpreter_offset, 7, 0, len(interpreter), 1, 1, 0)
+    else:
+        phoff = 64
+        phentsize = 56
+        header = struct.pack(endian + 'HHIQQQIHHH', 2, machine, 1, 0, phoff, 0, 0, 64, phentsize, 1)
+        program_header = struct.pack(endian + 'IIQQQQQQ', 3, 9, interpreter_offset, 7, 0, len(interpreter), 1, 0)
+    result = ident + header + program_header
+    if include_interpreter:
+        result += b'\x00' * max(0, interpreter_offset - len(result))
+        result += interpreter
+    return io.BytesIO(result)
+
+@pytest.mark.parametrize(('capacity', 'encoding'), [(1, 1), (1, 2), (2, 1), (2, 2)])
+def test_header_unsigned_machine_values_are_preserved(capacity, encoding):
+    elf = ELFFile(make_elf(capacity, encoding, machine=65535))
+    assert elf.machine == 65535
+
+def test_identification_is_read_as_unsigned_bytes(monkeypatch):
+    observed_formats = []
+    original_read = ELFFile._read
+
+    def recording_read(self, fmt):
+        observed_formats.append(fmt)
+        return original_read(self, fmt)
+    monkeypatch.setattr(ELFFile, '_read', recording_read)
+    ELFFile(make_elf(2, 1))
+    assert observed_formats[0] == '16B'
+
+def test_invalid_magic_reports_the_actual_magic():
+    invalid = io.BytesIO(b'NOPE' + b'\x00' * 12)
+    with pytest.raises(ELFInvalid) as raised:
+        ELFFile(invalid)
+    assert str(raised.value) == "invalid magic: b'NOPE'"
+
+def test_short_identification_has_a_specific_error_message():
+    with pytest.raises(ELFInvalid) as raised:
+        ELFFile(io.BytesIO(b'\x7fELF'))
+    assert str(raised.value) == 'unable to parse identification'
+
+def test_unknown_capacity_or_encoding_has_a_specific_error_message():
+    invalid = io.BytesIO(b'\x7fELF' + bytes([9, 1]) + b'\x00' * 10)
+    with pytest.raises(ELFInvalid) as raised:
+        ELFFile(invalid)
+    assert str(raised.value) == 'unrecognized capacity (9) or encoding (1)'
+
+def test_truncated_elf_header_has_a_specific_error_message():
+    truncated = io.BytesIO(b'\x7fELF' + bytes([2, 1]) + b'\x00' * 10)
+    with pytest.raises(ELFInvalid) as raised:
+        ELFFile(truncated)
+    assert str(raised.value) == 'unable to parse machine and section information'
