@@ -1,0 +1,16 @@
+{
+  "phase": "run",
+  "arm": "no-critic",
+  "subject": "/Users/jeffreyotterson/crucible-subjects/rag-guard",
+  "module": "rag_guard/guard.py",
+  "head_sha": "526f2f317a7c364f6ae86be746975ae639e38778",
+  "protocol_b_version": 1,
+  "seed": {
+    "seed_dir": "/Users/jeffreyotterson/ai-agentic-code-testing/experiments/seeds/rag-guard/rep1",
+    "test_sha256": "4413233ad7d89753bbf84f5ed2b05ec3432e1ce67e44ec14a4ffa2af7d1f3841",
+    "seed_head_sha": "526f2f317a7c364f6ae86be746975ae639e38778",
+    "rep": 1
+  },
+  "started_at": "20260713T215316Z",
+  "derived": true
+}

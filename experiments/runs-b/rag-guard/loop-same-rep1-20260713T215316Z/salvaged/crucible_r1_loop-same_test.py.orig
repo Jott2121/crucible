@@ -1,0 +1,29 @@
+import pytest
+from rag_guard.guard import _content_tokens, redact_pii, should_refuse
+
+
+def test_content_tokens_empty_string_returns_empty_set():
+    # With text="" the mutant would treat it as "XXXX" -> {"xxxx"} instead of empty set
+    assert _content_tokens("") == set()
+    assert _content_tokens(None) == set()
+
+
+def test_redact_pii_card_number_exact_replacement():
+    text = "Card: 4111 1111 1111 1111 end"
+    result = redact_pii(text)
+    assert result == "Card: [redacted-card] end"
+    assert "XX" not in result
+
+
+def test_should_refuse_default_threshold_boundary():
+    # With default min_score=0.05, a hit with score 0.1 should NOT trigger refuse.
+    hits = [{"score": 0.1}]
+    assert should_refuse(hits) is False
+
+    # A hit with score exactly 0.05 should not be < 0.05, so should_refuse is False
+    hits_eq = [{"score": 0.05}]
+    assert should_refuse(hits_eq) is False
+
+    # A hit with score below 0.05 should refuse
+    hits_low = [{"score": 0.01}]
+    assert should_refuse(hits_low) is True
