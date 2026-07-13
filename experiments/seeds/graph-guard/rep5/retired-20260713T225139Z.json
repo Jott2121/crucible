@@ -1,0 +1,5 @@
+{
+  "reason": "PROTOCOL-B \u00a74 reproduction mismatch: mutant_49 killed at injection, survived at freeze (borderline test; see DEVIATIONS.md 2026-07-13)",
+  "retired_at": "20260713T225139Z",
+  "draw": 1
+}
