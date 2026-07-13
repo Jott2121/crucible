@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>crucible — your AI wrote the tests. Who tested the tests?</title>
+<meta name="description" content="Adversarial test-hardening for AI-written code. A Tester writes tests, mutation testing finds what they miss, a Critic kills the named survivors. Mechanical verdicts, mutation-kill receipts.">
+<meta property="og:title" content="crucible — your AI wrote the tests. Who tested the tests?">
+<meta property="og:description" content="97% coverage. Green suite. 25 of 71 injected defects survived. Coverage measures what ran, not what would be caught.">
+<meta property="og:type" content="website">
+<style>
+  :root{
+    --bg:#0A0F1A; --bg2:#0E1626; --panel:#121C2E; --line:#1E2C44;
+    --fg:#E2E8F0; --dim:#94A3B8; --mute:#64748B;
+    --cyan:#38BDF8; --indigo:#818CF8; --green:#34D399; --amber:#FBBF24; --red:#F87171;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);line-height:1.65;
+       -webkit-font-smoothing:antialiased}
+  .wrap{max-width:900px;margin:0 auto;padding:0 24px}
+  a{color:var(--cyan)}
+
+  header{padding:80px 0 56px;background:
+    radial-gradient(1000px 400px at 75% 0%, rgba(56,189,248,.10), transparent 65%),
+    linear-gradient(180deg,#0A0F1A,#0E1626);
+    border-bottom:1px solid var(--line)}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:3px;color:var(--cyan);
+           text-transform:uppercase;margin-bottom:18px}
+  h1{font-size:clamp(30px,5.2vw,50px);line-height:1.12;margin:0 0 18px;letter-spacing:-1px;font-weight:700}
+  .lede{font-size:19px;color:var(--dim);max-width:640px;margin:0 0 30px}
+  .cta{display:flex;gap:12px;flex-wrap:wrap}
+  .btn{display:inline-block;padding:11px 20px;border-radius:9px;text-decoration:none;font-weight:600;font-size:15px}
+  .btn-p{background:var(--cyan);color:#05141F}
+  .btn-s{border:1px solid var(--line);color:var(--fg);background:rgba(255,255,255,.02)}
+
+  section{padding:60px 0;border-bottom:1px solid var(--line)}
+  h2{font-size:26px;margin:0 0 10px;letter-spacing:-.4px}
+  .sub{color:var(--mute);margin:0 0 28px;font-size:16px}
+
+  /* the gap */
+  .gap{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin:26px 0}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px;text-align:center}
+  .stat .n{font-family:var(--mono);font-size:30px;font-weight:700;letter-spacing:-1px}
+  .stat .l{font-size:12.5px;color:var(--mute);margin-top:6px;line-height:1.4}
+  .ok .n{color:var(--green)} .bad .n{color:var(--red)} .neu .n{color:var(--fg)}
+
+  .callout{border-left:3px solid var(--red);background:rgba(248,113,113,.06);
+           padding:16px 20px;border-radius:0 10px 10px 0;margin:24px 0;color:#FECACA}
+  .callout b{color:#fff}
+
+  pre{background:#070C14;border:1px solid var(--line);border-radius:12px;padding:18px 20px;
+      overflow-x:auto;font-family:var(--mono);font-size:13.5px;color:#CBD5E1;line-height:1.6}
+  code{font-family:var(--mono);font-size:.92em}
+  p code,li code{background:rgba(56,189,248,.08);color:#7DD3FC;padding:1px 6px;border-radius:5px}
+
+  .demo{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#070C14;margin:8px 0 14px}
+  .demo img{display:block;width:100%;height:auto}
+  .demo-cap{font-size:13px;color:var(--mute);text-align:center;padding:10px;border-top:1px solid var(--line)}
+
+  .flow{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:22px;
+        font-family:var(--mono);font-size:13px;color:var(--dim);white-space:pre;overflow-x:auto;line-height:1.75}
+
+  table{width:100%;border-collapse:collapse;font-size:14.5px;margin-top:8px}
+  th,td{text-align:left;padding:11px 12px;border-bottom:1px solid var(--line)}
+  th{color:var(--mute);font-weight:600;font-size:12.5px;text-transform:uppercase;letter-spacing:.6px}
+  td b{color:#fff}
+
+  .verdict{display:inline-block;font-family:var(--mono);font-size:11.5px;padding:3px 9px;border-radius:20px;font-weight:600}
+  .v-yes{background:rgba(52,211,153,.13);color:var(--green);border:1px solid rgba(52,211,153,.3)}
+  .v-no{background:rgba(251,191,36,.13);color:var(--amber);border:1px solid rgba(251,191,36,.3)}
+
+  ul{padding-left:20px;color:var(--dim)} li{margin:7px 0}
+  footer{padding:44px 0 64px;color:var(--mute);font-size:14px;text-align:center}
+  .hon{color:var(--amber);font-weight:600}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="eyebrow">Adversarial test-hardening</div>
+    <h1>Your AI wrote the tests.<br>Who tested the tests?</h1>
+    <p class="lede">
+      Coverage measures what <b>ran</b> — not what would be <b>caught</b>. crucible injects real defects,
+      finds the ones your suite misses, and hands an adversarial Critic the named survivors to kill.
+      Every verdict is mechanical. No model ever grades model output.
+    </p>
+    <div class="cta">
+      <a class="btn btn-p" href="https://github.com/Jott2121/crucible">GitHub →</a>
+      <a class="btn btn-s" href="#start">Free first win (no model, no keys)</a>
+    </div>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <h2>The gap, on a real module</h2>
+    <p class="sub">
+      <code>rag_guard/guard.py</code> — 57 lines, a guarded-RAG refusal gate. Its suite is green and
+      well-covered. Then mutation testing injects 71 real defects.
+    </p>
+
+    <div class="demo">
+      <img src="./assets/demo.gif" alt="Terminal recording: a green 97%-coverage test suite, then mutation testing reveals 25 of 71 injected defects survive, then crucible's harden loop kills 24 and refuses to fake the 25th.">
+      <div class="demo-cap">
+        Recorded live — every command really ran, and every number in it is read back from that run's
+        own receipt. Sped up for viewing;
+        <a href="./assets/demo.cast">replay the raw cast at real speed</a>.
+      </div>
+    </div>
+
+    <div class="gap">
+      <div class="stat ok"><div class="n">97%</div><div class="l">line coverage</div></div>
+      <div class="stat ok"><div class="n">7/7</div><div class="l">tests passing</div></div>
+      <div class="stat neu"><div class="n">71</div><div class="l">defects injected</div></div>
+      <div class="stat bad"><div class="n">25</div><div class="l">SURVIVED the suite</div></div>
+    </div>
+
+    <div class="callout">
+      A green build at 97% coverage — and <b>25 real defects walk straight through it</b>.
+      That is the gap coverage cannot see, and it is exactly the gap an AI-written suite tends to leave.
+    </div>
+
+    <p style="color:var(--dim)">
+      crucible's harden loop kills <b>24 of the 25</b>. Mutation score 65% → 99%, while
+      <b>line coverage never moves off 97%</b> the entire time.
+    </p>
+
+    <div class="callout" style="border-left-color:var(--green);background:rgba(52,211,153,.06);color:#A7F3D0">
+      <span style="color:var(--green);font-weight:600">The 25th is the point.</span>
+      In two rounds the Critic wrote tests that <b>failed on pristine code</b> — tests that would have
+      "passed" for the wrong reason. crucible <b>threw them out</b> rather than bank a kill it hadn't
+      earned, ended the loop <code>dry</code> with one mutant still standing, and said so in the receipt.
+      <br><br>
+      A tool that grades itself would have called that a win. This one can't: the verdict is a pytest
+      run, not an opinion. <i>An earlier run on the same module killed all 25 (<code>clean</code>).
+      Model nondeterminism is real; the receipts record both, not just the flattering one.</i>
+    </div>
+  </div>
+</section>
+
+<section id="start">
+  <div class="wrap">
+    <h2>Start with the free win</h2>
+    <p class="sub">No model. No API keys. No spend. Find out what your existing tests miss, on your own repo, in about ten minutes.</p>
+<pre>git clone https://github.com/Jott2121/crucible &amp;&amp; pip install -e "./crucible[dev]"
+cd /path/to/your-repo-clone      <span style="color:#64748B"># work in a clone: crucible writes scope config</span>
+
+crucible scope . --module yourpkg/yourmodule.py
+mutmut run &amp;&amp; mutmut results     <span style="color:#64748B"># survivors = injected bugs your tests never caught</span></pre>
+    <p style="color:var(--dim)">
+      <code>crucible scope</code> detects your layout, writes the mutation scope, and <b>proves</b> a fresh
+      test file is collectable before anything runs (a canary probe — it refuses with exit 4 rather than
+      guess). No AI is involved yet: that survivor count is plain mutation testing on your own suite.
+    </p>
+
+    <h2 style="margin-top:40px">Then harden</h2>
+<pre>crucible harden . --module yourpkg/yourmodule.py \
+    --tester claude-cli --critic claude-cli --runs-dir ~/.crucible-runs/yourrepo</pre>
+    <p style="color:var(--dim)">
+      With <code>claude-cli</code>, model calls run through Claude Code headless on your existing Claude
+      subscription — <b>$0 metered spend</b>. Every run's <code>meta.json</code> records
+      <code>billing: max-plan</code> so plan-covered shadow dollars are never mistaken for an invoice.
+      No subscription? <code>--tester anthropic</code> uses the metered API.
+    </p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>How it works</h2>
+    <p class="sub">Two agents, one referee. The referee is not a model.</p>
+    <div class="flow">  Tester  ──writes tests──►  mutmut  ──injects defects, counts kills──┐
+     ▲                                                                │
+     │                                                    named survivors
+     │                                                                ▼
+     └──────────────  Critic  ◄── "kill exactly these"  ◄─────────────┘
+
+              ... repeat until dry, or the round cap is hit
+
+  VERDICT: pytest kills the mutant, or it does not.  ← mechanical, not judged</div>
+    <ul style="margin-top:22px">
+      <li><b>No model grades model output.</b> The kill is a test run, not an opinion.</li>
+      <li><b>Fails closed.</b> If the canary can't prove your scope, crucible refuses instead of spending tokens.</li>
+      <li><b>Receipts, every run.</b> <code>meta.json</code> (models, billing, scope commit), <code>receipt.jsonl</code> (per-round tokens, cost, kills), <code>result.json</code> (verdict).</li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Does the adversarial loop actually work?</h2>
+    <p class="sub">Pre-registered before results existed (<code>experiments/PROTOCOL.md</code>). Five subjects, three arms.</p>
+    <table>
+      <tr><th>Hypothesis</th><th>Result</th><th>Verdict</th></tr>
+      <tr>
+        <td><b>H1</b> — the adversarial loop kills more mutants than one-shot generation</td>
+        <td>pooled exact McNemar<br><b>p = 4.9×10⁻³²</b>, b = 105, c = 0</td>
+        <td><span class="verdict v-yes">SUPPORTED</span></td>
+      </tr>
+      <tr>
+        <td><b>H2</b> — a cross-lineage critic beats a same-lineage critic</td>
+        <td><b>p = 0.0625</b></td>
+        <td><span class="verdict v-no">NOT SUPPORTED</span></td>
+      </tr>
+    </table>
+
+    <p style="color:var(--dim);margin-top:24px">
+      H1 <b>replicates</b> the direction established by MuTAP, AdverTest, and Meta's ACH in a new agentic,
+      repo-level, Python setting. We claim the replication, not the idea
+      (<a href="https://github.com/Jott2121/crucible/blob/main/docs/RELATED-WORK.md">RELATED-WORK.md</a>).
+    </p>
+
+    <div class="callout" style="border-left-color:var(--amber);background:rgba(251,191,36,.06);color:#FDE68A">
+      <span class="hon">The null is the interesting part.</span> An earlier run showed an <i>enormous</i> H2
+      effect. The autopsy traced it to <b>silent output truncation</b> rejecting one arm's rounds — an
+      instrument artifact, not a model difference. The bug was in the measuring device, not the finding.
+      That autopsy, and the fail-closed instrumentation built from it, is what this project actually
+      contributes. It is published at the same prominence as the positive result.
+    </div>
+
+    <p style="color:var(--dim)">
+      Full tables, all three pre-declared views, and cost-per-kill:
+      <a href="https://github.com/Jott2121/crucible/blob/main/experiments/RESULTS.md">experiments/RESULTS.md</a>
+    </p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Why you can check this</h2>
+    <ul>
+      <li>The experiment was <b>pre-registered</b> before any results existed.</li>
+      <li>The <b>null result is published</b> at the same prominence as the positive one.</li>
+      <li>Prior art is <b>cited, not rediscovered</b>.</li>
+      <li>It's <b>dogfooded</b>: crucible's own code runs under the same mutation gate —
+          <b>913 mutants, 907 killed, 6 survivors, all triaged and documented</b>
+          (<a href="https://github.com/Jott2121/crucible/blob/main/docs/MUTATION.md">MUTATION.md</a>).</li>
+    </ul>
+
+    <h2 style="margin-top:40px">Honest limitations</h2>
+    <ul>
+      <li>Python + pytest repos only. A repo the canary can't validate is a <b>refusal, not a guess</b>.</li>
+      <li>mutmut is pinned exactly (3.6.0) — the src-layout shim relies on a mutmut-internal contract.</li>
+      <li>The <code>claude-cli</code> provider has <b>no mechanical truncation check</b> (the CLI exposes no output cap). Disclosed in the provider docstring — and it is exactly the failure mode that produced the H2 artifact above.</li>
+      <li>Generated tests land in your working tree. Run it on a throwaway branch; the bundled <code>harden-tests</code> skill enforces that ritual (local branch only, never <code>main</code>).</li>
+    </ul>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p>
+      <a href="https://github.com/Jott2121/crucible">github.com/Jott2121/crucible</a> · MIT ·
+      built on <a href="https://github.com/Jott2121/oracle-gate">oracle-gate</a>
+    </p>
+    <p style="margin-top:6px"><i>Receipts, not claims.</i></p>
+  </div>
+</footer>
+
+</body>
+</html>
