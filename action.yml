@@ -7,8 +7,9 @@ branding:
 
 inputs:
   module:
-    description: "Path to the module to mutate, e.g. yourpkg/yourmodule.py"
-    required: true
+    description: "Module to scope, e.g. yourpkg/yourmodule.py. Omit it if your repo already configures [tool.mutmut] -- crucible will grade the scope you chose rather than overwrite it."
+    required: false
+    default: ""
   install-command:
     description: "How to install your project and its test deps."
     required: false
@@ -79,7 +80,13 @@ runs:
       run: |
         set -o pipefail
         # $0 diagnose. No model is called; no API key exists in this job.
-        crucible score . --module "$MODULE" --json > crucible-score.json
+        # An empty module means "grade the [tool.mutmut] scope this repo already
+        # configured" -- passing --module "" would instead scope the empty string.
+        if [ -n "$MODULE" ]; then
+          crucible score . --module "$MODULE" --json > crucible-score.json
+        else
+          crucible score . --json > crucible-score.json
+        fi
 
         python - <<'PY' >> "$GITHUB_OUTPUT"
         import json

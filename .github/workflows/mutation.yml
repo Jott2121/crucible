@@ -21,5 +21,6 @@ jobs:
       - name: Mutation score
         uses: ./
         with:
-          module: src/crucible/score.py
-          fail-under: "80"
+          # no module: grade the 8-module [tool.mutmut] scope this repo already
+          # maintains, rather than clobbering it. Dogfood means dogfood.
+          fail-under: "95"

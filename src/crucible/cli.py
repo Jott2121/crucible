@@ -159,6 +159,19 @@ def _cmd_report(args) -> int:
     return 0
 
 
+def _has_mutmut_scope(subject: Path) -> bool:
+    """True when the repo already configured [tool.mutmut] itself.
+
+    If it did, that scope is the author's decision about what is worth grading,
+    and `crucible score` uses it rather than overwriting it. Auto-detection is a
+    convenience for repos that have no opinion -- not a licence to replace one.
+    """
+    pyproject = subject / "pyproject.toml"
+    if not pyproject.exists():
+        return False
+    return "[tool.mutmut]" in pyproject.read_text()
+
+
 def _cmd_score(args) -> int:
     """$0 diagnose: scope the module, run mutmut, report what the suite misses.
 
@@ -180,8 +193,23 @@ def _cmd_score(args) -> int:
 
     subject = Path(args.subject).resolve()
     try:
-        plan = scope_mod.detect(subject, args.module)
-        scope_mod.apply(subject, plan)
+        if args.module:
+            # An explicit module means "scope it for me" -- we detect the layout
+            # and WRITE [tool.mutmut]. That overwrites whatever was there.
+            plan = scope_mod.detect(subject, args.module)
+            scope_mod.apply(subject, plan)
+        elif not _has_mutmut_scope(subject):
+            print(
+                "REFUSING: no [tool.mutmut] scope in pyproject.toml and no --module given.\n"
+                "  Pass --module yourpkg/yourmodule.py and I'll detect the scope for you,\n"
+                "  or configure [tool.mutmut] yourself and re-run without --module.",
+                file=sys.stderr,
+            )
+            return 4
+        # else: the repo already told mutmut what to mutate. Honour it. Silently
+        # rewriting a scope someone hand-tuned is how you grade the wrong thing
+        # and hand them a confident number about it.
+
         # mutmut grades the copy of the tests inside mutants/. Left over from an
         # earlier run, that copy silently produces yesterday's score -- always in
         # the flattering direction, because the leftovers are usually hardened.
@@ -192,10 +220,12 @@ def _cmd_score(args) -> int:
     except EmptyMutantSet as exc:
         # a scope with no mutants grades nothing; refusing beats printing a 0%
         # or a 100% that both happen to be false
-        print(f"REFUSING: {exc}")
+        print(f"REFUSING: {exc}", file=sys.stderr)
         return 4
     except (RuntimeError, FileNotFoundError) as exc:
-        print(f"REFUSING: {exc}")
+        # stderr, not stdout: --json redirects stdout to a file, and a refusal
+        # that lands in the JSON file is a refusal nobody ever reads
+        print(f"REFUSING: {exc}", file=sys.stderr)
         return 4
 
     if args.badge:
@@ -206,7 +236,7 @@ def _cmd_score(args) -> int:
             "score": round(score, 2),
             "counts": outcome.counts,
             "survivors": outcome.survivors,
-            "module": args.module,
+            "module": args.module or "[tool.mutmut] scope",
         }, indent=2))
     else:
         print(shock_line(outcome.counts, coverage=args.coverage))
@@ -266,7 +296,9 @@ def main(argv=None) -> int:
                     "is needed -- the number that embarrasses a coverage badge is free.",
     )
     scp.add_argument("subject")
-    scp.add_argument("--module", required=True)
+    scp.add_argument("--module", default=None,
+                     help="module to scope, e.g. yourpkg/yourmodule.py. Omit it to grade the "
+                          "[tool.mutmut] scope the repo already configured.")
     scp.add_argument("--json", action="store_true", help="machine-readable output")
     scp.add_argument("--badge", metavar="PATH",
                      help="write a shields.io endpoint JSON here (serverless badge)")
