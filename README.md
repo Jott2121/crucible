@@ -4,8 +4,8 @@
 
 [![ci](https://github.com/Jott2121/crucible/actions/workflows/ci.yml/badge.svg)](https://github.com/Jott2121/crucible/actions/workflows/ci.yml)
 [![codeql](https://github.com/Jott2121/crucible/actions/workflows/codeql.yml/badge.svg)](https://github.com/Jott2121/crucible/actions/workflows/codeql.yml)
-[![mutation score](https://img.shields.io/badge/mutation_score-99.3%25-34D399?labelColor=0F172A)](docs/MUTATION.md)
-[![tests](https://img.shields.io/badge/tests-307-38BDF8?labelColor=0F172A)](tests/)
+[![mutation score](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/Jott2121/crucible/badges/mutation.json&labelColor=0F172A)](docs/MUTATION.md)
+[![tests](https://img.shields.io/badge/tests-323-38BDF8?labelColor=0F172A)](tests/)
 [![H1](https://img.shields.io/badge/H1-supported_p%3D4.9e--32-818CF8?labelColor=0F172A)](experiments/RESULTS.md)
 [![H2](https://img.shields.io/badge/H2-not_supported_p%3D0.0625-FBBF24?labelColor=0F172A)](experiments/RESULTS.md)
 [![metered spend](https://img.shields.io/badge/metered_spend-%240-34D399?labelColor=0F172A)](#receipts-are-the-product)
@@ -29,6 +29,38 @@ thing measuring your safety.
 
 An earlier run on the same module killed all 25 (`clean`). Same tool, same module, different day —
 model nondeterminism is real, and the receipts record both rather than only the flattering one.
+
+## Put the number in your own PRs
+
+The diagnose costs nothing and calls no model. Point the Action at a module and every pull request
+tells you how many real bugs your suite would actually have caught:
+
+```yaml
+- uses: Jott2121/crucible@main
+  with:
+    module: yourpkg/yourmodule.py    # omit if your repo already configures [tool.mutmut]
+    fail-under: "70"                 # optional: red the build below this
+```
+
+It comments the score and names the survivors. **No model, no API key, `$0`** — the number that
+embarrasses a coverage badge is free to compute, and you should not need a subscription to be told
+the truth about your own tests.
+
+For the badge, set `badge-file: mutation.json`, publish it, and point shields.io at it. The payload
+lives in **your** repo — there is no badge service of mine sitting in the middle of your CI, and no
+uptime I owe you. The badge at the top of this page is generated exactly that way, by this Action,
+on this repo:
+
+```markdown
+[![mutation](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/YOU/REPO/badges/mutation.json)](...)
+```
+
+Or just run it locally, on any repo, right now:
+
+```
+crucible score . --module yourpkg/yourmodule.py --coverage 97
+97% line coverage, but 25 of 71 injected defects SURVIVED this suite (46 killed, mutation score 65%).
+```
 
 Coverage measures what ran, not what would be caught. Mutation testing injects real defects
 and counts how many your suite kills — and AI-written suites routinely leave survivors.

@@ -1,7 +1,8 @@
 name: mutation
 
-# crucible runs its own Action against its own code. If the mutation gate is
-# worth asking of you, it is worth surviving here first.
+# crucible runs its own Action against its own code, and publishes its own badge
+# from the result. If the gate is worth asking of you, it survives here first --
+# and the number on the README is the one CI actually measured, not one I typed.
 
 on:
   push:
@@ -9,8 +10,8 @@ on:
   pull_request:
 
 permissions:
-  contents: read
-  pull-requests: write
+  contents: write        # to publish the badge payload to the badges branch
+  pull-requests: write   # to comment the score on a PR
 
 jobs:
   score:
@@ -19,8 +20,27 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Mutation score
+        id: mutation
         uses: ./
         with:
           # no module: grade the 8-module [tool.mutmut] scope this repo already
           # maintains, rather than clobbering it. Dogfood means dogfood.
           fail-under: "95"
+          badge-file: mutation.json
+
+      - name: Publish the badge
+        # main only: a PR must never be able to move the badge on the README
+        if: github.ref == 'refs/heads/main'
+        env:
+          SCORE: ${{ steps.mutation.outputs.score }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # an orphan branch: the badge payload has no business carrying the
+          # repo's history around with it
+          git checkout --orphan badges
+          git rm -rf --cached . >/dev/null 2>&1 || true
+          find . -maxdepth 1 ! -name mutation.json ! -name .git ! -name . -exec rm -rf {} + || true
+          git add -f mutation.json
+          git commit -q -m "mutation score: ${SCORE}%"
+          git push -f origin badges
