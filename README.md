@@ -36,7 +36,7 @@ The diagnose costs nothing and calls no model. Point the Action at a module and 
 tells you how many real bugs your suite would actually have caught:
 
 ```yaml
-- uses: Jott2121/crucible@main
+- uses: Jott2121/crucible@v1
   with:
     module: yourpkg/yourmodule.py    # omit if your repo already configures [tool.mutmut]
     fail-under: "70"                 # optional: red the build below this
