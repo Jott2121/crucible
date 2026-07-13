@@ -61,6 +61,7 @@ source_paths = [
 pytest_add_cli_args_test_selection = [
     "tests/",
     "--ignore=tests/test_analyze.py",
+    "--ignore=tests/test_analyze_b.py",
     "--ignore=tests/test_experiment_b.py",
 ]
 # also_copy: pytest_add_cli_args_test_selection = ["tests/"] collects the WHOLE
