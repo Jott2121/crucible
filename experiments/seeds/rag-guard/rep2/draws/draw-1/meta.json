@@ -1,0 +1,13 @@
+{
+  "phase": "seed",
+  "subject": "/Users/jeffreyotterson/crucible-subjects/rag-guard",
+  "module": "rag_guard/guard.py",
+  "rep": 2,
+  "draw": 1,
+  "head_sha": "526f2f317a7c364f6ae86be746975ae639e38778",
+  "protocol_b_version": 1,
+  "tester_provider": "anthropic",
+  "tester_model": "claude-sonnet-5",
+  "tester_billing": "api",
+  "started_at": "20260713T204622Z"
+}
