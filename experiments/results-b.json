@@ -1,0 +1,1585 @@
+{
+  "descriptives": {
+    "loop_cross": {
+      "mean_critic_rounds": 2.45,
+      "rejected_rounds_total": 3,
+      "valid_cells": 20,
+      "verdicts": {
+        "cap": 1,
+        "clean": 13,
+        "dry": 6
+      }
+    },
+    "loop_same": {
+      "mean_critic_rounds": 3.3,
+      "rejected_rounds_total": 10,
+      "valid_cells": 20,
+      "verdicts": {
+        "cap": 6,
+        "clean": 5,
+        "dry": 9
+      }
+    }
+  },
+  "eb1": {
+    "delta_same": {
+      "per_subject": {
+        "graph-guard": {
+          "ci": {
+            "hi95": 5.0,
+            "lo95": 5.0,
+            "mean": 5.0,
+            "n": 5
+          },
+          "replicates": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        },
+        "idna": {
+          "ci": {
+            "hi95": 59.0,
+            "lo95": 55.0,
+            "mean": 57.2,
+            "n": 5
+          },
+          "replicates": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        },
+        "packaging": {
+          "ci": {
+            "hi95": 34.0,
+            "lo95": 11.8,
+            "mean": 24.8,
+            "n": 5
+          },
+          "replicates": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        },
+        "rag-guard": {
+          "ci": {
+            "hi95": 5.4,
+            "lo95": 3.2,
+            "mean": 4.4,
+            "n": 5
+          },
+          "replicates": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        }
+      },
+      "pooled_unweighted_subject_means": {
+        "hi95": 44.15,
+        "lo95": 4.7,
+        "mean": 22.85,
+        "n_subjects": 4,
+        "subjects": [
+          "graph-guard",
+          "idna",
+          "packaging",
+          "rag-guard"
+        ]
+      },
+      "rate_undefined_replicates_excluded": 0,
+      "replicate_composition": {
+        "graph-guard": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "idna": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "packaging": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "rag-guard": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      }
+    },
+    "rho_same": {
+      "per_subject": {
+        "graph-guard": {
+          "ci": {
+            "hi95": 0.5,
+            "lo95": 0.5,
+            "mean": 0.5,
+            "n": 5
+          },
+          "replicates": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        },
+        "idna": {
+          "ci": {
+            "hi95": 1.0,
+            "lo95": 0.9747,
+            "mean": 0.9893,
+            "n": 5
+          },
+          "replicates": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        },
+        "packaging": {
+          "ci": {
+            "hi95": 0.9714,
+            "lo95": 0.3863,
+            "mean": 0.7743,
+            "n": 5
+          },
+          "replicates": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        },
+        "rag-guard": {
+          "ci": {
+            "hi95": 0.9667,
+            "lo95": 0.7667,
+            "mean": 0.8667,
+            "n": 5
+          },
+          "replicates": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        }
+      },
+      "pooled_unweighted_subject_means": {
+        "hi95": 0.9355,
+        "lo95": 0.5917,
+        "mean": 0.7826,
+        "n_subjects": 4,
+        "subjects": [
+          "graph-guard",
+          "idna",
+          "packaging",
+          "rag-guard"
+        ]
+      },
+      "rate_undefined_replicates_excluded": 0,
+      "replicate_composition": {
+        "graph-guard": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "idna": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "packaging": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "rag-guard": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      }
+    }
+  },
+  "eb2": {
+    "d_cross_minus_same": {
+      "per_subject": {
+        "graph-guard": {
+          "ci": {
+            "hi95": 5.0,
+            "lo95": 3.2,
+            "mean": 4.4,
+            "n": 5
+          },
+          "replicates": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        },
+        "idna": {
+          "ci": {
+            "hi95": 1.4,
+            "lo95": 0.0,
+            "mean": 0.6,
+            "n": 5
+          },
+          "replicates": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        },
+        "packaging": {
+          "ci": {
+            "hi95": 23.4,
+            "lo95": 0.0,
+            "mean": 7.8,
+            "n": 5
+          },
+          "replicates": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        },
+        "rag-guard": {
+          "ci": {
+            "hi95": 0.8,
+            "lo95": 0.0,
+            "mean": 0.4,
+            "n": 5
+          },
+          "replicates": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        }
+      },
+      "pooled_unweighted_subject_means": {
+        "hi95": 6.1,
+        "lo95": 0.5,
+        "mean": 3.3,
+        "n_subjects": 4,
+        "subjects": [
+          "graph-guard",
+          "idna",
+          "packaging",
+          "rag-guard"
+        ]
+      },
+      "rate_undefined_replicates_excluded": 0,
+      "replicate_composition": {
+        "graph-guard": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "idna": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "packaging": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "rag-guard": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      }
+    },
+    "rho_cross": {
+      "per_subject": {
+        "graph-guard": {
+          "ci": {
+            "hi95": 1.0,
+            "lo95": 0.82,
+            "mean": 0.94,
+            "n": 5
+          },
+          "replicates": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        },
+        "idna": {
+          "ci": {
+            "hi95": 1.0,
+            "lo95": 1.0,
+            "mean": 1.0,
+            "n": 5
+          },
+          "replicates": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        },
+        "packaging": {
+          "ci": {
+            "hi95": 0.9734,
+            "lo95": 0.9635,
+            "mean": 0.9693,
+            "n": 5
+          },
+          "replicates": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        },
+        "rag-guard": {
+          "ci": {
+            "hi95": 1.0,
+            "lo95": 0.8,
+            "mean": 0.9333,
+            "n": 5
+          },
+          "replicates": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        }
+      },
+      "pooled_unweighted_subject_means": {
+        "hi95": 0.985,
+        "lo95": 0.9367,
+        "mean": 0.9607,
+        "n_subjects": 4,
+        "subjects": [
+          "graph-guard",
+          "idna",
+          "packaging",
+          "rag-guard"
+        ]
+      },
+      "rate_undefined_replicates_excluded": 0,
+      "replicate_composition": {
+        "graph-guard": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "idna": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "packaging": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "rag-guard": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      }
+    },
+    "rho_gap": {
+      "per_subject": {
+        "graph-guard": {
+          "ci": {
+            "hi95": 0.5,
+            "lo95": 0.32,
+            "mean": 0.44,
+            "n": 5
+          },
+          "replicates": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        },
+        "idna": {
+          "ci": {
+            "hi95": 0.0253,
+            "lo95": 0.0,
+            "mean": 0.0107,
+            "n": 5
+          },
+          "replicates": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        },
+        "packaging": {
+          "ci": {
+            "hi95": 0.585,
+            "lo95": 0.0,
+            "mean": 0.195,
+            "n": 5
+          },
+          "replicates": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        },
+        "rag-guard": {
+          "ci": {
+            "hi95": 0.1333,
+            "lo95": 0.0,
+            "mean": 0.0667,
+            "n": 5
+          },
+          "replicates": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        }
+      },
+      "pooled_unweighted_subject_means": {
+        "hi95": 0.3467,
+        "lo95": 0.0387,
+        "mean": 0.1781,
+        "n_subjects": 4,
+        "subjects": [
+          "graph-guard",
+          "idna",
+          "packaging",
+          "rag-guard"
+        ]
+      },
+      "rate_undefined_replicates_excluded": 0,
+      "replicate_composition": {
+        "graph-guard": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "idna": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "packaging": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "rag-guard": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      }
+    }
+  },
+  "params": {
+    "bootstrap_draws": 10000,
+    "k": 5,
+    "rng_seed": 20260713,
+    "subjects": [
+      "graph-guard",
+      "idna",
+      "packaging",
+      "rag-guard"
+    ]
+  },
+  "replicates": [
+    {
+      "d_cross_minus_same": 5,
+      "k0": 12,
+      "loop_cross": {
+        "attempt_statuses": [
+          "clean"
+        ],
+        "baseline_all_mutants": 80,
+        "cost_usd": 0.114905,
+        "critic_rounds": 2,
+        "dir": "loop-cross-rep1-20260713T220723Z",
+        "killed_total": 22,
+        "pre_killed": 58,
+        "rejected_rounds": 0,
+        "round0_kills": 12,
+        "spent_usd": 0.114905,
+        "status": "valid",
+        "verdict": "clean"
+      },
+      "loop_cross_cost_per_delta": 0.01149,
+      "loop_cross_delta": 10,
+      "loop_cross_full_score_pct": 100.0,
+      "loop_cross_rho": 1.0,
+      "loop_same": {
+        "attempt_statuses": [
+          "cap"
+        ],
+        "baseline_all_mutants": 80,
+        "cost_usd": 1.121643,
+        "critic_rounds": 4,
+        "dir": "loop-same-rep1-20260713T215431Z",
+        "killed_total": 17,
+        "pre_killed": 58,
+        "rejected_rounds": 1,
+        "round0_kills": 12,
+        "spent_usd": 1.121643,
+        "status": "valid",
+        "verdict": "cap"
+      },
+      "loop_same_cost_per_delta": 0.224329,
+      "loop_same_delta": 5,
+      "loop_same_full_score_pct": 93.8,
+      "loop_same_rho": 0.5,
+      "n_base": 22,
+      "rep": 1,
+      "rho_gap": 0.5,
+      "s": 10,
+      "seed": "ok",
+      "subject": "graph-guard"
+    },
+    {
+      "d_cross_minus_same": 5,
+      "k0": 12,
+      "loop_cross": {
+        "attempt_statuses": [
+          "clean"
+        ],
+        "baseline_all_mutants": 80,
+        "cost_usd": 0.113675,
+        "critic_rounds": 2,
+        "dir": "loop-cross-rep2-20260713T222357Z",
+        "killed_total": 22,
+        "pre_killed": 58,
+        "rejected_rounds": 0,
+        "round0_kills": 12,
+        "spent_usd": 0.113675,
+        "status": "valid",
+        "verdict": "clean"
+      },
+      "loop_cross_cost_per_delta": 0.011367,
+      "loop_cross_delta": 10,
+      "loop_cross_full_score_pct": 100.0,
+      "loop_cross_rho": 1.0,
+      "loop_same": {
+        "attempt_statuses": [
+          "cap"
+        ],
+        "baseline_all_mutants": 80,
+        "cost_usd": 1.297314,
+        "critic_rounds": 4,
+        "dir": "loop-same-rep2-20260713T220912Z",
+        "killed_total": 17,
+        "pre_killed": 58,
+        "rejected_rounds": 1,
+        "round0_kills": 12,
+        "spent_usd": 1.297314,
+        "status": "valid",
+        "verdict": "cap"
+      },
+      "loop_same_cost_per_delta": 0.259463,
+      "loop_same_delta": 5,
+      "loop_same_full_score_pct": 93.8,
+      "loop_same_rho": 0.5,
+      "n_base": 22,
+      "rep": 2,
+      "rho_gap": 0.5,
+      "s": 10,
+      "seed": "ok",
+      "subject": "graph-guard"
+    },
+    {
+      "d_cross_minus_same": 5,
+      "k0": 12,
+      "loop_cross": {
+        "attempt_statuses": [
+          "clean"
+        ],
+        "baseline_all_mutants": 80,
+        "cost_usd": 0.102515,
+        "critic_rounds": 2,
+        "dir": "loop-cross-rep3-20260713T223802Z",
+        "killed_total": 22,
+        "pre_killed": 58,
+        "rejected_rounds": 0,
+        "round0_kills": 12,
+        "spent_usd": 0.102515,
+        "status": "valid",
+        "verdict": "clean"
+      },
+      "loop_cross_cost_per_delta": 0.010252,
+      "loop_cross_delta": 10,
+      "loop_cross_full_score_pct": 100.0,
+      "loop_cross_rho": 1.0,
+      "loop_same": {
+        "attempt_statuses": [
+          "dry"
+        ],
+        "baseline_all_mutants": 80,
+        "cost_usd": 1.056162,
+        "critic_rounds": 4,
+        "dir": "loop-same-rep3-20260713T222544Z",
+        "killed_total": 17,
+        "pre_killed": 58,
+        "rejected_rounds": 0,
+        "round0_kills": 12,
+        "spent_usd": 1.056162,
+        "status": "valid",
+        "verdict": "dry"
+      },
+      "loop_same_cost_per_delta": 0.211232,
+      "loop_same_delta": 5,
+      "loop_same_full_score_pct": 93.8,
+      "loop_same_rho": 0.5,
+      "n_base": 22,
+      "rep": 3,
+      "rho_gap": 0.5,
+      "s": 10,
+      "seed": "ok",
+      "subject": "graph-guard"
+    },
+    {
+      "d_cross_minus_same": 5,
+      "k0": 12,
+      "loop_cross": {
+        "attempt_statuses": [
+          "clean"
+        ],
+        "baseline_all_mutants": 80,
+        "cost_usd": 0.1249525,
+        "critic_rounds": 2,
+        "dir": "loop-cross-rep4-20260713T224726Z",
+        "killed_total": 22,
+        "pre_killed": 58,
+        "rejected_rounds": 0,
+        "round0_kills": 12,
+        "spent_usd": 0.124952,
+        "status": "valid",
+        "verdict": "clean"
+      },
+      "loop_cross_cost_per_delta": 0.012495,
+      "loop_cross_delta": 10,
+      "loop_cross_full_score_pct": 100.0,
+      "loop_cross_rho": 1.0,
+      "loop_same": {
+        "attempt_statuses": [
+          "dry"
+        ],
+        "baseline_all_mutants": 80,
+        "cost_usd": 0.6602129999999999,
+        "critic_rounds": 3,
+        "dir": "loop-same-rep4-20260713T223941Z",
+        "killed_total": 17,
+        "pre_killed": 58,
+        "rejected_rounds": 0,
+        "round0_kills": 12,
+        "spent_usd": 0.660213,
+        "status": "valid",
+        "verdict": "dry"
+      },
+      "loop_same_cost_per_delta": 0.132043,
+      "loop_same_delta": 5,
+      "loop_same_full_score_pct": 93.8,
+      "loop_same_rho": 0.5,
+      "n_base": 22,
+      "rep": 4,
+      "rho_gap": 0.5,
+      "s": 10,
+      "seed": "ok",
+      "subject": "graph-guard"
+    },
+    {
+      "d_cross_minus_same": 2,
+      "k0": 12,
+      "loop_cross": {
+        "attempt_statuses": [
+          "crashed",
+          "dry"
+        ],
+        "baseline_all_mutants": 80,
+        "cost_usd": 0.2300975,
+        "critic_rounds": 4,
+        "dir": "loop-cross-rep5-20260713T230236Z",
+        "killed_total": 19,
+        "pre_killed": 58,
+        "rejected_rounds": 1,
+        "round0_kills": 12,
+        "spent_usd": 0.230097,
+        "status": "valid",
+        "verdict": "dry"
+      },
+      "loop_cross_cost_per_delta": 0.032871,
+      "loop_cross_delta": 7,
+      "loop_cross_full_score_pct": 96.2,
+      "loop_cross_rho": 0.7,
+      "loop_same": {
+        "attempt_statuses": [
+          "dry"
+        ],
+        "baseline_all_mutants": 80,
+        "cost_usd": 0.705786,
+        "critic_rounds": 3,
+        "dir": "loop-same-rep5-20260713T225310Z",
+        "killed_total": 17,
+        "pre_killed": 58,
+        "rejected_rounds": 0,
+        "round0_kills": 12,
+        "spent_usd": 0.705786,
+        "status": "valid",
+        "verdict": "dry"
+      },
+      "loop_same_cost_per_delta": 0.141157,
+      "loop_same_delta": 5,
+      "loop_same_full_score_pct": 93.8,
+      "loop_same_rho": 0.5,
+      "n_base": 22,
+      "rep": 5,
+      "rho_gap": 0.19999999999999996,
+      "s": 10,
+      "seed": "ok",
+      "subject": "graph-guard"
+    },
+    {
+      "d_cross_minus_same": 0,
+      "k0": 129,
+      "loop_cross": {
+        "attempt_statuses": [
+          "clean"
+        ],
+        "baseline_all_mutants": 187,
+        "cost_usd": 0.0868125,
+        "critic_rounds": 2,
+        "dir": "loop-cross-rep1-20260713T215849Z",
+        "killed_total": 187,
+        "pre_killed": 0,
+        "rejected_rounds": 0,
+        "round0_kills": 129,
+        "spent_usd": 0.086813,
+        "status": "valid",
+        "verdict": "clean"
+      },
+      "loop_cross_cost_per_delta": 0.001497,
+      "loop_cross_delta": 58,
+      "loop_cross_full_score_pct": 100.0,
+      "loop_cross_rho": 1.0,
+      "loop_same": {
+        "attempt_statuses": [
+          "clean"
+        ],
+        "baseline_all_mutants": 187,
+        "cost_usd": 0.384708,
+        "critic_rounds": 3,
+        "dir": "loop-same-rep1-20260713T215431Z",
+        "killed_total": 187,
+        "pre_killed": 0,
+        "rejected_rounds": 0,
+        "round0_kills": 129,
+        "spent_usd": 0.384708,
+        "status": "valid",
+        "verdict": "clean"
+      },
+      "loop_same_cost_per_delta": 0.006633,
+      "loop_same_delta": 58,
+      "loop_same_full_score_pct": 100.0,
+      "loop_same_rho": 1.0,
+      "n_base": 187,
+      "rep": 1,
+      "rho_gap": 0.0,
+      "s": 58,
+      "seed": "ok",
+      "subject": "idna"
+    },
+    {
+      "d_cross_minus_same": 0,
+      "k0": 129,
+      "loop_cross": {
+        "attempt_statuses": [
+          "clean"
+        ],
+        "baseline_all_mutants": 187,
+        "cost_usd": 0.08773500000000001,
+        "critic_rounds": 2,
+        "dir": "loop-cross-rep2-20260713T220423Z",
+        "killed_total": 187,
+        "pre_killed": 0,
+        "rejected_rounds": 0,
+        "round0_kills": 129,
+        "spent_usd": 0.087735,
+        "status": "valid",
+        "verdict": "clean"
+      },
+      "loop_cross_cost_per_delta": 0.001513,
+      "loop_cross_delta": 58,
+      "loop_cross_full_score_pct": 100.0,
+      "loop_cross_rho": 1.0,
+      "loop_same": {
+        "attempt_statuses": [
+          "clean"
+        ],
+        "baseline_all_mutants": 187,
+        "cost_usd": 0.39478199999999997,
+        "critic_rounds": 3,
+        "dir": "loop-same-rep2-20260713T220010Z",
+        "killed_total": 187,
+        "pre_killed": 0,
+        "rejected_rounds": 0,
+        "round0_kills": 129,
+        "spent_usd": 0.394782,
+        "status": "valid",
+        "verdict": "clean"
+      },
+      "loop_same_cost_per_delta": 0.006807,
+      "loop_same_delta": 58,
+      "loop_same_full_score_pct": 100.0,
+      "loop_same_rho": 1.0,
+      "n_base": 187,
+      "rep": 2,
+      "rho_gap": 0.0,
+      "s": 58,
+      "seed": "ok",
+      "subject": "idna"
+    },
+    {
+      "d_cross_minus_same": 2,
+      "k0": 132,
+      "loop_cross": {
+        "attempt_statuses": [
+          "clean"
+        ],
+        "baseline_all_mutants": 187,
+        "cost_usd": 0.06530749999999999,
+        "critic_rounds": 2,
+        "dir": "loop-cross-rep3-20260713T220938Z",
+        "killed_total": 187,
+        "pre_killed": 0,
+        "rejected_rounds": 0,
+        "round0_kills": 132,
+        "spent_usd": 0.065307,
+        "status": "valid",
+        "verdict": "clean"
+      },
+      "loop_cross_cost_per_delta": 0.001187,
+      "loop_cross_delta": 55,
+      "loop_cross_full_score_pct": 100.0,
+      "loop_cross_rho": 1.0,
+      "loop_same": {
+        "attempt_statuses": [
+          "dry"
+        ],
+        "baseline_all_mutants": 187,
+        "cost_usd": 0.369537,
+        "critic_rounds": 4,
+        "dir": "loop-same-rep3-20260713T220541Z",
+        "killed_total": 185,
+        "pre_killed": 0,
+        "rejected_rounds": 0,
+        "round0_kills": 132,
+        "spent_usd": 0.369537,
+        "status": "valid",
+        "verdict": "dry"
+      },
+      "loop_same_cost_per_delta": 0.006972,
+      "loop_same_delta": 53,
+      "loop_same_full_score_pct": 98.9,
+      "loop_same_rho": 0.9636363636363636,
+      "n_base": 187,
+      "rep": 3,
+      "rho_gap": 0.036363636363636376,
+      "s": 55,
+      "seed": "ok",
+      "subject": "idna"
+    },
+    {
+      "d_cross_minus_same": 1,
+      "k0": 129,
+      "loop_cross": {
+        "attempt_statuses": [
+          "clean"
+        ],
+        "baseline_all_mutants": 187,
+        "cost_usd": 0.0763475,
+        "critic_rounds": 2,
+        "dir": "loop-cross-rep4-20260713T221440Z",
+        "killed_total": 187,
+        "pre_killed": 0,
+        "rejected_rounds": 0,
+        "round0_kills": 129,
+        "spent_usd": 0.076347,
+        "status": "valid",
+        "verdict": "clean"
+      },
+      "loop_cross_cost_per_delta": 0.001316,
+      "loop_cross_delta": 58,
+      "loop_cross_full_score_pct": 100.0,
+      "loop_cross_rho": 1.0,
+      "loop_same": {
+        "attempt_statuses": [
+          "cap"
+        ],
+        "baseline_all_mutants": 187,
+        "cost_usd": 0.372828,
+        "critic_rounds": 4,
+        "dir": "loop-same-rep4-20260713T221038Z",
+        "killed_total": 186,
+        "pre_killed": 0,
+        "rejected_rounds": 0,
+        "round0_kills": 129,
+        "spent_usd": 0.372828,
+        "status": "valid",
+        "verdict": "cap"
+      },
+      "loop_same_cost_per_delta": 0.006541,
+      "loop_same_delta": 57,
+      "loop_same_full_score_pct": 99.5,
+      "loop_same_rho": 0.9827586206896551,
+      "n_base": 187,
+      "rep": 4,
+      "rho_gap": 0.017241379310344862,
+      "s": 58,
+      "seed": "ok",
+      "subject": "idna"
+    },
+    {
+      "d_cross_minus_same": 0,
+      "k0": 127,
+      "loop_cross": {
+        "attempt_statuses": [
+          "clean"
+        ],
+        "baseline_all_mutants": 187,
+        "cost_usd": 0.079995,
+        "critic_rounds": 3,
+        "dir": "loop-cross-rep5-20260713T221920Z",
+        "killed_total": 187,
+        "pre_killed": 0,
+        "rejected_rounds": 0,
+        "round0_kills": 127,
+        "spent_usd": 0.079995,
+        "status": "valid",
+        "verdict": "clean"
+      },
+      "loop_cross_cost_per_delta": 0.001333,
+      "loop_cross_delta": 60,
+      "loop_cross_full_score_pct": 100.0,
+      "loop_cross_rho": 1.0,
+      "loop_same": {
+        "attempt_statuses": [
+          "clean"
+        ],
+        "baseline_all_mutants": 187,
+        "cost_usd": 0.321561,
+        "critic_rounds": 3,
+        "dir": "loop-same-rep5-20260713T221552Z",
+        "killed_total": 187,
+        "pre_killed": 0,
+        "rejected_rounds": 0,
+        "round0_kills": 127,
+        "spent_usd": 0.321561,
+        "status": "valid",
+        "verdict": "clean"
+      },
+      "loop_same_cost_per_delta": 0.005359,
+      "loop_same_delta": 60,
+      "loop_same_full_score_pct": 100.0,
+      "loop_same_rho": 1.0,
+      "n_base": 187,
+      "rep": 5,
+      "rho_gap": 0.0,
+      "s": 60,
+      "seed": "ok",
+      "subject": "idna"
+    },
+    {
+      "d_cross_minus_same": 0,
+      "k0": 32,
+      "loop_cross": {
+        "attempt_statuses": [
+          "dry"
+        ],
+        "baseline_all_mutants": 69,
+        "cost_usd": 0.1814775,
+        "critic_rounds": 4,
+        "dir": "loop-cross-rep1-20260713T220044Z",
+        "killed_total": 68,
+        "pre_killed": 0,
+        "rejected_rounds": 0,
+        "round0_kills": 32,
+        "spent_usd": 0.181477,
+        "status": "valid",
+        "verdict": "dry"
+      },
+      "loop_cross_cost_per_delta": 0.005041,
+      "loop_cross_delta": 36,
+      "loop_cross_full_score_pct": 98.6,
+      "loop_cross_rho": 0.972972972972973,
+      "loop_same": {
+        "attempt_statuses": [
+          "cap"
+        ],
+        "baseline_all_mutants": 69,
+        "cost_usd": 0.6135,
+        "critic_rounds": 4,
+        "dir": "loop-same-rep1-20260713T215431Z",
+        "killed_total": 68,
+        "pre_killed": 0,
+        "rejected_rounds": 0,
+        "round0_kills": 32,
+        "spent_usd": 0.6135,
+        "status": "valid",
+        "verdict": "cap"
+      },
+      "loop_same_cost_per_delta": 0.017042,
+      "loop_same_delta": 36,
+      "loop_same_full_score_pct": 98.6,
+      "loop_same_rho": 0.972972972972973,
+      "n_base": 69,
+      "rep": 1,
+      "rho_gap": 0.0,
+      "s": 37,
+      "seed": "ok",
+      "subject": "packaging"
+    },
+    {
+      "d_cross_minus_same": 0,
+      "k0": 45,
+      "loop_cross": {
+        "attempt_statuses": [
+          "dry"
+        ],
+        "baseline_all_mutants": 69,
+        "cost_usd": 0.1139675,
+        "critic_rounds": 3,
+        "dir": "loop-cross-rep2-20260713T221317Z",
+        "killed_total": 68,
+        "pre_killed": 0,
+        "rejected_rounds": 0,
+        "round0_kills": 45,
+        "spent_usd": 0.113967,
+        "status": "valid",
+        "verdict": "dry"
+      },
+      "loop_cross_cost_per_delta": 0.004955,
+      "loop_cross_delta": 23,
+      "loop_cross_full_score_pct": 98.6,
+      "loop_cross_rho": 0.9583333333333334,
+      "loop_same": {
+        "attempt_statuses": [
+          "cap"
+        ],
+        "baseline_all_mutants": 69,
+        "cost_usd": 0.968271,
+        "critic_rounds": 4,
+        "dir": "loop-same-rep2-20260713T220249Z",
+        "killed_total": 68,
+        "pre_killed": 0,
+        "rejected_rounds": 0,
+        "round0_kills": 45,
+        "spent_usd": 0.968271,
+        "status": "valid",
+        "verdict": "cap"
+      },
+      "loop_same_cost_per_delta": 0.042099,
+      "loop_same_delta": 23,
+      "loop_same_full_score_pct": 98.6,
+      "loop_same_rho": 0.9583333333333334,
+      "n_base": 69,
+      "rep": 2,
+      "rho_gap": 0.0,
+      "s": 24,
+      "seed": "ok",
+      "subject": "packaging"
+    },
+    {
+      "d_cross_minus_same": 0,
+      "k0": 36,
+      "loop_cross": {
+        "attempt_statuses": [
+          "dry"
+        ],
+        "baseline_all_mutants": 69,
+        "cost_usd": 0.1728675,
+        "critic_rounds": 4,
+        "dir": "loop-cross-rep3-20260713T222453Z",
+        "killed_total": 68,
+        "pre_killed": 0,
+        "rejected_rounds": 0,
+        "round0_kills": 36,
+        "spent_usd": 0.172868,
+        "status": "valid",
+        "verdict": "dry"
+      },
+      "loop_cross_cost_per_delta": 0.005402,
+      "loop_cross_delta": 32,
+      "loop_cross_full_score_pct": 98.6,
+      "loop_cross_rho": 0.9696969696969697,
+      "loop_same": {
+        "attempt_statuses": [
+          "dry"
+        ],
+        "baseline_all_mutants": 69,
+        "cost_usd": 0.972414,
+        "critic_rounds": 4,
+        "dir": "loop-same-rep3-20260713T221441Z",
+        "killed_total": 68,
+        "pre_killed": 0,
+        "rejected_rounds": 0,
+        "round0_kills": 36,
+        "spent_usd": 0.972414,
+        "status": "valid",
+        "verdict": "dry"
+      },
+      "loop_same_cost_per_delta": 0.030388,
+      "loop_same_delta": 32,
+      "loop_same_full_score_pct": 98.6,
+      "loop_same_rho": 0.9696969696969697,
+      "n_base": 69,
+      "rep": 3,
+      "rho_gap": 0.0,
+      "s": 33,
+      "seed": "ok",
+      "subject": "packaging"
+    },
+    {
+      "d_cross_minus_same": 39,
+      "k0": 29,
+      "loop_cross": {
+        "attempt_statuses": [
+          "cap"
+        ],
+        "baseline_all_mutants": 69,
+        "cost_usd": 0.23958500000000002,
+        "critic_rounds": 4,
+        "dir": "loop-cross-rep4-20260713T223401Z",
+        "killed_total": 68,
+        "pre_killed": 0,
+        "rejected_rounds": 0,
+        "round0_kills": 29,
+        "spent_usd": 0.239585,
+        "status": "valid",
+        "verdict": "cap"
+      },
+      "loop_cross_cost_per_delta": 0.006143,
+      "loop_cross_delta": 39,
+      "loop_cross_full_score_pct": 98.6,
+      "loop_cross_rho": 0.975,
+      "loop_same": {
+        "attempt_statuses": [
+          "dry"
+        ],
+        "baseline_all_mutants": 69,
+        "cost_usd": 0.7245,
+        "critic_rounds": 2,
+        "dir": "loop-same-rep4-20260713T222654Z",
+        "killed_total": 29,
+        "pre_killed": 0,
+        "rejected_rounds": 2,
+        "round0_kills": 29,
+        "spent_usd": 0.7245,
+        "status": "valid",
+        "verdict": "dry"
+      },
+      "loop_same_cost_per_delta": null,
+      "loop_same_delta": 0,
+      "loop_same_full_score_pct": 42.0,
+      "loop_same_rho": 0.0,
+      "n_base": 69,
+      "rep": 4,
+      "rho_gap": 0.975,
+      "s": 40,
+      "seed": "ok",
+      "subject": "packaging"
+    },
+    {
+      "d_cross_minus_same": 0,
+      "k0": 35,
+      "loop_cross": {
+        "attempt_statuses": [
+          "dry"
+        ],
+        "baseline_all_mutants": 69,
+        "cost_usd": 0.1429625,
+        "critic_rounds": 4,
+        "dir": "loop-cross-rep5-20260713T224712Z",
+        "killed_total": 68,
+        "pre_killed": 0,
+        "rejected_rounds": 0,
+        "round0_kills": 35,
+        "spent_usd": 0.142963,
+        "status": "valid",
+        "verdict": "dry"
+      },
+      "loop_cross_cost_per_delta": 0.004332,
+      "loop_cross_delta": 33,
+      "loop_cross_full_score_pct": 98.6,
+      "loop_cross_rho": 0.9705882352941176,
+      "loop_same": {
+        "attempt_statuses": [
+          "cap"
+        ],
+        "baseline_all_mutants": 69,
+        "cost_usd": 1.006635,
+        "critic_rounds": 4,
+        "dir": "loop-same-rep5-20260713T223646Z",
+        "killed_total": 68,
+        "pre_killed": 0,
+        "rejected_rounds": 0,
+        "round0_kills": 35,
+        "spent_usd": 1.006635,
+        "status": "valid",
+        "verdict": "cap"
+      },
+      "loop_same_cost_per_delta": 0.030504,
+      "loop_same_delta": 33,
+      "loop_same_full_score_pct": 98.6,
+      "loop_same_rho": 0.9705882352941176,
+      "n_base": 69,
+      "rep": 5,
+      "rho_gap": 0.0,
+      "s": 34,
+      "seed": "ok",
+      "subject": "packaging"
+    },
+    {
+      "d_cross_minus_same": 0,
+      "k0": 22,
+      "loop_cross": {
+        "attempt_statuses": [
+          "dry"
+        ],
+        "baseline_all_mutants": 71,
+        "cost_usd": 0.0166075,
+        "critic_rounds": 3,
+        "dir": "loop-cross-rep1-20260713T215334Z",
+        "killed_total": 24,
+        "pre_killed": 46,
+        "rejected_rounds": 2,
+        "round0_kills": 22,
+        "spent_usd": 0.016608,
+        "status": "valid",
+        "verdict": "dry"
+      },
+      "loop_cross_cost_per_delta": 0.008304,
+      "loop_cross_delta": 2,
+      "loop_cross_full_score_pct": 98.6,
+      "loop_cross_rho": 0.6666666666666666,
+      "loop_same": {
+        "attempt_statuses": [
+          "dry"
+        ],
+        "baseline_all_mutants": 71,
+        "cost_usd": 0.026808,
+        "critic_rounds": 3,
+        "dir": "loop-same-rep1-20260713T215316Z",
+        "killed_total": 24,
+        "pre_killed": 46,
+        "rejected_rounds": 2,
+        "round0_kills": 22,
+        "spent_usd": 0.026808,
+        "status": "valid",
+        "verdict": "dry"
+      },
+      "loop_same_cost_per_delta": 0.013404,
+      "loop_same_delta": 2,
+      "loop_same_full_score_pct": 98.6,
+      "loop_same_rho": 0.6666666666666666,
+      "n_base": 25,
+      "rep": 1,
+      "rho_gap": 0.0,
+      "s": 3,
+      "seed": "ok",
+      "subject": "rag-guard"
+    },
+    {
+      "d_cross_minus_same": 1,
+      "k0": 19,
+      "loop_cross": {
+        "attempt_statuses": [
+          "clean"
+        ],
+        "baseline_all_mutants": 71,
+        "cost_usd": 0.0154575,
+        "critic_rounds": 1,
+        "dir": "loop-cross-rep2-20260713T215457Z",
+        "killed_total": 25,
+        "pre_killed": 46,
+        "rejected_rounds": 0,
+        "round0_kills": 19,
+        "spent_usd": 0.015458,
+        "status": "valid",
+        "verdict": "clean"
+      },
+      "loop_cross_cost_per_delta": 0.002576,
+      "loop_cross_delta": 6,
+      "loop_cross_full_score_pct": 100.0,
+      "loop_cross_rho": 1.0,
+      "loop_same": {
+        "attempt_statuses": [
+          "dry"
+        ],
+        "baseline_all_mutants": 71,
+        "cost_usd": 0.032787,
+        "critic_rounds": 3,
+        "dir": "loop-same-rep2-20260713T215432Z",
+        "killed_total": 24,
+        "pre_killed": 46,
+        "rejected_rounds": 2,
+        "round0_kills": 19,
+        "spent_usd": 0.032787,
+        "status": "valid",
+        "verdict": "dry"
+      },
+      "loop_same_cost_per_delta": 0.006557,
+      "loop_same_delta": 5,
+      "loop_same_full_score_pct": 98.6,
+      "loop_same_rho": 0.8333333333333334,
+      "n_base": 25,
+      "rep": 2,
+      "rho_gap": 0.16666666666666663,
+      "s": 6,
+      "seed": "ok",
+      "subject": "rag-guard"
+    },
+    {
+      "d_cross_minus_same": 0,
+      "k0": 21,
+      "loop_cross": {
+        "attempt_statuses": [
+          "clean"
+        ],
+        "baseline_all_mutants": 71,
+        "cost_usd": 0.01132,
+        "critic_rounds": 1,
+        "dir": "loop-cross-rep3-20260713T215546Z",
+        "killed_total": 25,
+        "pre_killed": 46,
+        "rejected_rounds": 0,
+        "round0_kills": 21,
+        "spent_usd": 0.01132,
+        "status": "valid",
+        "verdict": "clean"
+      },
+      "loop_cross_cost_per_delta": 0.00283,
+      "loop_cross_delta": 4,
+      "loop_cross_full_score_pct": 100.0,
+      "loop_cross_rho": 1.0,
+      "loop_same": {
+        "attempt_statuses": [
+          "clean"
+        ],
+        "baseline_all_mutants": 71,
+        "cost_usd": 0.041175,
+        "critic_rounds": 2,
+        "dir": "loop-same-rep3-20260713T215515Z",
+        "killed_total": 25,
+        "pre_killed": 46,
+        "rejected_rounds": 0,
+        "round0_kills": 21,
+        "spent_usd": 0.041175,
+        "status": "valid",
+        "verdict": "clean"
+      },
+      "loop_same_cost_per_delta": 0.010294,
+      "loop_same_delta": 4,
+      "loop_same_full_score_pct": 100.0,
+      "loop_same_rho": 1.0,
+      "n_base": 25,
+      "rep": 3,
+      "rho_gap": 0.0,
+      "s": 4,
+      "seed": "ok",
+      "subject": "rag-guard"
+    },
+    {
+      "d_cross_minus_same": 0,
+      "k0": 19,
+      "loop_cross": {
+        "attempt_statuses": [
+          "clean"
+        ],
+        "baseline_all_mutants": 71,
+        "cost_usd": 0.0130125,
+        "critic_rounds": 1,
+        "dir": "loop-cross-rep4-20260713T215624Z",
+        "killed_total": 25,
+        "pre_killed": 46,
+        "rejected_rounds": 0,
+        "round0_kills": 19,
+        "spent_usd": 0.013012,
+        "status": "valid",
+        "verdict": "clean"
+      },
+      "loop_cross_cost_per_delta": 0.002169,
+      "loop_cross_delta": 6,
+      "loop_cross_full_score_pct": 100.0,
+      "loop_cross_rho": 1.0,
+      "loop_same": {
+        "attempt_statuses": [
+          "clean"
+        ],
+        "baseline_all_mutants": 71,
+        "cost_usd": 0.031464000000000006,
+        "critic_rounds": 2,
+        "dir": "loop-same-rep4-20260713T215600Z",
+        "killed_total": 25,
+        "pre_killed": 46,
+        "rejected_rounds": 0,
+        "round0_kills": 19,
+        "spent_usd": 0.031464,
+        "status": "valid",
+        "verdict": "clean"
+      },
+      "loop_same_cost_per_delta": 0.005244,
+      "loop_same_delta": 6,
+      "loop_same_full_score_pct": 100.0,
+      "loop_same_rho": 1.0,
+      "n_base": 25,
+      "rep": 4,
+      "rho_gap": 0.0,
+      "s": 6,
+      "seed": "ok",
+      "subject": "rag-guard"
+    },
+    {
+      "d_cross_minus_same": 1,
+      "k0": 19,
+      "loop_cross": {
+        "attempt_statuses": [
+          "clean"
+        ],
+        "baseline_all_mutants": 71,
+        "cost_usd": 0.0160425,
+        "critic_rounds": 1,
+        "dir": "loop-cross-rep5-20260713T215700Z",
+        "killed_total": 25,
+        "pre_killed": 46,
+        "rejected_rounds": 0,
+        "round0_kills": 19,
+        "spent_usd": 0.016043,
+        "status": "valid",
+        "verdict": "clean"
+      },
+      "loop_cross_cost_per_delta": 0.002674,
+      "loop_cross_delta": 6,
+      "loop_cross_full_score_pct": 100.0,
+      "loop_cross_rho": 1.0,
+      "loop_same": {
+        "attempt_statuses": [
+          "dry"
+        ],
+        "baseline_all_mutants": 71,
+        "cost_usd": 0.033312,
+        "critic_rounds": 3,
+        "dir": "loop-same-rep5-20260713T215638Z",
+        "killed_total": 24,
+        "pre_killed": 46,
+        "rejected_rounds": 2,
+        "round0_kills": 19,
+        "spent_usd": 0.033312,
+        "status": "valid",
+        "verdict": "dry"
+      },
+      "loop_same_cost_per_delta": 0.006662,
+      "loop_same_delta": 5,
+      "loop_same_full_score_pct": 98.6,
+      "loop_same_rho": 0.8333333333333334,
+      "n_base": 25,
+      "rep": 5,
+      "rho_gap": 0.16666666666666663,
+      "s": 6,
+      "seed": "ok",
+      "subject": "rag-guard"
+    }
+  ],
+  "spend": {
+    "all_receipted_total_usd": 15.471367,
+    "loop_cross_usd": 2.005642,
+    "loop_same_usd": 11.1354,
+    "runs_b_all_receipted_usd": 13.141042,
+    "runs_b_unattributed_usd": 0.0,
+    "seed_draws_usd": 2.330325
+  }
+}
