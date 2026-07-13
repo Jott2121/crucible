@@ -1,8 +1,34 @@
 # crucible
 
-[![ci](https://github.com/Jott2121/crucible/actions/workflows/ci.yml/badge.svg)](https://github.com/Jott2121/crucible/actions/workflows/ci.yml)
-
 **Your AI wrote the tests. Who tested the tests?**
+
+[![ci](https://github.com/Jott2121/crucible/actions/workflows/ci.yml/badge.svg)](https://github.com/Jott2121/crucible/actions/workflows/ci.yml)
+[![codeql](https://github.com/Jott2121/crucible/actions/workflows/codeql.yml/badge.svg)](https://github.com/Jott2121/crucible/actions/workflows/codeql.yml)
+[![mutation score](https://img.shields.io/badge/mutation_score-99.3%25-34D399?labelColor=0F172A)](docs/MUTATION.md)
+[![tests](https://img.shields.io/badge/tests-307-38BDF8?labelColor=0F172A)](tests/)
+[![H1](https://img.shields.io/badge/H1-supported_p%3D4.9e--32-818CF8?labelColor=0F172A)](experiments/RESULTS.md)
+[![H2](https://img.shields.io/badge/H2-not_supported_p%3D0.0625-FBBF24?labelColor=0F172A)](experiments/RESULTS.md)
+[![metered spend](https://img.shields.io/badge/metered_spend-%240-34D399?labelColor=0F172A)](#receipts-are-the-product)
+[![license](https://img.shields.io/badge/license-MIT-64748B?labelColor=0F172A)](LICENSE)
+
+![crucible demo — a green suite at 97% coverage, 25 of 71 injected defects surviving, and the harden loop killing 24 of them while refusing to fake the 25th](docs/assets/demo.gif)
+
+<sub>Recorded live — every command really ran, and every number in it is read back from that run's
+own receipt. Sped up for viewing; [replay the raw cast at real speed](docs/assets/demo.cast).
+Full landing page: **[jott2121.github.io/crucible](https://jott2121.github.io/crucible/)**</sub>
+
+That module has **7 passing tests and 97% line coverage**. Mutation testing injects **71 real
+defects**. The suite kills 46. **25 survive** — twenty-five real bugs walking straight through a
+green build.
+
+crucible kills **24 of the 25**, and then does the more important thing: in two rounds the Critic
+wrote tests that **failed on pristine code**, and crucible **threw them out** rather than bank a
+kill it hadn't earned. The loop ends `dry` with one mutant still standing, and says so. Mutation
+score 65% → 99%; **line coverage never moves off 97% the entire time.** Coverage was never the
+thing measuring your safety.
+
+An earlier run on the same module killed all 25 (`clean`). Same tool, same module, different day —
+model nondeterminism is real, and the receipts record both rather than only the flattering one.
 
 Coverage measures what ran, not what would be caught. Mutation testing injects real defects
 and counts how many your suite kills — and AI-written suites routinely leave survivors.
