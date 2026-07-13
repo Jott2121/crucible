@@ -383,9 +383,9 @@ mutation per variant), in contrast to LLM-generated mutants used by some adversa
 Each subject's mutation scope, meaning the exact module mutated and the exact sibling files copied
 into the sandbox, was fixed at pre-registration and thereafter changed only through logged,
 receipted amendments (Section 3.8), never silently at run time. Kills are counted per mutant over
-each subject's own pristine-baseline survivor set: round 0's survivors measured before any
-generated test exists, so both arms in any comparison are scored against the same universe of
-mutants. A generated test that fails to compile, fails on the pristine (un-mutated) module, or
+each subject's own pristine-baseline survivor set: the survivors measured on the pristine
+module before any generated test exists, so both arms in any comparison are scored against the
+same universe of mutants. A generated test that fails to compile, fails on the pristine (un-mutated) module, or
 fails a flake check (it must pass on pristine code twice) is rejected before it can contribute a
 kill; the rejection and its reason are recorded, and the round credits zero kills. A test that
 passes collection but fails on the pristine module, a wrong-oracle test rather than a bad file, is
@@ -848,10 +848,11 @@ every survivor killed against 5 of 20 for the same-provider arm, with 3 rejected
 ### 4.9 Experiment 2 cost, like for like
 
 Experiment 2's arms span identical subjects and replicates, so its cost comparison has none of
-Experiment 1's denominator asymmetry. From full-precision receipts: seed draws $2.33; the
-same-lineage arm $11.14 for 457 incremental kills ($0.0244 per incremental kill); the
-cross-lineage arm $2.01 for 523 incremental kills ($0.0038 per incremental kill), 6.4x cheaper
-per outcome at a similar rate card. The spend entering the analysis (accepted seeds plus validly scored continuations) is $15.34;
+Experiment 1's denominator asymmetry. From full-precision receipts, on explicit bases: the
+twenty accepted seeds entering the analysis cost $2.20 (all seed draws including the one retired
+seed: $2.33); the same-lineage arm $11.14 for 457 incremental kills ($0.0244 per incremental
+kill); the cross-lineage arm $2.01 for 523 incremental kills ($0.0038 per incremental kill),
+6.4x cheaper per outcome at a similar rate card. The spend entering the analysis (accepted seeds plus validly scored continuations) is $15.34;
 the all-receipted total, adding the retired seed draw, the invalidated cell, and the crashed
 attempt, is $15.47. The receipts decompose the difference arithmetically: the same-lineage critic's rounds emitted
 678,564 output tokens against the cross-lineage critic's 100,545 (6.7x), and at the two
@@ -994,7 +995,7 @@ subjects with the same models, and return different answers: an inconclusive p =
 discordant pairs, then a rate gap of 0.178 with a bootstrap interval above zero. Three things
 changed together: the round-0 draw was frozen and shared (removing initial-draw variance whose
 scale the seeds measured directly, a sixteen-kill spread on packaging), replication went from one
-cell per subject-arm to five, and counted-analysis spend roughly tripled ($15.34 for the cells
+cell per subject-arm to five, and counted-analysis spend increased 3.6-fold ($15.34 for the cells
 entering Experiment 2's analysis against $4.23 for Experiment 1's counted cells; each
 experiment's additional invalidated or replaced spend is receipted separately). The design does not separate those contributions, so we do not
 attribute the changed answer to variance removal alone; we claim only that the paired,

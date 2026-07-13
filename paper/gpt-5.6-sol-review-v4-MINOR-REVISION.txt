@@ -1,0 +1,35 @@
+## Verdict: MINOR REVISION
+
+The round-2 fixes are present in v4. The response memo is substantially accurate:
+
+- **R1:** Configuration—not isolated-lineage—language is now explicit in Sections 2.3, 3.2, 4.3, and elsewhere. Price matching replaces capability-tier matching, with the required capability-equivalence disclaimer.
+- **R2:** The overstated Experiment 1/Experiment 2 transition language is removed. Section 5.1 now distinguishes the two estimands.
+- **R3:** The graph-guard interpretation is appropriately qualified; the parity claims are gone.
+- **R4:** All four Experiment 2 estimands now have two-stage bootstrap intervals. Leave-one-subject-out values are explicitly point estimates without intervals.
+- **R5:** Like-for-like Experiment 2 arm costs and the token-based arithmetic decomposition are present, with no capability- or budget-matched inference.
+- **R6:** The literature claims are scoped, Section 2.6 contains the requested acknowledgment, and the ChatTester author list is complete.
+
+Remaining items:
+
+1. **Section 4.9 presents cost components on inconsistent bases without labeling them.**  
+   It states:
+   - seed draws: **$2.33**
+   - same-lineage arm: **$11.14**
+   - cross-lineage arm: **$2.01**
+
+   Those sum to **$15.48**, not the subsequently stated **$15.34 analysis-entering spend**. The apparent explanation is that $2.33 includes the retired replacement-related seed, whereas the accepted seeds entering analysis cost about $2.19. State both seed bases explicitly. For example: accepted seeds entering analysis, all seed draws including the retired seed, valid continuation spend, and all-receipted spend. As written, the local arithmetic appears inconsistent.
+
+2. **Section 5.4 mischaracterizes the spending ratio.**  
+   “Counted-analysis spend roughly tripled” is inaccurate:  
+   \[
+   15.34 / 4.23 = 3.63.
+   \]
+   Replace it with “increased 3.6-fold” or “more than tripled.”
+
+3. **Section 3.4 incorrectly defines the baseline survivor set.**  
+   The sentence says:
+   > “round 0's survivors measured before any generated test exists”
+
+   Round 0 is itself the generated Tester suite. This should say **“the pristine-baseline survivors, measured before any generated test exists”** or equivalent. The manuscript elsewhere correctly distinguishes pristine-baseline survivors from post-round-0 survivors.
+
+These are local corrections. No further redesign or reanalysis is required.
