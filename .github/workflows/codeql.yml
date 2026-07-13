@@ -28,6 +28,16 @@ jobs:
         with:
           languages: python
           queries: security-extended
+          # Experiment receipt dirs hold MODEL-GENERATED test files archived as
+          # frozen, append-only evidence (PROTOCOL.md / PROTOCOL-B.md) -- data,
+          # not product code. Alerts there cannot be "fixed" (editing a receipt
+          # corrupts the pre-registered record), so the dirs are excluded.
+          # Jeff-approved 2026-07-13 (alert #1 triage).
+          config: |
+            paths-ignore:
+              - experiments/runs
+              - experiments/runs-b
+              - experiments/seeds
 
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@dd903d2e4f5405488e5ef1422510ee31c8b32357 # v3
