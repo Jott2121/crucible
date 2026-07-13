@@ -1145,3 +1145,61 @@ def test_discovery_scan_names_pyproject_in_unparseable_refusal(tmp_path):
     })
     with pytest.raises(RuntimeError, match="pyproject.toml"):
         scope_mod._assert_fresh_file_collectable(repo)
+
+
+# ── Survivor triage 2026-07-13 ────────────────────────────────────────────────
+# The mutation gate found 7 survivors in scope.py, all of them string-literal
+# mutants inside REFUSAL messages: apply's conftest-collision guidance
+# (mutmut 10-14) and canary_probe's no-public-API refusal (mutmut 52-53). None
+# were equivalent -- they survived only because the existing tests asserted a
+# fragment of each message (match="conftest.py") instead of the message.
+#
+# A refusal message IS the product on those paths: it is the entire value the
+# user gets when crucible declines to run. Asserting that it merely "contains
+# conftest.py" leaves the actual instructions free to rot into nonsense.
+#
+# Pinned by EXACT EQUALITY, not substring. A substring assertion does not kill
+# these: the mutant that wraps the text in XX..XX still CONTAINS the original,
+# so `expected in actual` passes on the corrupted string. (Same trap as an
+# unanchored pytest.raises(match=...) -- see tests/test_score.py.)
+
+def test_apply_conftest_collision_message_is_pinned_exactly(tmp_path):
+    repo = _mk(tmp_path, {"src/mod.py": "X = 1\n"})
+    conftest = repo / "conftest.py"
+    conftest.write_text("import pytest\n")
+
+    with pytest.raises(RuntimeError) as exc:
+        apply(repo, detect(repo, "src/mod.py"))
+
+    assert str(exc.value) == (
+        f"{conftest} already exists and differs from crucible's src/ sys.path "
+        "shim; subject has a root conftest.py -- crucible will not overwrite it. "
+        "Merge the src/ sys.path shim yourself or move your conftest."
+    )
+
+
+def test_canary_probe_no_public_api_message_is_pinned_exactly(tmp_path, monkeypatch):
+    import crucible.scope as scope_mod
+
+    class FakeOutcome:
+        counts = {"killed": 0}
+        all_mutants = 10
+        survivors = []
+
+    class FakeEngine:
+        def __init__(self, cwd, run=None):
+            pass
+
+        def measure(self):
+            return FakeOutcome()
+
+    monkeypatch.setattr(scope_mod, "MutmutEngine", FakeEngine)
+    repo = _mk(tmp_path, {"mypkg/mod.py": "_private = 1\n"})
+
+    with pytest.raises(RuntimeError) as exc:
+        scope_mod.canary_probe(repo, "mypkg/mod.py")
+
+    assert str(exc.value) == (
+        "module mypkg/mod.py exposes no public top-level symbols to probe; "
+        "point crucible at a module with public API"
+    )

@@ -1,5 +1,57 @@
 # Mutation-Survivor Triage
 
+## Post-`score` re-run (2026-07-13) — CANONICAL
+
+Adding `crucible score` + the GitHub Action grew the scope from 7 modules to 8
+(`+score.py`) and the mutant population 913 -> 982.
+
+The Action, run against crucible's own code on the very PR that introduced it,
+immediately found **4 survivors in `score.py`** and **7 previously-undocumented
+survivors in `scope.py`**. All 11 are now killed. None were equivalent.
+
+| Run | Mutants | Killed | Survived | No-cov | Overall |
+|-----|---------|--------|----------|--------|---------|
+| First run with score.py in scope | 982 | 965 | 17 | 0 | 98.3% |
+| + score.py killing tests | 982 | 969 | 13 | 0 | 98.7% |
+| **+ scope.py survivor triage (canonical)** | **982** | **976** | **6** | **0** | **99.4%** |
+
+**What the 11 killed survivors were, and why they lived.** Every one was a
+string-literal mutant inside a **refusal message** that no test asserted:
+
+- `score.x_mutation_score__mutmut_6/7/8` — the `EmptyMutantSet` message.
+- `score.x_shock_line__mutmut_7` — the result sentence.
+- `scope.x_apply__mutmut_10..14` (5) — the conftest-collision guidance.
+- `scope.x_canary_probe__mutmut_52/53` (2) — the no-public-API refusal.
+
+The tests asserted *fragments* of each message (`match="conftest.py"`,
+`startswith(...)`, a bare `pytest.raises`) rather than the message. **A refusal
+message is the entire product on those paths** — it is all the user gets when
+crucible declines to run — so leaving it unasserted let the instructions rot into
+nonsense undetected.
+
+**The trap worth recording.** `pytest.raises(match=...)` does a regex **search**,
+not a full match. The mutant that corrupted a message to `"XXno mutants
+generated; nothing to scoreXX"` therefore **survived an unanchored `match=`** —
+the garbage still *contains* the expected text. The same hole defeats a
+substring assertion (`expected in actual`). These are now pinned by **exact
+equality**, or with an anchored `^...$` pattern.
+
+**The 6 remaining survivors are exactly the 6 already documented below** (see the
+Task-14b section). Zero untriaged survivors; no bare exclusions:
+
+1. `guardrails.x_extract_test_file__mutmut_4` — equivalent, Jeff-approved.
+2. `report.x_mcnemar_exact__mutmut_4` — equivalent, Jeff-approved.
+3. `guardrails.x__parse_failed_test_names__mutmut_3` — documented.
+4. `scope.x_canary_probe__mutmut_125` — documented (the `waived=False` default;
+   numbered `__mutmut_120` in the previous pass — mutant indices shift when the
+   file changes, the disposition does not).
+5. `scope.x_detect__mutmut_19` — environment-limited equivalent (`"tests"` ->
+   `"TESTS"`; survives on a case-insensitive filesystem, and **is killed on
+   Linux CI** — which the 2026-07-13 CI run confirms).
+6. `lean.x__build_argv__mutmut_3` — documented.
+
+---
+
 ## Post-fix-wave re-run (Task 14b, 2026-07-10)
 
 The final-review fix wave (pristine baseline, per-round receipt streaming,
