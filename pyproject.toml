@@ -54,7 +54,15 @@ source_paths = [
 # --ignore=tests/test_analyze.py: it imports experiments/analyze.py, which is
 # outside source_paths/also_copy so absent from mutmut's sandbox -- the same
 # v6 hazard class crucible's own scope tool flags on subject repos.
-pytest_add_cli_args_test_selection = ["tests/", "--ignore=tests/test_analyze.py"]
+# --ignore=tests/test_experiment_b.py: same class -- it reads the frozen
+# experiments/protocol-b.json from disk, absent from the sandbox. Its loop.py
+# use is monkeypatched anyway; the seeded_run mutation-killers live in
+# tests/test_loop.py, which stays selected.
+pytest_add_cli_args_test_selection = [
+    "tests/",
+    "--ignore=tests/test_analyze.py",
+    "--ignore=tests/test_experiment_b.py",
+]
 # also_copy: pytest_add_cli_args_test_selection = ["tests/"] collects the WHOLE
 # suite, and several tests import crucible modules outside source_paths
 # (engine.py, cli.py, etc). mutmut's sandbox only contains files listed in

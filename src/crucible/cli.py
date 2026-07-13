@@ -275,6 +275,18 @@ def main(argv=None) -> int:
     ep.add_argument("--subject", required=True)
     ep.add_argument("--module", required=True)
     ep.add_argument("--runs-dir", default="experiments/runs")
+    bp = sub.add_parser(
+        "experiment-b",
+        help="PROTOCOL-B frozen-round-0 cells: seed draws, seeded continuations, "
+             "seed retirement (pre-registration enforced mechanically)",
+    )
+    bp.add_argument("protocol")
+    bp.add_argument("--phase", required=True, choices=("seed", "run", "retire-seed"))
+    bp.add_argument("--subject", required=True)
+    bp.add_argument("--module", default=None)
+    bp.add_argument("--arm", default=None)
+    bp.add_argument("--rep", type=int, default=None)
+    bp.add_argument("--reason", default=None)
     sp = sub.add_parser(
         "scope",
         help="detect+write the mutmut scope for one module, then canary-prove it "
@@ -318,6 +330,10 @@ def main(argv=None) -> int:
         assert_protocol_committed(Path.cwd(), Path(args.protocol))
         protocol = load_protocol(args.protocol)
         return run_arm(protocol, args.arm, args.subject, args.runs_dir, args.module)
+    if args.cmd == "experiment-b":
+        from crucible.experiment_b import dispatch
+        # same repo-root convention as `experiment`: run from the crucible checkout
+        return dispatch(args, Path.cwd())
     if args.cmd == "scope":
         subject = Path(args.subject).resolve()
         try:

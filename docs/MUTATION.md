@@ -1,6 +1,47 @@
 # Mutation-Survivor Triage
 
-## Post-`score` re-run (2026-07-13) — CANONICAL
+## Post-Experiment-B-harness re-run (2026-07-13, feat/experiment-b) — CANONICAL
+
+The PROTOCOL-B seeded-continuation code (`loop.seeded_run`, `loop._critic_phase`,
+`ReproductionMismatch`) grew `loop.py`'s share of the population; totals moved
+982 -> 1130 (1148 before a cleanup, see below).
+
+| Run | Mutants | Killed | Survived | Untriaged | Overall |
+|-----|---------|--------|----------|-----------|---------|
+| First run with seeded_run in scope | 1148 | 1092 | 56 | 50 | 95.1% |
+| **+ killer tests & no-op-arg cleanup (canonical)** | **1130** | **1125** | **5** | **0** | **99.6%** |
+
+The 50 untriaged survivors were dispatched three ways, in priority order:
+
+- **Killed (~33):** the same class as the score.py episode below — gate MESSAGES
+  and receipt FIELDS nothing asserted exactly. `tests/test_loop.py` now pins
+  every `ReproductionMismatch` message with full-string equality
+  (`test_seeded_gate_messages_are_exact`, `test_resurrection_message_is_exact`)
+  and every round-0 receipt field (`test_seeded_round0_record_fields_are_exact`,
+  the capturing-env passthrough test, the provenance-defaults test).
+- **Deleted (13, better than documenting):** every pre-append `raise` in
+  `seeded_run` passed `rounds=rounds` while `rounds` was still the empty list —
+  a no-op argument whose only effect was breeding equivalent mutants
+  (`rounds=None` / argument dropped). The argument was removed at those six call
+  sites (the constructor default is the same empty list), so the mutants ceased
+  to exist instead of joining the exemption ledger. Only the resurrection raise,
+  where billed rounds genuinely exist, still passes `rounds=`.
+- **Excluded with cause (1 test file):** `tests/test_experiment_b.py` reads the
+  frozen `experiments/protocol-b.json` from disk, which is outside
+  `source_paths`/`also_copy` and therefore absent from mutmut's sandbox — the
+  same documented class as `tests/test_analyze.py` (see `pyproject.toml`). Its
+  loop.py usage is monkeypatched; every seeded_run mutation-killer lives in
+  `tests/test_loop.py`, which stays selected.
+
+**The 5 remaining survivors are all previously documented below** (zero
+untriaged, no bare exclusions). `scope.x_detect__mutmut_19`, the documented
+environment-limited equivalent, was killed in this local macOS run — its
+disposition ("survives case-insensitive filesystems, killed on Linux CI")
+already covers both outcomes.
+
+---
+
+## Post-`score` re-run (2026-07-13) — superseded by the run above
 
 Adding `crucible score` + the GitHub Action grew the scope from 7 modules to 8
 (`+score.py`) and the mutant population 913 -> 982.

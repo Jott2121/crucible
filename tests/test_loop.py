@@ -393,3 +393,270 @@ def test_tester_round_truncation_makes_the_run_verdict_rejected():
     assert result.rounds[0].usage_in == 20 and result.rounds[0].usage_out == 32000
     assert result.rounds[0].cost_usd > 0
     assert env.archived == [(0, "oneshot", "truncated model output", "truncated")]
+
+
+# --- PROTOCOL-B seeded continuations (crucible.loop.seeded_run) -------------------
+
+SEED_TEXT = "def test_frozen():\n    assert True\n"
+
+
+def _seeded(env, arm="loop-same", **cfg_over):
+    from crucible.loop import seeded_run
+    cfg = LoopConfig(arm=arm, **cfg_over)
+    return seeded_run(env, cfg, SEED_TEXT, ["m1", "m2", "m3"], ["m3"],
+                      seed_model="claude-sonnet-5", seed_prompt_sha256="f" * 64)
+
+
+def test_seeded_run_injects_seed_without_calling_the_tester():
+    env = FakeEnv([outcome(["m1", "m2", "m3"]), outcome(["m3"]), outcome([])])
+    result = _seeded(env)
+    assert "tester" not in env.calls          # the whole point: round 0 is frozen
+    assert env.calls == ["critic"]
+    assert result.verdict == "clean"
+    r0 = result.rounds[0]
+    assert r0.kills == ["m1", "m2"]
+    assert r0.cost_usd == 0.0                 # zero marginal cost
+    assert r0.model == "claude-sonnet-5"
+    assert r0.prompt_sha256 == "f" * 64
+    assert "frozen seed" in r0.note
+    assert result.baseline_survivors == ["m1", "m2", "m3"]
+
+
+def test_seeded_run_baseline_mismatch_raises():
+    from crucible.loop import ReproductionMismatch
+    env = FakeEnv([outcome(["m1", "m2"])])    # frozen baseline was m1,m2,m3
+    with pytest.raises(ReproductionMismatch, match="pristine baseline"):
+        _seeded(env)
+    assert env.written == []                  # nothing injected before the check
+
+
+def test_seeded_run_post_round0_mismatch_raises():
+    from crucible.loop import ReproductionMismatch
+    env = FakeEnv([outcome(["m1", "m2", "m3"]), outcome(["m2", "m3"])])  # frozen post was m3
+    with pytest.raises(ReproductionMismatch, match="post-round-0"):
+        _seeded(env)
+
+
+def test_seeded_run_injection_rejection_is_instrument_failure_not_verdict():
+    from crucible.loop import ReproductionMismatch
+    env = FakeEnv([outcome(["m1", "m2", "m3"])], reject_rounds={0})
+    with pytest.raises(ReproductionMismatch, match="pristine validation"):
+        _seeded(env)
+
+
+def test_seeded_run_injection_salvage_drop_is_instrument_failure():
+    from crucible.loop import ReproductionMismatch
+    env = FakeEnv([outcome(["m1", "m2", "m3"])], dropped_by_round={0: ["test_frozen"]})
+    with pytest.raises(ReproductionMismatch, match="salvage dropped"):
+        _seeded(env)
+
+
+def test_seeded_run_sandbox_failure_at_injection_is_instrument_failure():
+    from crucible.loop import ReproductionMismatch
+
+    class SandboxEnv(FakeEnv):
+        def measure(self):
+            if len(self.written) == 0:
+                return super().measure()
+            raise SandboxStatsFailure("stats crashed")
+
+    env = SandboxEnv([outcome(["m1", "m2", "m3"])])
+    with pytest.raises(ReproductionMismatch, match="sandbox"):
+        _seeded(env)
+
+
+def test_seeded_run_zero_survivor_seed_short_circuits_without_critic_calls():
+    from crucible.loop import seeded_run
+    env = FakeEnv([outcome(["m1", "m2"]), outcome([])])
+    result = seeded_run(env, LoopConfig(arm="loop-same"), SEED_TEXT, ["m1", "m2"], [])
+    assert result.verdict == "clean"
+    assert env.calls == []                    # zero critic rounds, zero cost
+    assert result.total_cost_usd == 0.0
+
+
+def test_seeded_run_resurrected_mutant_raises_after_receipting_the_round():
+    from crucible.loop import ReproductionMismatch
+    # critic round measurement shows m9, never in the survivor set: a killed
+    # mutant "came back" => nondeterministic test in play
+    env = FakeEnv([outcome(["m1", "m2", "m3"]), outcome(["m3"]), outcome(["m3", "m9"])])
+    seen = []
+    from crucible.loop import seeded_run
+    with pytest.raises(ReproductionMismatch, match="resurrected") as excinfo:
+        seeded_run(env, LoopConfig(arm="loop-same"), SEED_TEXT,
+                   ["m1", "m2", "m3"], ["m3"], on_round=seen.append)
+    assert len(seen) == 2                     # round 0 + the offending critic round
+    assert excinfo.value.rounds[-1].round == 1  # evidence carried for honest costing
+
+
+def test_seeded_run_dry_verdict_matches_harden_semantics():
+    env = FakeEnv([outcome(["m1", "m2", "m3"]), outcome(["m3"]),
+                   outcome(["m3"]), outcome(["m3"])])
+    result = _seeded(env, dry_rounds=2)
+    assert result.verdict == "dry"
+    assert [r.role for r in result.rounds] == ["tester", "critic", "critic"]
+
+
+def test_seeded_run_critic_abort_keeps_abort_verdict():
+    env = FakeEnv([outcome(["m1", "m2", "m3"]), outcome(["m3"])], fail_from_call=0)
+    result = _seeded(env)
+    assert result.verdict == "aborted"
+    assert result.rounds[1].status == "aborted"
+
+
+def test_seeded_run_tree_tampering_after_injection_is_instrument_failure():
+    # review finding S1: assert_clean failing at injection must be the receipted
+    # invalid-cell class, never a raw GuardrailViolation crash
+    from crucible.loop import ReproductionMismatch
+
+    class TamperEnv(FakeEnv):
+        def assert_clean(self):
+            raise GuardrailViolation("tracked file modified: scripted")
+
+    env = TamperEnv([outcome(["m1", "m2", "m3"]), outcome(["m3"])])
+    with pytest.raises(ReproductionMismatch, match="tree integrity"):
+        _seeded(env)
+
+
+def test_fresh_harden_tolerates_resurrection_as_experiment_1_did():
+    # review finding S4: the resurrection gate is PROTOCOL-B-only. Experiment 1's
+    # fresh-round-0 semantics never checked for it, and the extraction of
+    # _critic_phase must not silently change that -- this pins the flag at the
+    # fresh call site (and kills the mutant that flips it).
+    env = FakeEnv([outcome(["m1", "m2", "m3"]),   # baseline
+                   outcome(["m3"]),               # after tester round 0
+                   outcome(["m3", "m9"]),         # critic round: m9 "comes back"
+                   outcome(["m3", "m9"])])        # second critic round: dry
+    result = harden(env, LoopConfig(dry_rounds=2, arm="loop"))
+    assert result.verdict == "dry"                # no raise: tolerated, as before
+
+
+def test_seeded_run_cap_verdict_uses_max_rounds_budget():
+    # 4 critic rounds each killing one mutant, one still standing at the cap
+    env = FakeEnv([outcome(["m1", "m2", "m3", "m4", "m5", "m6", "m7"]),  # baseline
+                   outcome(["m2", "m3", "m4", "m5", "m6"]),  # after seed: 5 remain
+                   outcome(["m3", "m4", "m5", "m6"]),
+                   outcome(["m4", "m5", "m6"]),
+                   outcome(["m5", "m6"]),
+                   outcome(["m6"])])
+    from crucible.loop import seeded_run
+    result = seeded_run(env, LoopConfig(max_rounds=4, dry_rounds=2, arm="loop-same"),
+                        SEED_TEXT, ["m1", "m2", "m3", "m4", "m5", "m6", "m7"],
+                        ["m2", "m3", "m4", "m5", "m6"])
+    assert result.verdict == "cap"
+    assert [r.role for r in result.rounds] == ["tester"] + ["critic"] * 4
+
+
+# --- mutation-killers: PROTOCOL-B gate messages and receipt fields are the product ----
+# (same discipline as the score.py survivors: partial assertions let message and
+# field mutants live; exact equality is the gate)
+
+
+def test_seeded_round0_record_fields_are_exact():
+    env = FakeEnv([outcome(["m1", "m2", "m3"]), outcome(["m3"]), outcome([])])
+    collected = []
+    from crucible.loop import seeded_run
+    result = seeded_run(env, LoopConfig(arm="loop-same"), SEED_TEXT,
+                        ["m1", "m2", "m3"], ["m3"],
+                        on_round=collected.append,
+                        seed_model="claude-sonnet-5", seed_prompt_sha256="f" * 64)
+    r0 = result.rounds[0]
+    assert r0.round == 0
+    assert r0.role == "tester"
+    assert r0.survivors_before == ["m1", "m2", "m3"]
+    assert r0.test_file == "tests/crucible_r0_loop-same_test.py"
+    assert r0.all_mutants == 10
+    assert r0.counts == {"survived": 1}
+    assert r0.note == "frozen seed injected; zero marginal cost (PROTOCOL-B)"
+    assert result.baseline_all_mutants == 10
+    assert result.baseline_counts == {"survived": 3}
+    # on_round must receive the actual records, in order
+    assert collected[0] is r0
+    assert [r.round for r in collected] == [0, 1]
+
+
+def test_seeded_run_defaults_leave_seed_provenance_empty():
+    from crucible.loop import seeded_run
+    env = FakeEnv([outcome(["m1"]), outcome([])])
+    result = seeded_run(env, LoopConfig(arm="loop-same"), SEED_TEXT, ["m1"], [])
+    assert result.rounds[0].model == ""
+    assert result.rounds[0].prompt_sha256 == ""
+
+
+def test_seeded_run_passes_seed_text_and_path_through_unchanged():
+    class CapturingEnv(FakeEnv):
+        def write_test_file(self, round_no, arm, content):
+            self.captured_content = content
+            return super().write_test_file(round_no, arm, content)
+
+        def validate(self, test_path):
+            self.validated_path = test_path
+            return super().validate(test_path)
+
+    env = CapturingEnv([outcome(["m1"]), outcome([])])
+    from crucible.loop import seeded_run
+    seeded_run(env, LoopConfig(arm="loop-same"), SEED_TEXT, ["m1"], [])
+    assert env.captured_content == SEED_TEXT
+    assert env.validated_path == "tests/crucible_r0_loop-same_test.py"
+
+
+def test_seeded_gate_messages_are_exact():
+    from crucible.loop import ReproductionMismatch, seeded_run
+
+    def msg_of(env, expected_post=("m3",)):
+        with pytest.raises(ReproductionMismatch) as excinfo:
+            seeded_run(env, LoopConfig(arm="loop-same"), SEED_TEXT,
+                       ["m1", "m2", "m3"], list(expected_post))
+        return str(excinfo.value), excinfo.value.rounds
+
+    m, rounds = msg_of(FakeEnv([outcome(["m1", "m2"])]))
+    assert m == ("pristine baseline differs from the frozen seed's: measured "
+                 "['m1', 'm2'] != frozen ['m1', 'm2', 'm3'] "
+                 "(PROTOCOL-B §4 reproduction check)")
+    assert rounds == []
+
+    m, rounds = msg_of(FakeEnv([outcome(["m1", "m2", "m3"])], reject_rounds={0}))
+    assert m == ("frozen seed failed pristine validation at injection: "
+                 "invalid: scripted rejection (PROTOCOL-B §4 seed re-validation)")
+    assert rounds == []
+
+    m, rounds = msg_of(FakeEnv([outcome(["m1", "m2", "m3"])],
+                               dropped_by_round={0: ["test_frozen"]}))
+    assert m == ("injection-time salvage dropped ['test_frozen']: the frozen seed no "
+                 "longer passes pristine as frozen (PROTOCOL-B §4 seed re-validation)")
+    assert rounds == []
+
+    class SandboxEnv(FakeEnv):
+        def measure(self):
+            if len(self.written) == 0:
+                return super().measure()
+            raise SandboxStatsFailure("stats crashed")
+
+    m, rounds = msg_of(SandboxEnv([outcome(["m1", "m2", "m3"])]))
+    assert m == ("frozen seed crashed the measurement sandbox at injection: "
+                 "stats crashed (measured clean at freeze time, so the instrument changed)")
+    assert rounds == []
+
+    class TamperEnv(FakeEnv):
+        def assert_clean(self):
+            raise GuardrailViolation("tracked file modified: scripted")
+
+    m, rounds = msg_of(TamperEnv([outcome(["m1", "m2", "m3"]), outcome(["m3"])]))
+    assert m == ("tree integrity failed after seed injection: "
+                 "tracked file modified: scripted (PROTOCOL-B §4)")
+    assert rounds == []
+
+    m, rounds = msg_of(FakeEnv([outcome(["m1", "m2", "m3"]), outcome(["m2", "m3"])]))
+    assert m == ("post-round-0 survivors differ from the frozen seed's: measured "
+                 "['m2', 'm3'] != frozen ['m3'] (PROTOCOL-B §4 reproduction check)")
+    assert rounds == []
+
+
+def test_resurrection_message_is_exact():
+    from crucible.loop import ReproductionMismatch, seeded_run
+    env = FakeEnv([outcome(["m1", "m2", "m3"]), outcome(["m3"]), outcome(["m3", "m9"])])
+    with pytest.raises(ReproductionMismatch) as excinfo:
+        seeded_run(env, LoopConfig(arm="loop-same"), SEED_TEXT, ["m1", "m2", "m3"], ["m3"])
+    assert str(excinfo.value) == (
+        "round 1 resurrected mutants ['m9']: a mutant measured killed came back, "
+        "so a non-deterministic test is in play; the replicate is "
+        "instrument-invalid (PROTOCOL-B §4)")
