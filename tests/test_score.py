@@ -34,9 +34,13 @@ def test_perfect_and_zero_suites():
 
 def test_empty_mutant_set_refuses_rather_than_reporting_a_number():
     # 0 mutants is not 0% and it is not 100% -- it is "no answer".
-    # The message is asserted, not just the type: an exception whose text nobody
-    # checks is an exception whose text can rot into nonsense unnoticed.
-    with pytest.raises(EmptyMutantSet, match="no mutants generated; nothing to score"):
+    #
+    # ANCHORED on purpose. pytest.raises(match=...) does a regex SEARCH, not a
+    # full match, so an unanchored pattern still passes when the message has been
+    # corrupted at either end. Mutation testing proved it: the mutant that turned
+    # this message into "XXno mutants generated; nothing to scoreXX" SURVIVED an
+    # unanchored match=, because the garbage still contains the expected text.
+    with pytest.raises(EmptyMutantSet, match=r"^no mutants generated; nothing to score$"):
         mutation_score({"killed": 0, "survived": 0, "total": 0})
 
 
