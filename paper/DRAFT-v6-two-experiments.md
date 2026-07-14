@@ -2,11 +2,10 @@
 
 **Jeff Otterson** (Independent)
 
-<!-- v6: verified v5 shortened per the reviewer's editorial recommendation (the incident
-     reported once in Results, interpreted once in Discussion; consolidated cost table).
-     Deduplication only -- no verified number or scoped claim altered. AWAITING RE-LOCK.
-     Review of record: gpt-5.6-sol ACCEPT (round 4) + fresh-Fable post-lock SHIP YES (v5);
-     full arc: terra REJECT (v1), sol MAJOR (v2), sol MAJOR (v3), sol MINOR (v4). -->
+<!-- LOCKED by the author 2026-07-13 (v6, final). Review of record: gpt-5.6-sol
+     ACCEPT/SHIP (editorial round on v6) + fresh-Fable post-lock SHIP YES (v5);
+     full arc: terra REJECT (v1), sol MAJOR (v2), sol MAJOR (v3), sol MINOR (v4),
+     sol ACCEPT (v4-final), fable SHIP NO->YES (v4->v5), sol MINOR COPYEDIT->ACCEPT (v6). -->
 
 > Disclosure: This manuscript was drafted by an AI assistant from the author's frozen, pre-registered
 > experimental artifacts under the author's direction; every quantitative and design claim was checked
