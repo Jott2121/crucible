@@ -1,0 +1,13 @@
+### Round 4 confirmation — reviewer of record
+
+All three minor revisions are confirmed:
+
+1. **Section 4.9:** Explicitly distinguishes **$2.20 for the twenty accepted seeds entering analysis** from **$2.33 for all seed draws, including the retired seed**. These bases align with the stated **$15.34 analysis-entering spend** and **$15.47 all-receipted spend**; minor apparent differences from summing displayed figures are appropriately attributable to full-precision receipt calculations versus rounded presentation.
+
+2. **Section 5.4:** Correctly states that counted-analysis spend **“increased 3.6-fold”** ($15.34 versus $4.23).
+
+3. **Section 3.4:** Defines the baseline survivor set as **“the survivors measured on the pristine module before any generated test exists,”** removing the prior round-0 conflation.
+
+I found no newly introduced contradiction or regression in the affected passages or their linked claims.
+
+**Final verdict for the record: ACCEPT. No further revision required.**
