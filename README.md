@@ -5,9 +5,9 @@
 [![ci](https://github.com/Jott2121/crucible/actions/workflows/ci.yml/badge.svg)](https://github.com/Jott2121/crucible/actions/workflows/ci.yml)
 [![codeql](https://github.com/Jott2121/crucible/actions/workflows/codeql.yml/badge.svg)](https://github.com/Jott2121/crucible/actions/workflows/codeql.yml)
 [![mutation score](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/Jott2121/crucible/badges/mutation.json&labelColor=0F172A)](docs/MUTATION.md)
-[![tests](https://img.shields.io/badge/tests-332-38BDF8?labelColor=0F172A)](tests/)
-[![H1](https://img.shields.io/badge/H1-supported_p%3D4.9e--32-818CF8?labelColor=0F172A)](experiments/RESULTS.md)
-[![H2](https://img.shields.io/badge/H2-not_supported_p%3D0.0625-FBBF24?labelColor=0F172A)](experiments/RESULTS.md)
+[![tests](https://img.shields.io/badge/tests-439-38BDF8?labelColor=0F172A)](tests/)
+[![loop effect](https://img.shields.io/badge/loop_causal_effect-0.783_%5B0.59%2C0.94%5D-818CF8?labelColor=0F172A)](experiments/RESULTS-B.md)
+[![cross-config pilot](https://img.shields.io/badge/cross--config_pilot-%2B0.178_%5B0.04%2C0.35%5D-FBBF24?labelColor=0F172A)](experiments/RESULTS-B.md)
 [![metered spend](https://img.shields.io/badge/metered_spend-%240-34D399?labelColor=0F172A)](#receipts-are-the-product)
 [![license](https://img.shields.io/badge/license-MIT-64748B?labelColor=0F172A)](LICENSE)
 
@@ -120,23 +120,35 @@ prove your scope, crucible refuses instead of spending tokens.
 
 ## Results
 
-The pre-registered experiment (`experiments/PROTOCOL.md`) ran five subjects across three arms
-(one-shot, same-lineage adversarial loop, cross-lineage adversarial loop). **H1** — the
-adversarial loop kills more mutants than one-shot generation — is **supported**: pooled exact
-McNemar p = 4.9×10⁻³², b = 105, c = 0. This **replicates** the direction established by MuTAP,
-AdverTest, and Meta's ACH (see `docs/RELATED-WORK.md`) in a new agentic, repo-level, Python
-setting — we claim the replication, not the idea. **H2** — a cross-lineage critic beats a
-same-lineage critic on missed survivors — is **not supported** (p = 0.0625). An earlier run
-showed an enormous H2 effect; the autopsy traced it to silent output truncation rejecting one
-arm's rounds — an instrument artifact, not a model difference. That autopsy, and the fail-closed
-instrumentation built from it, is the finding. Full tables, all three pre-declared views,
-cost-per-kill, and the instrument-repair narrative: [`experiments/RESULTS.md`](experiments/RESULTS.md).
+Two pre-registered experiments (`experiments/PROTOCOL.md`, `experiments/PROTOCOL-B.md`).
+**Experiment 1** ran five subjects across three arms (one-shot, same-lineage adversarial loop,
+cross-lineage adversarial loop). The loop-arm pipeline outscored one-shot 105 discordant kills to
+0 (pooled exact McNemar p = 4.9×10⁻³²) — a pipeline-level replication of the direction
+established by MuTAP, AdverTest, and Meta's ACH (`docs/RELATED-WORK.md`); because each arm drew
+its own round-0 suite, it is not a causal estimate of the loop, a confound an external
+cross-model review of the draft paper caught. **Experiment 2** removed it: one frozen round-0
+suite per replicate (5 per subject × 4 subjects), committed before its continuations, all three
+arms run from that identical state. Within that design the Critic loop's incremental effect is
+causal and large: a mean **78% of the survivors the frozen round-0 left standing were killed by
+the critic rounds** (rate 0.783, 95% bootstrap interval [0.592, 0.935]). The cross-provider
+critic configuration — pre-registered as a no-verdict pilot — showed a positive within-replicate
+difference (rate gap 0.178 [0.039, 0.347]; direction stable under every leave-one-out
+sensitivity, magnitude 59% driven by one receipted truncation failure) at 5.5× lower arm cost.
+An earlier analysis had shown an enormous cross-lineage effect at p = 9.5×10⁻⁶⁶; the autopsy
+traced it to silent output truncation deleting one arm's rounds — an instrument artifact, not a
+model difference — and the same mechanism recurred three times in Experiment 2, this time
+mechanically detected and honestly scored. That autopsy and the fail-closed instrumentation
+built from it are the finding. Full tables: [`experiments/RESULTS.md`](experiments/RESULTS.md)
+(Experiment 1), [`experiments/RESULTS-B.md`](experiments/RESULTS-B.md) (Experiment 2), and the
+paper draft with its complete cross-model review trail in [`paper/`](paper/).
 
 ## Why trust this
 
-The claims above are checkable: the experiment was pre-registered before results existed
-(`experiments/PROTOCOL.md`), the null is published at the same prominence as the positive
-result, the prior art is cited rather than rediscovered (`docs/RELATED-WORK.md`), and the
+The claims above are checkable: both experiments were pre-registered before results existed
+(Experiment 2's protocol was pushed publicly before its runner was even built), and
+inconclusive or corrected results are published at the same prominence as positive ones —
+including a manufactured effect the instrument itself produced, autopsied with receipts.
+Additionally, the prior art is cited rather than rediscovered (`docs/RELATED-WORK.md`), and the
 tool is dogfooded — crucible's own modules run under the same mutation gate, current score
 and survivor dispositions in `docs/MUTATION.md`.
 
