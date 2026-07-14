@@ -2,6 +2,10 @@
 
 **Jeff Otterson** (Independent)
 
+<!-- LOCKED by the author 2026-07-13 (v4). Review of record: gpt-5.6-sol ACCEPT (round 4);
+     prior rounds: terra REJECT (v1), sol MAJOR (v2), sol MAJOR (v3), sol MINOR (v4 pre-fix).
+     Post-lock independent fresh-Fable read: see paper/fable-postlock-read-v4.txt -->
+
 > Disclosure: This manuscript was drafted by an AI assistant from the author's frozen, pre-registered
 > experimental artifacts under the author's direction; every quantitative and design claim was checked
 > against the committed sources. The tooling is disclosed rather than hidden, consistent with the
