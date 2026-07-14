@@ -894,13 +894,15 @@ and it is the estimate this paper stands on.
 ### 5.2 The instrument autopsy
 
 Section 4.4 reports the incident; this section interprets it. The defect's essential property
-was not its size but its correlation with the treatment. The output ceiling sat only on the
-verbose same-lineage critic's calls, so the rounds it silently deleted were deleted in proportion
-to exactly the variable H2 measured: a symmetric defect adds noise, a treatment-correlated defect
-manufactures a result. And the manufactured result was invisible from inside: a clean,
-well-formatted, enormous p-value, with nothing in the number announcing that it measured the
-harness rather than the models. When detection was added and the four affected cells rerun, the
-apparent effect collapsed from p = 9.5 x 10^-66 to p = 0.0625 (Section 4.4 gives the per-subject
+was not merely its size but its correlation with the H2 arm. The ceiling applied to
+same-provider calls generally; for H2, its consequential failures were verbose same-lineage
+Critic rounds, so it preferentially deleted work from one arm. A treatment-independent failure
+would not preferentially depress that arm; this one could manufacture a difference -- and the
+manufactured result was invisible from inside: a clean, well-formatted, enormous p-value, with
+nothing in the number announcing that it measured the harness rather than the models. When
+detection was added, the four affected cells were invalidated; corrected-instrument replacements
+were run where obtainable, with the one unresolvable cell scored missing, and the apparent
+effect collapsed from p = 9.5 x 10^-66 to p = 0.0625 (Section 4.4 gives the per-subject
 decomposition and the variance caveat on the single-rerun cells).
 
 **How it was caught.** Not by a runtime gate. This study caught three earlier silent-corruption

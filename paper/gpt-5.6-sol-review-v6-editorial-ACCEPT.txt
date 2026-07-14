@@ -1,0 +1,20 @@
+## Editorial confirmation
+
+1. **NTH1 deduplication:** Substantively successful. The Experiment 1 truncation incident is reported in detail in §4.4 and interpreted in §5.2; the shorter references elsewhere are pointers or necessary summaries. The configuration, estimand, and pilot disciplines remain intact, and the intro compressions do not broaden the causal scope.
+
+2. **New claims:** The compressed introduction introduces no material new empirical claim. However, the new §5.2 opening contains one literal inconsistency and one overcompressed qualifier:
+
+   - “The output ceiling sat only on the verbose same-lineage critic’s calls” conflicts with §4.4, which correctly says the cap applied to every same-provider call, including Tester calls. Its H2 bias operated through the same-lineage Critic rounds.
+   - “the four affected cells rerun” implies four valid replacements, whereas one affected cell ultimately remained missing.
+
+   Replace the relevant passage with:
+
+   > The defect’s essential property was not merely its size but its correlation with the H2 arm. The ceiling applied to same-provider calls generally; for H2, its consequential failures were verbose same-lineage Critic rounds, so it preferentially deleted work from one arm. A treatment-independent failure would not preferentially depress that arm; this one could manufacture a difference.  
+   >  
+   > When detection was added, the four affected cells were invalidated; corrected-instrument replacements were run where obtainable, with the unresolved cell scored missing. The apparent effect collapsed from p = 9.5 × 10^-66 to p = 0.0625.
+
+   This also avoids the overly categorical formulation “a symmetric defect adds noise.”
+
+3. **NTH5 cost table:** Correctly based and labeled. Experiment 1’s counted total is consistent with the full-precision arm totals ($4.2307 → $4.23); $11.05 is clearly all-receipted spend, and ~$0.63 is separately identified as an unreceipted estimate. Experiment 2 likewise distinguishes analysis-entering, all-receipted, and unreceipted spend. The apparent $15.35 sum from individually rounded components is compatible with the stated $15.34 full-precision total.
+
+4. **Final verdict for the record:** **MINOR COPYEDIT — HOLD RE-LOCK.** NTH1 and NTH5 are substantively satisfied, with no dropped load-bearing discipline qualifier elsewhere. Make the two §5.2 corrections above; after that, **ACCEPT / SHIP with no further substantive review required**.
