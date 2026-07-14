@@ -1,0 +1,71 @@
+# Fresh-Fable post-lock verification read of DRAFT-v4 (2026-07-13)
+
+Independent reviewer instance with no prior contact with the manuscript. Recomputed every
+recomputable statistic (analyze.py, analyze_b.py, sensitivity_b.py rerun; receipts under runs/,
+runs-b/, seeds/ re-summed independently), checked the deviations log, protocols, git/push
+timeline, and the review arc. The overwhelming majority of the paper's numbers reproduce
+exactly. Four findings block; the rest are small.
+
+## BLOCKING
+
+B1. "one same-lineage Critic reply hit the ... raised output cap" -- receipts show THREE.
+Experiment 2's counted receipts contain three truncation-rejected same-lineage critic rounds,
+all at exactly 32,000 output tokens: graph-guard loop-same rep1 (round 1), graph-guard
+loop-same rep2 (round 1), packaging loop-same rep4 (round 2). Only the packaging event was
+disclosed. Makes the Intro sentence factually false, understates the paper's own central
+thesis (the mechanism recurred three times), and omits an operational-failure component from
+the graph-guard cells that 4.8 leans on (the plateau argument survives: all five graph-guard
+replicates landed Delta_same = 5 whether or not a round was truncated). Also 5.2's "A
+truncation at the first round of a cell fails that cell loudly as missing data" reads
+awkwardly unless "first round" is explicitly the tester round (round 0).
+
+B2. "18 of 20 critic rounds" on graph-guard -- receipts show 16 of 18. The five counted
+graph-guard loop-same cells ran 4+4+4+3+3 = 18 critic rounds, of which 2 were rejected (the
+two 32k truncations of B1). "Overwhelmingly accepted" survives at 16/18; the numbers as
+written are wrong on both numerator and denominator.
+
+B3. "on a different subject, months of engineering later" -- wrong on both counts. The
+featured recurrence is on packaging, the same subject whose truncated loop-same critic rounds
+were the autopsy's clearest Experiment-1 illustration; and the defect was repaired 2026-07-10
+(protocol_version 9) with the recurrence dated 2026-07-13: three days, not months. Both facts
+trivially checkable in the public repo the paper points readers to.
+
+B4. Section 3.4 self-contradicting definition (the known class) still present in locked v4.
+"Fails on the pristine module" is assigned two mutually exclusive outcomes in consecutive
+sentences: whole-round rejection with zero kills vs individual salvage with the round
+continuing. Actual instrument behavior: individual pristine-failing tests are pruned; the
+round is rejected only when the file fails validation as a file (unparseable, truncated, or no
+tests survive).
+
+## SHOULD-FIX
+
+S1. "attempted five times against a pre-committed attempt budget" overstates when the budget
+existed: the stopping rule was pre-committed with the v11 amendment, before the final attempt
+only (DEVIATIONS row 40; RESULTS.md states this honestly).
+
+## NITS
+
+N1. 4.9's all-receipted delta is entirely the retired seed draw ($0.1346); the invalidated
+cell and crashed attempt billed $0.00 -- a recomputing reader will wonder.
+N2. Rounding at interval bounds: two-stage Delta_same printed [4.7, 44.6] vs script (4.65,
+44.55); rounding a lower bound up marginally flatters the interval.
+N3. "eight rounds were recorded rejected" "across the counted cells" refers to the superseded
+counted set; "counted" is doing double duty with 4.1's final counted set.
+
+## Verified clean
+
+All other checked statistics reproduce exactly from the frozen sources, including: the full
+4.1/4.2/4.3/4.4/4.5 Experiment-1 tables and history figures; the entire 4.7 and 4.8 tables
+digit-for-digit against analyze_b.py and sensitivity_b.py; all sensitivity and two-stage
+figures; token totals 678,564/100,545 and the output-cost decomposition; all spend bases
+($2.20/$2.33/$15.34/$15.47/$4.23/3.6-fold); seed kill spreads and identical pristine baselines;
+both B-prefixed DEVIATIONS events; the freeze/push mechanics of 3.9/3.10 verified against git
+(protocol-b committed+pushed before the runner existed; 20 seeds pushed before the first
+continuation; the replacement seed committed before its continuations and pushed with the final
+receipts); prompt hashes, rates, pins, versions; the review arc as characterized; references
+complete and bidirectional; section numbering and cross-references sound; the
+configuration-not-lineage discipline and the narrow 3.10 estimand scope held consistently
+everywhere checked.
+
+## SHIP: NO (v4) -- four blocking items, all cheap record-fidelity fixes; after those (plus S1
+ideally), this ships. [Folded into DRAFT-v5; see the v5 header note.]
