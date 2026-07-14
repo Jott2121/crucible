@@ -69,3 +69,13 @@ everywhere checked.
 
 ## SHIP: NO (v4) -- four blocking items, all cheap record-fidelity fixes; after those (plus S1
 ideally), this ships. [Folded into DRAFT-v5; see the v5 header note.]
+
+# Verify pass on DRAFT-v5 (same reviewer instance, 2026-07-13)
+
+Diffed v4->v5 (exactly the expected hunks; all v4 numeric verification carries over) and
+re-verified every fix against receipts and instrument code (guardrails.py, loop.py): B1-B4,
+S1, N1-N3 all FAITHFUL / RECEIPTS-TRUE / MATCHES-CODE. Knock-on sweep of Abstract, 5.1, 5.4,
+6.x found no residual singular-truncation language and no new contradictions. Two optional
+nits (3.4 whole-file flaky-rejection clause for a latent, never-fired code path; Abstract
+plural "recurrences") -- both folded by the author post-verdict. SHIP: YES -- v5 fit for the
+author's re-lock and arXiv submission.

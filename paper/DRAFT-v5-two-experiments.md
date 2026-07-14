@@ -39,7 +39,7 @@ difference (within-replicate rate gap 0.178, 95% bootstrap interval [0.039, 0.34
 stable under every leave-one-out sensitivity, magnitude dominated by a single replicate) at 5.5x
 lower arm cost. This is a comparison of two named model-provider-harness configurations, not an
 isolated lineage effect: part of the measured gap is one configuration's receipted operational
-failures, including a recurrence of the autopsy's truncation mechanism under the corrected
+failures, including recurrences of the autopsy's truncation mechanism under the corrected
 instrument, this time detected and scored rather than laundered. We conclude that cross-model
 comparisons can inherit the asymmetries of the harness that runs them, that adversarial cross-model
 review catches what mechanical gates miss at the instrument, analysis, and manuscript levels alike,
@@ -395,7 +395,9 @@ reason recorded, when it fails validation as a file: it does not parse, the repl
 or malformed, or none of its tests survive the per-test checks. Within an accepted file, each
 individual test must pass on the pristine (un-mutated) module twice (the flake check); a test
 that fails on pristine code, a wrong-oracle test rather than a bad file, is pruned individually
-and logged, never counted as a kill, and the round continues with the tests that survive.
+and logged, never counted as a kill, and the round continues with the tests that survive
+(a file that passes the pristine run once and fails the repeat is rejected whole as flaky --
+a code path no counted round ever triggered).
 
 ### 3.5 The paired statistic
 
