@@ -134,7 +134,7 @@ the critic rounds** (rate 0.783, 95% bootstrap interval [0.592, 0.935]). The cro
 critic configuration — pre-registered as a no-verdict pilot — showed a positive within-replicate
 difference (rate gap 0.178 [0.039, 0.347]; direction stable under every leave-one-out
 sensitivity, magnitude 59% driven by one receipted truncation failure) at 5.5× lower arm cost.
-An earlier analysis had shown an enormous cross-lineage effect at p = 9.5×10⁻⁶⁶; the autopsy
+An earlier analysis had shown an apparently overwhelming cross-lineage effect; the autopsy
 traced it to silent output truncation deleting one arm's rounds — an instrument artifact, not a
 model difference — and the same mechanism recurred three times in Experiment 2, this time
 mechanically detected and honestly scored. That autopsy and the fail-closed instrumentation
