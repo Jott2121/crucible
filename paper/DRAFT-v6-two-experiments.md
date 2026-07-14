@@ -340,13 +340,13 @@ and its pilot cells were pre-declared to count as data; in the event those cells
 reclassified for an instrument defect (Section 3.8) and rerun, so the pilot designation does not
 affect the counted dataset.
 
-| Subject | Provenance | Target module | Suite | Mutants | Killed by existing suite | Baseline survivors (scored) |
-|---|---|---|---|---:|---:|---:|
-| attrition-risk-ml | author repo (public) | `src/train.py` | kept | 255 | 0 | 255 |
-| graph-guard | author repo (public) | `graph_guard/ppr.py` | kept | 80 | 58 | 22 |
-| rag-guard | author repo (public) | `rag_guard/guard.py` | kept | 71 | 46 | 25 |
-| packaging | pypa/packaging (OSS) | `src/packaging/_elffile.py` | stripped | 69 | 0 | 69 |
-| idna | kjd/idna (OSS) | `idna/cli.py` | stripped | 187 | 0 | 187 |
+| Subject | Provenance; suite | Target module | Mutants | Killed by existing suite | Baseline survivors (scored) |
+|--------|--------------|--------------------------------|----:|---------:|----------:|
+| attrition-risk-ml | author repo (public); kept | `src/train.py` | 255 | 0 | 255 |
+| graph-guard | author repo (public); kept | `graph_guard/ppr.py` | 80 | 58 | 22 |
+| rag-guard | author repo (public); kept | `rag_guard/guard.py` | 71 | 46 | 25 |
+| packaging | pypa/packaging (OSS); stripped | `src/packaging/_elffile.py` | 69 | 0 | 69 |
+| idna | kjd/idna (OSS); stripped | `idna/cli.py` | 187 | 0 | 187 |
 
 Both mutation denominators are shown, per the pre-registration's rule that neither the
 full-mutant count nor the baseline-survivor count is presented alone. The two third-party
