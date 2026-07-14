@@ -81,9 +81,11 @@ Find out what your existing tests actually miss, on your own repo:
     97% line coverage, but 25 of 71 injected defects SURVIVED this suite (46 killed, mutation score 65%).
 
 **No model is called and no API key is needed.** `crucible score` detects your layout, writes the
-mutation scope, and **proves** a fresh test file is collectable before anything else runs (a canary
-probe; it refuses — exit 4 — rather than guess). If your repo already configures `[tool.mutmut]`,
-drop `--module` and crucible grades the scope you chose instead of overwriting it.
+mutation scope, and runs mutmut on it. For the airtight pre-flight check — a `$0` canary that
+refuses (exit 4) unless a freshly written test actually collects and registers a kill under your
+scope — run `crucible scope` first (the bundled harden ritual does). If your repo already
+configures `[tool.mutmut]`, drop `--module` and crucible grades the scope you chose instead of
+overwriting it.
 
 The survivor count is plain mutation testing on your own suite. No AI is involved yet — the number
 that embarrasses a coverage badge is free to compute.
@@ -151,6 +153,44 @@ including a manufactured effect the instrument itself produced, autopsied with r
 Additionally, the prior art is cited rather than rediscovered (`docs/RELATED-WORK.md`), and the
 tool is dogfooded — crucible's own modules run under the same mutation gate, current score
 and survivor dispositions in `docs/MUTATION.md`.
+
+## How is this different from asking Claude to improve tests with mutmut?
+
+Honest answer first: the core loop is the same, and you can hand-roll it. A model writing
+tests against mutmut's survivor list is exactly what a good one-file workflow does, and for
+strengthening a single suite on your own machine that workflow is genuinely fine. crucible is
+not a different algorithm. What it adds is the discipline that makes the result trustworthy to
+someone who was not watching it run:
+
+- **It refuses to spend a token on a scope it has not proven is real.** `crucible scope` runs a
+  `$0` canary probe before any model is called: it proves the scope actually generates mutants
+  and that a freshly written test really gets collected and registers a kill — or that your
+  existing suite already kills under it. A scope it cannot prove is a refusal (exit 4), not a
+  run, and the bundled harden ritual runs this gate first — so the failure where a model happily
+  writes tests nothing ever executes burns zero tokens instead of a budget.
+- **The loop is iterated, not a single pass.** A separate Critic re-attacks whatever is still
+  surviving, round after round, until dry or a cap. On the frozen round-0 experiment (same-lineage
+  arm, 4 subjects × 5 replicates) the critic rounds killed a mean **78% of the survivors a single
+  generation left standing** (0.783, 95% bootstrap interval [0.592, 0.935]) — measured, not
+  asserted ([full tables](experiments/RESULTS-B.md)).
+- **It is strictly add-only.** Generated tests are only ever added; an `assert_add_only` guard
+  trips if a run would edit or delete anything already in your suite. (crucible does write a
+  `[tool.mutmut]` scope into the clone's `pyproject.toml` and commit it — that commit is exactly
+  what the receipt binds to.) With the local-branch-only ritual, the blast radius on your existing
+  tests is zero.
+- **Kills you did not earn do not count.** A generated test that fails on unmutated code is dropped
+  test-by-test — the rest of the file is salvaged — and every kept file has to pass on pristine
+  code twice, so a flaky kill is rejected rather than banked. A suite that is red on pristine code
+  stops the run before a model is ever called (mutmut refuses a red baseline too — crucible just
+  refuses before you have paid for the generation).
+- **Every run is a receipt bound to a commit.** Models, tokens, cost, verdict, and prompt hashes
+  are written to disk and tied to the scope commit, so a result is auditable by someone who was
+  not in the room — which commit, which models, which prompts, what it cost — rather than a
+  summary you take on faith.
+
+If none of that matters for your use — one suite, one machine, one pass — a one-file workflow will
+serve you well. crucible earns its extra surface exactly when the number has to survive being
+handed to a teammate, a CI gate, or a reviewer.
 
 ## Honest limitations
 
