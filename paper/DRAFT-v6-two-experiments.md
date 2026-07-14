@@ -1,6 +1,6 @@
 # Adversarial Test-Hardening for AI-Written Code: An Instrument Autopsy and a Pre-Registered Causal Estimate of the Critic Loop
 
-**Jeff Otterson** (Independent)
+**Jeff Otterson** (W. P. Carey School of Business, Arizona State University)
 
 <!-- LOCKED by the author 2026-07-13 (v6, final). Review of record: gpt-5.6-sol
      ACCEPT/SHIP (editorial round on v6) + fresh-Fable post-lock SHIP YES (v5);
