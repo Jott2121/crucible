@@ -210,3 +210,8 @@ handed to a teammate, a CI gate, or a reviewer.
 
 Built on [oracle-gate](https://github.com/Jott2121/oracle-gate) (survivor triage, provenance,
 providers). MIT license.
+
+Companion instrument: [quorum-cal](https://github.com/Jott2121/quorum-cal) — measures how many
+independent votes an LLM judge panel is actually worth. Its truth-by-construction gold sets are
+built from exactly the killed mutants crucible produces (measured: three identical judges are
+~1.3 effective votes; diverse panels shared zero false endorsements of real bugs).
