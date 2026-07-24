@@ -215,3 +215,10 @@ Companion instrument: [quorum-cal](https://github.com/Jott2121/quorum-cal) — m
 independent votes an LLM judge panel is actually worth. Its truth-by-construction gold sets are
 built from exactly the killed mutants crucible produces (measured: three identical judges are
 ~1.3 effective votes; diverse panels shared zero false endorsements of real bugs).
+
+Companion instrument: [sabot](https://github.com/Jott2121/sabot) — the same question one
+level up. crucible asks whether your tests would notice a planted defect; sabot plants a
+fault inside a *running* multi-agent pipeline and asks whether the pipeline's own reviewer
+and guardrail stages notice. Measured across LangGraph, CrewAI and AutoGen/Magentic-One,
+the median own-check detection rate was 16.7%, and the most common outcome was a correct
+answer with nothing flagging the fault.
