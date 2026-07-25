@@ -1,22 +1,50 @@
 [build-system]
-requires = ["setuptools>=68"]
+# >=77 for PEP 639 (SPDX `license` string + `license-files`).
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "crucible"
+# Distribution name is `crucible-harden` because `crucible` was already taken on
+# PyPI by an unrelated project. The import package and the console script are
+# both still `crucible` -- `pip install crucible-harden`, then run `crucible`.
+name = "crucible-harden"
 version = "0.1.0"
 description = "Adversarial test-hardening loop for AI-built code: Tester vs Critic closing mutation feedback, mechanical verdicts, metered spend, receipts."
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [{ name = "Jeff Otterson" }]
+keywords = ["mutation-testing", "testing", "ai", "llm", "agents", "test-quality", "pytest"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Software Development :: Testing",
+    "Topic :: Software Development :: Testing :: Mutation",
+]
 dependencies = [
-    "oracle-gate @ git+https://github.com/Jott2121/oracle-gate@ce9b0b93ba59afa4598a85738db9abd7f975e8bc#subdirectory=tool",
-    "agent-cost-attribution @ git+https://github.com/Jott2121/agent-cost-attribution@b502b093e5344beea06dcafcf32239e90302ddad",
+    # Upper-bounded on purpose: crucible reaches past these packages' public
+    # surface -- engine.py uses oracle_gate.runner/survivors internals and
+    # meter.py imports the private agent_cost_attribution.pricing._tier. A minor
+    # release of either could move something crucible depends on, so a new minor
+    # has to be tested here before it is allowed in.
+    "oracle-gate>=0.1.0,<0.2",
+    "agent-cost-attribution>=0.1.0,<0.2",
     # Exact pin: scope.py's SRC_SHIM reads MUTANT_UNDER_TEST at call time -- a
     # mutmut 3.6.0 internal contract, not a public API (accepted residual, now pinned).
     "mutmut==3.6.0",
 ]
+
+[project.urls]
+Homepage = "https://jott2121.github.io/crucible/"
+Repository = "https://github.com/Jott2121/crucible"
+Issues = "https://github.com/Jott2121/crucible/issues"
+Results = "https://github.com/Jott2121/crucible/blob/main/experiments/RESULTS-B.md"
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "pytest-cov>=5"]

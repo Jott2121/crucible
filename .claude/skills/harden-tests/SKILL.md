@@ -21,7 +21,8 @@ receipts shadow-priced and flagged `billing: max-plan`.
   never hand-tune the scope to force a pass; a scope the gate cannot prove
   is a scope that silently loses kills (the v6 lesson this gate exists for).
 - Requires: `claude` CLI on PATH (logged in), `crucible` installed and on
-  PATH (`pip install -e ".[dev]"` in the crucible checkout), a git-clean
+  PATH (`pip install crucible-harden` -- the distribution is named
+  `crucible-harden`, the command it installs is `crucible`), a git-clean
   subject repo.
 
 ## Procedure

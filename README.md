@@ -4,17 +4,17 @@
 
 [![ci](https://github.com/Jott2121/crucible/actions/workflows/ci.yml/badge.svg)](https://github.com/Jott2121/crucible/actions/workflows/ci.yml)
 [![codeql](https://github.com/Jott2121/crucible/actions/workflows/codeql.yml/badge.svg)](https://github.com/Jott2121/crucible/actions/workflows/codeql.yml)
-[![mutation score](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/Jott2121/crucible/badges/mutation.json&labelColor=0F172A)](docs/MUTATION.md)
-[![tests](https://img.shields.io/badge/tests-439-38BDF8?labelColor=0F172A)](tests/)
-[![loop effect](https://img.shields.io/badge/loop_causal_effect-0.783_%5B0.59%2C0.94%5D-818CF8?labelColor=0F172A)](experiments/RESULTS-B.md)
-[![cross-config pilot](https://img.shields.io/badge/cross--config_pilot-%2B0.178_%5B0.04%2C0.35%5D-FBBF24?labelColor=0F172A)](experiments/RESULTS-B.md)
+[![mutation score](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/Jott2121/crucible/badges/mutation.json&labelColor=0F172A)](https://github.com/Jott2121/crucible/blob/main/docs/MUTATION.md)
+[![tests](https://img.shields.io/badge/tests-439-38BDF8?labelColor=0F172A)](https://github.com/Jott2121/crucible/tree/main/tests/)
+[![loop effect](https://img.shields.io/badge/loop_causal_effect-0.783_%5B0.59%2C0.94%5D-818CF8?labelColor=0F172A)](https://github.com/Jott2121/crucible/blob/main/experiments/RESULTS-B.md)
+[![cross-config pilot](https://img.shields.io/badge/cross--config_pilot-%2B0.178_%5B0.04%2C0.35%5D-FBBF24?labelColor=0F172A)](https://github.com/Jott2121/crucible/blob/main/experiments/RESULTS-B.md)
 [![metered spend](https://img.shields.io/badge/metered_spend-%240-34D399?labelColor=0F172A)](#receipts-are-the-product)
-[![license](https://img.shields.io/badge/license-MIT-64748B?labelColor=0F172A)](LICENSE)
+[![license](https://img.shields.io/badge/license-MIT-64748B?labelColor=0F172A)](https://github.com/Jott2121/crucible/blob/main/LICENSE)
 
-![crucible demo — a green suite at 97% coverage, 25 of 71 injected defects surviving, and the harden loop killing 24 of them while refusing to fake the 25th](docs/assets/demo.gif)
+![crucible demo — a green suite at 97% coverage, 25 of 71 injected defects surviving, and the harden loop killing 24 of them while refusing to fake the 25th](https://raw.githubusercontent.com/Jott2121/crucible/main/docs/assets/demo.gif)
 
 <sub>Recorded live — every command really ran, and every number in it is read back from that run's
-own receipt. Sped up for viewing; [replay the raw cast at real speed](docs/assets/demo.cast).
+own receipt. Sped up for viewing; [replay the raw cast at real speed](https://github.com/Jott2121/crucible/blob/main/docs/assets/demo.cast).
 Full landing page: **[jott2121.github.io/crucible](https://jott2121.github.io/crucible/)**</sub>
 
 That module has **7 passing tests and 97% line coverage**. Mutation testing injects **71 real
@@ -73,7 +73,7 @@ it survives. **No model ever grades model output.**
 
 Find out what your existing tests actually miss, on your own repo:
 
-    pip install "crucible @ git+https://github.com/Jott2121/crucible@v1"
+    pip install crucible-harden       # the command it installs is `crucible`
 
     cd /path/to/your-repo-clone       # work in a clone: crucible writes scope config
     crucible score . --module yourpkg/yourmodule.py --coverage 97
@@ -140,9 +140,9 @@ An earlier analysis had shown an apparently overwhelming cross-lineage effect; t
 traced it to silent output truncation deleting one arm's rounds — an instrument artifact, not a
 model difference — and the same mechanism recurred three times in Experiment 2, this time
 mechanically detected and honestly scored. That autopsy and the fail-closed instrumentation
-built from it are the finding. Full tables: [`experiments/RESULTS.md`](experiments/RESULTS.md)
-(Experiment 1), [`experiments/RESULTS-B.md`](experiments/RESULTS-B.md) (Experiment 2), and the
-paper draft with its complete cross-model review trail in [`paper/`](paper/).
+built from it are the finding. Full tables: [`experiments/RESULTS.md`](https://github.com/Jott2121/crucible/blob/main/experiments/RESULTS.md)
+(Experiment 1), [`experiments/RESULTS-B.md`](https://github.com/Jott2121/crucible/blob/main/experiments/RESULTS-B.md) (Experiment 2), and the
+paper draft with its complete cross-model review trail in [`paper/`](https://github.com/Jott2121/crucible/tree/main/paper/).
 
 ## Why trust this
 
@@ -172,7 +172,7 @@ someone who was not watching it run:
   surviving, round after round, until dry or a cap. On the frozen round-0 experiment (same-lineage
   arm, 4 subjects × 5 replicates) the critic rounds killed a mean **78% of the survivors a single
   generation left standing** (0.783, 95% bootstrap interval [0.592, 0.935]) — measured, not
-  asserted ([full tables](experiments/RESULTS-B.md)).
+  asserted ([full tables](https://github.com/Jott2121/crucible/blob/main/experiments/RESULTS-B.md)).
 - **It is strictly add-only.** Generated tests are only ever added; an `assert_add_only` guard
   trips if a run would edit or delete anything already in your suite. (crucible does write a
   `[tool.mutmut]` scope into the clone's `pyproject.toml` and commit it — that commit is exactly
