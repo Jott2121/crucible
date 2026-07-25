@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 # PyPI by an unrelated project. The import package and the console script are
 # both still `crucible` -- `pip install crucible-harden`, then run `crucible`.
 name = "crucible-harden"
-version = "0.1.0"
+version = "0.1.1"
 description = "Adversarial test-hardening loop for AI-built code: Tester vs Critic closing mutation feedback, mechanical verdicts, metered spend, receipts."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -32,8 +32,8 @@ dependencies = [
     # meter.py imports the private agent_cost_attribution.pricing._tier. A minor
     # release of either could move something crucible depends on, so a new minor
     # has to be tested here before it is allowed in.
-    "oracle-gate>=0.1.0,<0.2",
-    "agent-cost-attribution>=0.1.0,<0.2",
+    "oracle-gate>=0.1.1,<0.2",
+    "agent-cost-attribution>=0.1.1,<0.2",
     # Exact pin: scope.py's SRC_SHIM reads MUTANT_UNDER_TEST at call time -- a
     # mutmut 3.6.0 internal contract, not a public API (accepted residual, now pinned).
     "mutmut==3.6.0",

@@ -7,7 +7,10 @@ model raises rather than pricing wrong: a cost-per-kill paper cannot contain a g
 """
 from __future__ import annotations
 
-from agent_cost_attribution.pricing import PRICES, _tier
+# `tier` is public API from agent-cost-attribution 0.1.1; crucible used to import
+# the private `_tier`, a dependency that package never promised to keep. Aliased
+# because _rates() below binds a local named `tier`.
+from agent_cost_attribution.pricing import PRICES, tier as price_tier
 from oracle_gate.providers import Usage
 
 # $ per 1M tokens (input, output). Verify against the provider's live pricing page
@@ -23,7 +26,7 @@ class UnpricedModel(ValueError):
 
 
 def _rates(model: str) -> tuple[float, float]:
-    tier = _tier(model)
+    tier = price_tier(model)
     if tier is not None:
         return PRICES[tier]
     rates = RATES_EXTRA.get((model or "").lower())
