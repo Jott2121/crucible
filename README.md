@@ -90,6 +90,39 @@ overwriting it.
 The survivor count is plain mutation testing on your own suite. No AI is involved yet — the number
 that embarrasses a coverage badge is free to compute.
 
+Nothing to install, if you have [uv](https://docs.astral.sh/uv/):
+
+    uvx --from crucible-harden crucible score . --module yourpkg/yourmodule.py
+
+(uvx runs crucible in its own throwaway environment. That is fine when your tests import your
+package from the working tree, as above; if they need it *installed* — a src-layout project, say —
+use the `pip install` path into the environment your tests already run in.)
+
+## Using another coding agent?
+
+There is no MCP server here, on purpose. `crucible score` is a shell command that prints a number
+and names the survivors, so any agent that can run a command can already use it — Cursor, Cline,
+Windsurf, Codex, Copilot, or a plain terminal. Point yours at this:
+
+> Run `uvx --from crucible-harden crucible score . --module <the module you just wrote tests for>`.
+> It injects real defects and reports how many the test suite actually kills. Anything in the
+> `survivors` list is a bug the suite would let through. Write tests that kill those specific
+> mutants, then re-run to confirm the count dropped.
+
+The harden loop is deliberately **not** exposed as a tool call: it runs for minutes, writes files,
+and creates git branches, so a client timeout and retry would re-run the whole thing and re-spend
+for it. Guardrails belong in the operator's ritual, not in an arbitrary caller's hands — which is
+what the Claude Code skill below encodes.
+
+## Claude Code plugin
+
+    /plugin marketplace add Jott2121/crucible
+    /plugin install crucible-harden@crucible
+
+Installs the `harden-tests` skill, which drives the full ritual: preflight, local branch, the free
+scope canary, the loop, and a receipted report. It requires `pip install crucible-harden` as well —
+the plugin is the procedure, the package is the tool.
+
 ## Then harden — the adversarial loop
 
     crucible harden . --module yourpkg/yourmodule.py \
@@ -116,9 +149,11 @@ Every run writes a receipt directory:
     result.json       # verdict + totals
 
 Generated tests are written into the working tree of wherever you run it — so run it on a
-throwaway branch; the bundled `harden-tests` skill (`.claude/skills/harden-tests/`) enforces
-the full ritual: **local branch only, never main, PR strictly opt-in**. If the canary can't
-prove your scope, crucible refuses instead of spending tokens.
+throwaway branch; the bundled `harden-tests` skill (`skills/harden-tests/`, installable as a
+Claude Code plugin) enforces the full ritual: **local branch only, never main, PR strictly
+opt-in**. If the canary can't prove your scope, crucible refuses instead of spending tokens.
+Those generated tests are model-written Python that pytest then executes on your machine —
+crucible discards any that fail on pristine code, but it does not sandbox execution.
 
 ## Results
 

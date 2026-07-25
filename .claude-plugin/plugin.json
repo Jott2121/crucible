@@ -1,0 +1,18 @@
+{
+  "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
+  "name": "crucible-harden",
+  "description": "Adversarial test-hardening for AI-written code: mutation testing finds the defects your suite misses, a Critic agent writes tests to kill exactly those, and every verdict is a pytest run rather than a model's opinion.",
+  "version": "0.1.1",
+  "author": {
+    "name": "Jeff Otterson"
+  },
+  "homepage": "https://jott2121.github.io/crucible/",
+  "repository": "https://github.com/Jott2121/crucible",
+  "license": "MIT",
+  "keywords": [
+    "testing",
+    "mutation-testing",
+    "pytest",
+    "test-quality"
+  ]
+}
