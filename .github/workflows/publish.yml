@@ -11,9 +11,20 @@ name: publish
 # The distribution is `crucible-harden` (plain `crucible` was already taken on
 # PyPI by an unrelated project); the console script it installs is `crucible`.
 #
+# THIS REPO SHIPS TWO ARTIFACTS ON TWO VERSION LINES: the GitHub Action, released
+# as `v1.x`, and this PyPI package. Only package releases may publish, so the
+# trigger is gated on a `pypi-v*` tag prefix -- otherwise the next Action release
+# would fire an upload attempt. The build job additionally asserts the tag matches
+# the version in pyproject.toml, because the tag is what a human types and the
+# version is what actually gets published, and a PyPI version is never reusable.
+#
+# The `pypi` environment SCOPES the trusted publisher (PyPI checks the claim); it
+# is not by itself an approval gate. Add required reviewers to that environment in
+# repo settings if a human should stand between "release published" and "wheel on
+# PyPI".
+#
 # Release procedure: bump `version` in pyproject.toml, merge, then publish a
-# GitHub Release whose tag matches. PyPI refuses to overwrite an existing version,
-# so a re-run of a shipped tag fails loudly instead of silently replacing a wheel.
+# GitHub Release tagged `pypi-v<version>`.
 
 on:
   release:
@@ -23,24 +34,34 @@ permissions:
   contents: read
 
 jobs:
-  publish:
+  # Build and verify in a job with NO id-token permission. Everything that runs
+  # third-party code -- the test suite, `build`, `twine` -- happens here, so none
+  # of it executes while a PyPI-minting credential is obtainable.
+  build:
+    if: startsWith(github.event.release.tag_name, 'pypi-v')
     runs-on: ubuntu-latest
-    environment:
-      name: pypi
-      url: https://pypi.org/p/crucible-harden
-    permissions:
-      # The OIDC token PyPI checks. The only write scope this job gets.
-      id-token: write
-      contents: read
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.12"
 
+      - name: Tag must match the version being published
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          VERSION=$(python -c "import tomllib;print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          if [ "$TAG" != "pypi-v$VERSION" ]; then
+            echo "tag $TAG does not match pyproject version $VERSION (expected pypi-v$VERSION)"
+            exit 1
+          fi
+
       # The suite is the release gate. A tag that cannot pass its own tests does
       # not get a wheel on PyPI, where the version number is unreusable forever.
-      - name: Test before publishing
+      # tests/test_packaging.py is the part that matters here: it rejects an
+      # invalid classifier or a direct-URL dependency, both of which PyPI refuses
+      # at upload and `twine check` does not catch.
+      - name: Test
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
@@ -58,4 +79,25 @@ jobs:
           python -m pip install --upgrade twine
           python -m twine check dist/*
 
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/crucible-harden
+    permissions:
+      # The OIDC token PyPI checks. The only write scope, in the only job that
+      # runs no project or build-tool code.
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist
+          path: dist/
       - uses: pypa/gh-action-pypi-publish@ba38be9e461d3875417946c167d0b5f3d385a247 # v1.14.1
