@@ -48,7 +48,7 @@ Results = "https://github.com/Jott2121/crucible/blob/main/experiments/RESULTS-B.
 [project.optional-dependencies]
 # trove-classifiers: the canonical classifier list, so tests/test_packaging.py can
 # reject an invented classifier here rather than at the irreversible upload.
-dev = ["pytest>=8", "pytest-cov>=5", "trove-classifiers"]
+dev = ["pytest>=8", "pytest-cov>=5", "trove-classifiers", "ruff"]
 
 [project.scripts]
 crucible = "crucible.cli:main"
@@ -68,6 +68,36 @@ source = ["src/crucible"]
 # don't red the build, but a real regression does.
 fail_under = 90
 show_missing = true
+
+[tool.ruff]
+target-version = "py311"
+# Governs `ruff format` if it is ever run; E501 below is NOT enforced, so this is
+# a target for new code, not a rule the existing tree has to satisfy.
+line-length = 100
+
+[tool.ruff.lint]
+# Deliberately narrow. Lint here is a correctness gate for agent-written code --
+# pyflakes catches undefined names, dead imports, and shadowed definitions, which
+# is the failure mode of a model editing a file it only half-read. Style is not
+# the gate; the test suite and mutation score are.
+select = ["E", "F"]
+ignore = [
+    # 27 existing lines are long explanatory comments carrying the WHY behind a
+    # pin, a workaround, or a security boundary. Reflowing prose to satisfy a
+    # column count loses more than it buys.
+    "E501",
+    # `import shutil, subprocess` inside a test helper, and one late import in
+    # tests/test_providers_ext.py. Both are local-by-intent; hoisting them would
+    # churn tests to no effect.
+    "E401",
+    "E402",
+    # `l` as the loop variable over `.splitlines()`. Reads fine; renaming it
+    # would touch a mutation-tested module for zero behavior change.
+    "E741",
+]
+# NOT selected: "I" (import sorting). It is 18 files of pure reordering on the
+# current tree -- worth doing, but as its own commit, not smuggled into a config
+# change.
 
 [tool.mutmut]
 source_paths = [

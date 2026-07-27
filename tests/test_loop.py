@@ -3,7 +3,7 @@ from oracle_gate.providers import Usage
 
 from crucible.engine import MutationOutcome, SandboxStatsFailure
 from crucible.guardrails import GuardrailViolation
-from crucible.loop import LoopConfig, LoopResult, RoundReply, harden, oneshot
+from crucible.loop import LoopConfig, RoundReply, harden, oneshot
 from crucible.providers_ext import TruncatedOutput
 
 

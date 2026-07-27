@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from crucible.scope import ScopePlan, apply, detect
+from crucible.scope import apply, detect
 
 SHIM = 'import sys, pathlib\nsys.path.insert(0, str(pathlib.Path(__file__).parent / "src"))\n'
 

@@ -19,5 +19,8 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[dev]"
+      # ruff ships in the dev extra, so no extra install and no new pinned action.
+      # Rules are configured in pyproject.toml and are deliberately narrow.
+      - run: ruff check src tests
       - run: python -m pytest -q -m "not slow" --cov --cov-report=term-missing --cov-fail-under=90
       - run: python -m pytest -q -m slow
