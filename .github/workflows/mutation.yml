@@ -36,11 +36,13 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # an orphan branch: the badge payload has no business carrying the
-          # repo's history around with it
-          git checkout --orphan badges
-          git rm -rf --cached . >/dev/null 2>&1 || true
-          find . -maxdepth 1 ! -name mutation.json ! -name .git ! -name . -exec rm -rf {} + || true
-          git add -f mutation.json
-          git commit -q -m "mutation score: ${SCORE}%"
-          git push -f origin badges
+          # An orphan commit built with plumbing: the badge payload has no
+          # business carrying the repo's history, and the working tree must not
+          # be touched at all -- the runner re-reads action.yml from the
+          # workspace at job teardown to run the local action's post step, so
+          # the previous checkout-and-delete approach failed every main run
+          # after the badge had already published.
+          BLOB=$(git hash-object -w mutation.json)
+          TREE=$(printf '100644 blob %s\tmutation.json\n' "$BLOB" | git mktree)
+          COMMIT=$(git commit-tree "$TREE" -m "mutation score: ${SCORE}%")
+          git push -f origin "$COMMIT:refs/heads/badges"
