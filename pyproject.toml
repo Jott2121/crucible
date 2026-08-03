@@ -36,7 +36,7 @@ dependencies = [
     "agent-cost-attribution>=0.1.1,<0.2",
     # Exact pin: scope.py's SRC_SHIM reads MUTANT_UNDER_TEST at call time -- a
     # mutmut 3.6.0 internal contract, not a public API (accepted residual, now pinned).
-    "mutmut==3.6.0",
+    "mutmut==3.7.0",
 ]
 
 [project.urls]
