@@ -231,7 +231,9 @@ handed to a teammate, a CI gate, or a reviewer.
 
 - Python + pytest repos only; layout heuristics target well-formed projects — a repo the
   canary can't validate is a refusal, not a guess.
-- mutmut is pinned exactly (3.6.0): the src-layout shim relies on a mutmut-internal contract.
+- mutmut is pinned exactly (3.7.0): the canary reads mutmut's `MUTANT_UNDER_TEST`, and the
+  engine has to clear mutmut's cross-run verdict cache before every measure. Both are
+  mutmut internals, so each new minor is tested here before it is allowed in.
 - The `claude-cli` provider has no mechanical truncation check (the CLI exposes no output
   cap); disclosed in the provider docstring.
 - The 120.6× lean result is one module, one apples-to-apples pair of runs. Your ratio will
