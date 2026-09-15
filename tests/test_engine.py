@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from crucible.engine import (
@@ -15,10 +17,20 @@ RESULTS = """\
 """
 
 
+STATS = '{"killed": 1, "survived": 2, "no_coverage": 0, "timeout": 0}'
+
+
 class FakeRun:
     """Scripted subprocess.run: returns canned (returncode, stdout) by command.
     Records kwargs per call (subprocess.run compatibility: the engine's tee
-    injects timeout= for the `mutmut run` invocation)."""
+    injects timeout= for the `mutmut run` invocation).
+
+    `mutmut export-cicd-stats` WRITES mutants/mutmut-cicd-stats.json here
+    rather than the test pre-creating it: measure() now deletes the mutants/
+    sandbox before every run (mutmut 3.7.0's stale result cache lives there),
+    so a file planted before the call is gone by the time the engine reads it
+    -- exactly as it would be in a real run. Only a fake that produces the
+    file where the real command does can stand in for it."""
 
     def __init__(self, script):
         self.script = script
@@ -30,6 +42,10 @@ class FakeRun:
         key = " ".join(cmd[2:])  # drop "python -m"
         self.kwargs_by_key[key] = kwargs
         rc, out = self.script.get(key, (0, ""))
+        if key == "mutmut export-cicd-stats" and rc == 0 and cwd is not None:
+            stats_path = Path(cwd) / "mutants" / "mutmut-cicd-stats.json"
+            stats_path.parent.mkdir(parents=True, exist_ok=True)
+            stats_path.write_text(STATS)
 
         class P:
             returncode, stdout, stderr = rc, out, ""
@@ -38,10 +54,6 @@ class FakeRun:
 
 
 def test_measure_returns_survivor_ids(tmp_path):
-    (tmp_path / "mutants").mkdir()
-    (tmp_path / "mutants" / "mutmut-cicd-stats.json").write_text(
-        '{"killed": 1, "survived": 2, "no_coverage": 0, "timeout": 0}'
-    )
     run = FakeRun({
         "mutmut --version": (0, "mutmut, version 3.6.0"),
         "mutmut run": (2, ""),
@@ -57,16 +69,72 @@ def test_measure_returns_survivor_ids(tmp_path):
     assert outcome.all_mutants == 3
 
 
+def test_measure_deletes_a_leftover_mutants_sandbox_before_running(tmp_path):
+    """mutmut 3.7.0 caches per-mutant verdicts in mutants/<file>.meta and only
+    invalidates them when the MUTATED function's source hash moves -- a new or
+    deleted test file invalidates nothing. crucible's loop measures the same
+    unchanged module before and after writing tests, so a carried-over verdict
+    is a lie in both directions (an earned kill read back as survived, a
+    withdrawn test's kill read back as killed). Every measure must start from
+    no sandbox at all, which is mutmut's own prescribed cache reset."""
+    stale = tmp_path / "mutants" / "subject_pkg"
+    stale.mkdir(parents=True)
+    (stale / "calc.py.meta").write_text('{"exit_code_by_key": {"x": 0}}')
+    run = FakeRun({
+        "mutmut --version": (0, "mutmut, version 3.6.0"),
+        "mutmut run": (2, ""),
+        "mutmut export-cicd-stats": (0, ""),
+        "mutmut results --all true": (0, RESULTS),
+    })
+    MutmutEngine(tmp_path, run=run).measure()
+    assert not (stale / "calc.py.meta").exists()
+
+
+def test_measure_refuses_when_the_sandbox_survives_the_delete(tmp_path):
+    """The delete is load-bearing, and rmtree(ignore_errors=True) is silent:
+    a read-only file or an open handle can leave the sandbox (and its *.meta
+    verdicts) standing with no exception raised. A measure that proceeds from
+    there reports yesterday's cache as today's number -- the exact lie this
+    clear-out exists to prevent -- so a surviving sandbox must refuse loudly
+    instead. Simulated with a no-op rmtree, which is what a fully-failed
+    delete looks like from here."""
+    (tmp_path / "mutants" / "subject_pkg").mkdir(parents=True)
+    (tmp_path / "mutants" / "subject_pkg" / "calc.py.meta").write_text("{}")
+    run = FakeRun({
+        "mutmut --version": (0, "mutmut, version 3.6.0"),
+        "mutmut run": (2, ""),
+        "mutmut export-cicd-stats": (0, ""),
+        "mutmut results --all true": (0, RESULTS),
+    })
+    import crucible.engine as engine_mod
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(engine_mod.shutil, "rmtree", lambda *a, **k: None)
+        with pytest.raises(RuntimeError, match="could not clear mutmut sandbox"):
+            MutmutEngine(tmp_path, run=run).measure()
+    # and it refused BEFORE spending a mutmut run on the stale sandbox
+    assert run.calls == []
+
+
+def test_measure_tolerates_a_missing_mutants_sandbox(tmp_path):
+    """The cache reset is unconditional, so the first measure on a clone that
+    has never been mutated must not trip over the absent directory."""
+    assert not (tmp_path / "mutants").exists()
+    run = FakeRun({
+        "mutmut --version": (0, "mutmut, version 3.6.0"),
+        "mutmut run": (2, ""),
+        "mutmut export-cicd-stats": (0, ""),
+        "mutmut results --all true": (0, RESULTS),
+    })
+    assert MutmutEngine(tmp_path, run=run).measure().all_mutants == 3
+
+
 def test_measure_bounds_mutmut_run_with_timeout(tmp_path):
     """Only the `mutmut run` invocation is bounded; a hang there (a generated
     test's own process pool deadlocking inside mutmut's forked workers) must
     become a loud failure, never an unbounded wait with no receipt trace."""
     from crucible.engine import MUTMUT_RUN_TIMEOUT_S
 
-    (tmp_path / "mutants").mkdir()
-    (tmp_path / "mutants" / "mutmut-cicd-stats.json").write_text(
-        '{"killed": 1, "survived": 2, "no_coverage": 0, "timeout": 0}'
-    )
     run = FakeRun({
         "mutmut --version": (0, "mutmut, version 3.6.0"),
         "mutmut run": (2, ""),
@@ -197,10 +265,6 @@ def test_write_scope_replace_still_works_with_also_copy(tmp_path):
 
 
 def test_measure_reraises_unclassified_status_as_runtime_error(tmp_path):
-    (tmp_path / "mutants").mkdir()
-    (tmp_path / "mutants" / "mutmut-cicd-stats.json").write_text(
-        '{"killed": 0, "survived": 0, "no_coverage": 0, "timeout": 0}'
-    )
     run = FakeRun({
         "mutmut --version": (0, "mutmut, version 3.6.0"),
         "mutmut run": (2, ""),
@@ -221,10 +285,6 @@ def test_measure_treats_all_not_checked_as_zero_test_baseline_when_no_tests_exis
     mutmut's own stats phase hard-fails on zero tests rather than reporting 0%
     coverage, but an empty suite provably kills nothing, so every mutant is a
     survivor by construction, not a guess."""
-    (tmp_path / "mutants").mkdir()
-    (tmp_path / "mutants" / "mutmut-cicd-stats.json").write_text(
-        '{"killed": 0, "survived": 0, "no_coverage": 0, "timeout": 0}'
-    )
     run = FakeRun({
         "mutmut --version": (0, "mutmut, version 3.6.0"),
         "mutmut run": (1, ""),
@@ -251,10 +311,6 @@ def test_measure_treats_all_not_checked_as_zero_test_baseline_when_suite_is_gree
     protocol §3.1's pre-declared "degenerate maximal-headroom false-pass
     case"). This is provably zero coverage, not a guess -- the suite ran
     clean, it just never touched this file."""
-    (tmp_path / "mutants").mkdir()
-    (tmp_path / "mutants" / "mutmut-cicd-stats.json").write_text(
-        '{"killed": 0, "survived": 0, "no_coverage": 0, "timeout": 0}'
-    )
     run = FakeRun({
         "mutmut --version": (0, "mutmut, version 3.6.0"),
         "mutmut run": (1, ""),
@@ -276,10 +332,6 @@ def test_zero_test_baseline_pristine_pytest_has_a_timeout_and_refuses_on_hang(tm
     subprocess.TimeoutExpired for that specific command."""
     import subprocess
 
-    (tmp_path / "mutants").mkdir()
-    (tmp_path / "mutants" / "mutmut-cicd-stats.json").write_text(
-        '{"killed": 0, "survived": 0, "no_coverage": 0, "timeout": 0}'
-    )
     inner = FakeRun({
         "mutmut --version": (0, "mutmut, version 3.6.0"),
         "mutmut run": (1, ""),
@@ -301,10 +353,6 @@ def test_measure_reraises_when_pytest_confirms_a_real_error(tmp_path):
     confirm either legitimate zero-coverage case (e.g. a real collection
     error elsewhere, exit 1/2 rather than 0/5), this is a genuine scope bug
     and must still fail loud rather than being silently treated as valid."""
-    (tmp_path / "mutants").mkdir()
-    (tmp_path / "mutants" / "mutmut-cicd-stats.json").write_text(
-        '{"killed": 0, "survived": 0, "no_coverage": 0, "timeout": 0}'
-    )
     run = FakeRun({
         "mutmut --version": (0, "mutmut, version 3.6.0"),
         "mutmut run": (1, ""),
@@ -319,10 +367,6 @@ def test_measure_reraises_when_pytest_confirms_a_real_error(tmp_path):
 def test_measure_healthy_run_unaffected_by_stats_failure_detector(tmp_path):
     """v5: the new tee/detector plumbing around `mutmut run` must not change
     behavior for a normal, fully-classified run (the common case)."""
-    (tmp_path / "mutants").mkdir()
-    (tmp_path / "mutants" / "mutmut-cicd-stats.json").write_text(
-        '{"killed": 1, "survived": 2, "no_coverage": 0, "timeout": 0}'
-    )
     run = FakeRun({
         "mutmut --version": (0, "mutmut, version 3.6.0"),
         "mutmut run": (2, "healthy summary, no failure markers\n"),
@@ -344,10 +388,6 @@ def test_measure_raises_sandbox_stats_failure_when_runner_returned_nonfive(tmp_p
     mutmut's `mutmut run` stdout names a real runner failure (`runner
     returned 1`, not 5). SandboxStatsFailure must fire BEFORE
     `_zero_test_baseline` can launder this into a false all-survived zero."""
-    (tmp_path / "mutants").mkdir()
-    (tmp_path / "mutants" / "mutmut-cicd-stats.json").write_text(
-        '{"killed": 0, "survived": 0, "no_coverage": 0, "timeout": 0}'
-    )
     run = FakeRun({
         "mutmut --version": (0, "mutmut, version 3.6.0"),
         "mutmut run": (1,
@@ -368,10 +408,6 @@ def test_measure_raises_sandbox_stats_failure_on_stopping_after_marker(tmp_path)
     """v5: mutmut can also abort the stats phase early with "Stopping after
     N failures" rather than the "failed to collect stats" message; this must
     be detected too."""
-    (tmp_path / "mutants").mkdir()
-    (tmp_path / "mutants" / "mutmut-cicd-stats.json").write_text(
-        '{"killed": 0, "survived": 0, "no_coverage": 0, "timeout": 0}'
-    )
     run = FakeRun({
         "mutmut --version": (0, "mutmut, version 3.6.0"),
         "mutmut run": (1, "....F\nStopping after 1 failures!\n"),
@@ -387,10 +423,6 @@ def test_measure_does_not_mistake_legitimate_empty_suite_for_sandbox_failure(tmp
     """v5: `runner returned 5` -- "no tests exist anywhere" -- is the
     legitimate empty-suite signal `_zero_test_baseline` already handles
     (protocol §3.2 v4); it must NOT be mistaken for a sandbox crash."""
-    (tmp_path / "mutants").mkdir()
-    (tmp_path / "mutants" / "mutmut-cicd-stats.json").write_text(
-        '{"killed": 0, "survived": 0, "no_coverage": 0, "timeout": 0}'
-    )
     run = FakeRun({
         "mutmut --version": (0, "mutmut, version 3.6.0"),
         "mutmut run": (1, "failed to collect stats. runner returned 5\n"),
@@ -411,10 +443,6 @@ def test_measure_reraises_when_not_checked_is_mixed_with_classified_status(tmp_p
     """A mix of "not checked" and real statuses means something WAS measured
     -- a real bug (e.g. a scope that only partially resolves) hides in the
     rest, so the zero-test fallback must not paper over it."""
-    (tmp_path / "mutants").mkdir()
-    (tmp_path / "mutants" / "mutmut-cicd-stats.json").write_text(
-        '{"killed": 0, "survived": 1, "no_coverage": 0, "timeout": 0}'
-    )
     run = FakeRun({
         "mutmut --version": (0, "mutmut, version 3.6.0"),
         "mutmut run": (1, ""),

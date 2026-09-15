@@ -34,9 +34,23 @@ dependencies = [
     # has to be tested here before it is allowed in.
     "oracle-gate>=0.1.1,<0.2",
     "agent-cost-attribution>=0.1.1,<0.2",
-    # Exact pin: scope.py's SRC_SHIM reads MUTANT_UNDER_TEST at call time -- a
-    # mutmut 3.6.0 internal contract, not a public API (accepted residual, now pinned).
-    "mutmut==3.6.0",
+    # Exact pin, two internal contracts deep (accepted residuals, both re-verified
+    # on 3.7.0):
+    #   1. scope.py's canary reads MUTANT_UNDER_TEST at call time and depends on
+    #      its '' / 'stats' / 'fail' / '<module>.<mutant>' values -- a trampoline
+    #      internal, not a public API.
+    #   2. mutmut 3.7.0 caches per-mutant verdicts across runs in mutants/*.meta,
+    #      keyed on the mutated function's source hash only -- test-file changes
+    #      invalidate nothing, which would silently freeze crucible's
+    #      measure -> write tests -> measure-again loop at the first verdict.
+    #      engine.measure() removes the mutants/ sandbox before every run (the
+    #      reset mutmut itself prescribes). mutmut's own config path for this
+    #      -- cache_invalidation_files + on_dependency_change = "rerun" -- is
+    #      not used: it only invalidates for files the configured globs name,
+    #      so it fails OPEN on any subject whose tests fall outside them.
+    # Neither is a promise mutmut makes, so a new minor still has to be tested
+    # here before it is allowed in.
+    "mutmut==3.7.0",
 ]
 
 [project.urls]

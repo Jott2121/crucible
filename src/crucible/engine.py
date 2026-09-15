@@ -9,6 +9,7 @@ generator operating on a disposable CLONE) sets it deliberately via write_scope(
 from __future__ import annotations
 
 import re
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -133,6 +134,46 @@ class MutmutEngine:
         self.run = run
 
     def measure(self) -> MutationOutcome:
+        # A measure is a MEASUREMENT, never a cache read. mutmut 3.7.0 added
+        # cross-run result caching: `create_mutants_for_file` now keeps the
+        # previous verdict for every mutant whose *mutated function's* source
+        # hash is unchanged (3.6.0 reset every exit code to None on each run),
+        # and its change detection deliberately ignores .py files outside
+        # source_paths ("the per-function hashes already track them") -- so a
+        # freshly written or deleted TEST file invalidates nothing. That breaks
+        # crucible's whole measure -> generate tests -> measure-again loop in
+        # BOTH directions on an unchanged module: a new test that really does
+        # kill a survivor reads back as still-survived (observed: `0.00
+        # mutations/second`, every verdict served from mutants/*.meta), and a
+        # kill earned by a test that was later discarded would read back as
+        # still-killed. Removing the sandbox is mutmut's own prescribed cache
+        # reset (its warning text: "delete the mutants/ directory"), and it is
+        # the one that cannot fail open. mutmut does offer a config path --
+        # `cache_invalidation_files` globs plus `on_dependency_change =
+        # "rerun"` (configuration.py, __main__._changed_dependency_files /
+        # _report_watched_file_changes) -- but it only invalidates for files
+        # the operator's globs happen to name, so any subject whose tests sit
+        # outside the pattern goes back to serving stale verdicts silently.
+        # Fail-open is the wrong direction for the one number crucible exists
+        # to make trustworthy, so the sandbox goes instead. Correct and
+        # harmless on 3.6.0 too, which never carried verdicts across runs
+        # anyway -- the only cost either way is regenerating the mutants.
+        # This generalises score.stale_artifacts (whose docstring records the
+        # same lie in its earlier, stale-test-copy form) from the one `crucible
+        # score` entry point to EVERY measure, which is where the invariant
+        # actually belongs.
+        #
+        # The removal is load-bearing, so it is verified rather than assumed:
+        # ignore_errors swallows a read-only file or an open handle, and a
+        # partial delete leaves exactly the *.meta verdicts this exists to
+        # destroy. Surviving sandbox => refuse, never measure.
+        sandbox = self.cwd / "mutants"
+        shutil.rmtree(sandbox, ignore_errors=True)
+        if sandbox.exists():
+            raise RuntimeError(
+                f"could not clear mutmut sandbox {sandbox}; stale verdicts would be "
+                "served as a fresh measurement. Remove it by hand and re-run."
+            )
         tee = _RunTee(self.run)
         counts, results_text = run_mutation(self.cwd, run=tee)
         mutants = parse_results(results_text)
