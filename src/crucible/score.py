@@ -118,12 +118,14 @@ def shock_line(counts: dict, coverage: float | None = None) -> str:
     unexecuted = counts.get("no_tests", 0)
     score = mutation_score(counts)
     cov = f"{coverage:.0f}% line coverage, but " if coverage is not None else ""
-    timed_out = f", {timeouts} timed out" if timeouts else ""
+    # "> 0", not truthiness: a missing count must never read as zero by accident,
+    # and mutmut's None-default mutants are only killable with an explicit compare
+    timed_out = f", {timeouts} timed out" if timeouts > 0 else ""
     line = (
         f"{cov}{survived} of {total} injected defects SURVIVED this suite "
         f"({killed} killed{timed_out}, mutation score {score:.0f}%)."
     )
-    if unexecuted:
+    if unexecuted > 0:
         verb = "was" if unexecuted == 1 else "were"
         line += f" {unexecuted} of them {verb} never executed by any test."
     return line

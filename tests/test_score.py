@@ -181,3 +181,11 @@ def test_shock_line_accounts_for_timeouts_instead_of_losing_them():
         "25 of 71 injected defects SURVIVED this suite "
         "(44 killed, 2 timed out, mutation score 62%)."
     )
+
+
+def test_shock_line_names_a_single_timeout():
+    # the boundary: one timed-out mutant must be named, not dropped
+    assert shock_line({"killed": 9, "survived": 0, "timeout": 1, "total": 10}) == (
+        "0 of 10 injected defects SURVIVED this suite "
+        "(9 killed, 1 timed out, mutation score 90%)."
+    )
