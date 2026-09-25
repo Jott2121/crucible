@@ -5,7 +5,7 @@
 [![ci](https://github.com/Jott2121/crucible/actions/workflows/ci.yml/badge.svg)](https://github.com/Jott2121/crucible/actions/workflows/ci.yml)
 [![codeql](https://github.com/Jott2121/crucible/actions/workflows/codeql.yml/badge.svg)](https://github.com/Jott2121/crucible/actions/workflows/codeql.yml)
 [![mutation score](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/Jott2121/crucible/badges/mutation.json&labelColor=0F172A)](https://github.com/Jott2121/crucible/blob/main/docs/MUTATION.md)
-[![tests](https://img.shields.io/badge/tests-443-38BDF8?labelColor=0F172A)](https://github.com/Jott2121/crucible/tree/main/tests/)
+[![tests](https://img.shields.io/badge/tests-462-38BDF8?labelColor=0F172A)](https://github.com/Jott2121/crucible/tree/main/tests/)
 [![loop effect](https://img.shields.io/badge/loop_causal_effect-0.783_%5B0.59%2C0.94%5D-818CF8?labelColor=0F172A)](https://github.com/Jott2121/crucible/blob/main/experiments/RESULTS-B.md)
 [![cross-config pilot](https://img.shields.io/badge/cross--config_pilot-%2B0.178_%5B0.04%2C0.35%5D-FBBF24?labelColor=0F172A)](https://github.com/Jott2121/crucible/blob/main/experiments/RESULTS-B.md)
 [![metered spend](https://img.shields.io/badge/metered_spend-%240-34D399?labelColor=0F172A)](#receipts-are-the-product)
@@ -257,5 +257,6 @@ Companion instrument: [sabot](https://github.com/Jott2121/sabot) — the same qu
 level up. crucible asks whether your tests would notice a planted defect; sabot plants a
 fault inside a *running* multi-agent pipeline and asks whether the pipeline's own reviewer
 and guardrail stages notice. Measured across LangGraph, CrewAI and AutoGen/Magentic-One,
-the median own-check detection rate was 16.7%, and the most common outcome was a correct
-answer with nothing flagging the fault.
+the median own-check detection rate was 16.7%. The sharpest result: when a write tool
+reported success but wrote nothing, no reviewer flagged it and the task failed in every
+cell, on all three frameworks.

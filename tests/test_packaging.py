@@ -110,9 +110,11 @@ def test_declared_python_floor_matches_the_classifiers():
     assert not below, f"classifiers claim Python {below} but requires-python is >={floor}"
 
 
-def test_crucible_imports():
+def test_crucible_version_matches_the_packaged_version():
+    # two hard-coded copies of the version drift silently: bumping pyproject alone
+    # would ship a release whose crucible.__version__ still names the old one
     import crucible
-    assert crucible.__version__ == "0.1.1"
+    assert crucible.__version__ == _pyproject()["project"]["version"]
 
 
 def test_oracle_gate_importable():

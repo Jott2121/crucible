@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 # PyPI by an unrelated project. The import package and the console script are
 # both still `crucible` -- `pip install crucible-harden`, then run `crucible`.
 name = "crucible-harden"
-version = "0.1.1"
+version = "0.1.2"
 description = "Adversarial test-hardening loop for AI-built code: Tester vs Critic closing mutation feedback, mechanical verdicts, metered spend, receipts."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -142,7 +142,11 @@ pytest_add_cli_args_test_selection = [
 # (engine.py, cli.py, etc). mutmut's sandbox only contains files listed in
 # source_paths, so those imports raise ModuleNotFoundError inside the mutants/
 # copy unless the rest of the package is also present (unmutated).
-also_copy = ["src/crucible"]
+# action.yml: tests/test_score_reporting.py executes the Action's embedded Python,
+# read from action.yml at the repo root. Absent from the sandbox, those tests fail
+# inside mutants/ and the stats phase refuses the whole run (the same v6 hazard
+# class as the --ignore'd tests above). Copying one small file keeps them counted.
+also_copy = ["src/crucible", "action.yml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

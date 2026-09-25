@@ -126,3 +126,66 @@ def test_stale_artifacts_finds_the_mutmut_working_copy(tmp_path):
     # both must be found: mutants/ holds the stale copy of the TESTS, which is
     # what silently produced a 34-point-too-high score on a real repo
     assert found == {"mutants", ".mutmut-cache"}
+
+
+# --- "survived" means undetected: survived plus never-executed (no tests) -----------
+#
+# mutmut reports a mutant nothing executes as "no tests", separately from
+# "survived". Both walked through the suite undetected, and the survivor LIST has
+# always named both (oracle_gate.survivors.undetected). The headline counted only
+# "survived", so a module with an untested function printed "0 of 3 injected
+# defects SURVIVED" above a list of 2 survivors -- flattering the suite in exactly
+# the case it is weakest.
+
+def test_undetected_count_includes_mutants_no_test_ever_executed():
+    from crucible.score import undetected_count
+
+    assert undetected_count({"killed": 1, "survived": 0, "no_tests": 2, "total": 3}) == 2
+    assert undetected_count({"killed": 46, "survived": 20, "no_tests": 5, "total": 71}) == 25
+
+
+def test_undetected_count_tolerates_counts_without_a_no_tests_field():
+    from crucible.score import undetected_count
+
+    assert undetected_count(counts(46, 25)) == 25
+
+
+def test_shock_line_counts_never_executed_mutants_as_survivors():
+    # the live repro: one tested function, one untested function
+    assert shock_line({"killed": 1, "survived": 0, "no_tests": 2, "total": 3}) == (
+        "2 of 3 injected defects SURVIVED this suite "
+        "(1 killed, mutation score 33%). "
+        "2 of them were never executed by any test."
+    )
+
+
+def test_shock_line_says_which_survivors_no_test_ever_executed():
+    assert shock_line({"killed": 46, "survived": 20, "no_tests": 5, "total": 71}) == (
+        "25 of 71 injected defects SURVIVED this suite "
+        "(46 killed, mutation score 65%). "
+        "5 of them were never executed by any test."
+    )
+
+
+def test_shock_line_uses_the_singular_for_one_never_executed_mutant():
+    assert shock_line({"killed": 8, "survived": 1, "no_tests": 1, "total": 10}) == (
+        "2 of 10 injected defects SURVIVED this suite "
+        "(8 killed, mutation score 80%). "
+        "1 of them was never executed by any test."
+    )
+
+
+def test_shock_line_accounts_for_timeouts_instead_of_losing_them():
+    # killed + survived + timed out must add up to the total the line quotes
+    assert shock_line({"killed": 44, "survived": 25, "timeout": 2, "total": 71}) == (
+        "25 of 71 injected defects SURVIVED this suite "
+        "(44 killed, 2 timed out, mutation score 62%)."
+    )
+
+
+def test_shock_line_names_a_single_timeout():
+    # the boundary: one timed-out mutant must be named, not dropped
+    assert shock_line({"killed": 9, "survived": 0, "timeout": 1, "total": 10}) == (
+        "0 of 10 injected defects SURVIVED this suite "
+        "(9 killed, 1 timed out, mutation score 90%)."
+    )

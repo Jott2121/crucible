@@ -39,7 +39,7 @@ outputs:
     description: "Injected defects the suite caught."
     value: ${{ steps.score.outputs.killed }}
   survived:
-    description: "Injected defects that walked straight through. This is the number that matters."
+    description: "Injected defects that walked straight through, including ones no test ever executed. This is the number that matters."
     value: ${{ steps.score.outputs.survived }}
   total:
     description: "Total defects injected."
@@ -94,7 +94,9 @@ runs:
         c = d["counts"]
         print(f"score={d['score']}")
         print(f"killed={c['killed']}")
-        print(f"survived={c['survived']}")
+        # "undetected", not mutmut's narrower "survived": it also counts mutants no
+        # test ever executed, which is what the survivor list has always named.
+        print(f"survived={d['undetected']}")
         print(f"total={c['total']}")
         PY
 
@@ -128,14 +130,19 @@ runs:
         c = d["counts"]
         survivors = d["survivors"]
         score = d["score"]
+        undetected = d["undetected"]
+        unexecuted = c.get("no_tests", 0)
 
         print("### 🧪 Mutation score: **{:.0f}%**".format(score))
         print()
         print(f"Crucible injected **{c['total']}** real defects into `{d['module']}`. "
               f"This suite killed **{c['killed']}** of them.")
         print()
-        if c["survived"]:
-            print(f"> **{c['survived']} defects survived** — real bugs this suite would not catch.")
+        if undetected:
+            print(f"> **{undetected} defects survived** — real bugs this suite would not catch.")
+            if unexecuted:
+                verb = "was" if unexecuted == 1 else "were"
+                print(f"> {unexecuted} of them {verb} never executed by any test.")
             print()
             print("<details><summary>Show the survivors</summary>")
             print()
@@ -146,8 +153,13 @@ runs:
                 print(f"... and {len(survivors) - 25} more")
             print("```")
             print("</details>")
-        else:
+        elif c["killed"] == c["total"]:
             print("> **Every injected defect was killed.** This suite actually catches bugs.")
+        else:
+            # nothing survived, but not everything was killed: the rest timed out,
+            # and the score above does not count a timeout as a kill
+            print(f"> **No injected defect survived.** {c['total'] - c['killed']} timed out "
+                  "instead of failing a test, and the score does not count those as killed.")
         print()
         print("<sub>Coverage measures what *ran*. This measures what would be *caught*. "
               "[crucible](https://github.com/Jott2121/crucible) · no model, no API key, $0</sub>")
@@ -168,7 +180,7 @@ runs:
         score = d["score"]
         if score < floor:
             print(f"::error::Mutation score {score:.0f}% is below the floor of {floor:.0f}%. "
-                  f"{d['counts']['survived']} injected defects survived this suite.")
+                  f"{d['undetected']} injected defects survived this suite.")
             sys.exit(1)
         print(f"Mutation score {score:.0f}% meets the floor of {floor:.0f}%.")
         PY
