@@ -189,6 +189,7 @@ def _cmd_score(args) -> int:
         mutation_score,
         shock_line,
         stale_artifacts,
+        undetected_count,
     )
 
     subject = Path(args.subject).resolve()
@@ -228,12 +229,26 @@ def _cmd_score(args) -> int:
         print(f"REFUSING: {exc}", file=sys.stderr)
         return 4
 
+    # The headline count comes from mutmut's summary stats; the survivor list comes
+    # from its per-mutant results. They are separate sources. If they disagree,
+    # whichever one we printed would be a guess, so refuse rather than pick one.
+    undetected = undetected_count(outcome.counts)
+    if undetected != len(outcome.survivors):
+        print(
+            f"REFUSING: mutmut's summary counts {undetected} undetected mutants but its "
+            f"per-mutant results name {len(outcome.survivors)} survivor(s); the two "
+            "sources disagree, so no survivor count here is trustworthy.",
+            file=sys.stderr,
+        )
+        return 4
+
     if args.badge:
         Path(args.badge).write_text(json.dumps(badge_payload(outcome.counts)) + "\n")
 
     if args.json:
         print(json.dumps({
             "score": round(score, 2),
+            "undetected": undetected,
             "counts": outcome.counts,
             "survivors": outcome.survivors,
             "module": args.module or "[tool.mutmut] scope",

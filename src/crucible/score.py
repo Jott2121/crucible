@@ -89,21 +89,44 @@ def badge_payload(counts: dict, label: str = "mutation") -> dict:
     }
 
 
+def undetected_count(counts: dict) -> int:
+    """Mutants no test caught: mutmut's "survived" PLUS its "no tests".
+
+    mutmut reports a mutant that no test even executes as "no tests", separately
+    from "survived". Both walked straight through the suite, and the survivor list
+    crucible prints has always named both (oracle_gate.survivors.undetected).
+    Counting only "survived" was the flattering variant: a module with a wholly
+    untested function printed "0 of 3 injected defects SURVIVED" above a list of
+    2 survivors -- understating the damage exactly where the suite is weakest.
+    """
+    return counts["survived"] + counts.get("no_tests", 0)
+
+
 def shock_line(counts: dict, coverage: float | None = None) -> str:
     """The one-line result, written to be pasted into a PR or a tweet.
 
     Leads with the survivors rather than the score, because "25 bugs survived"
     is a fact about the reader's code and "65%" is a fact about my tool.
+    Survivors are counted by undetected_count(), so the headline always agrees
+    with the survivor list printed under it. Timeouts are named rather than
+    dropped, so the numbers in the sentence account for the total it quotes.
     """
-    survived = counts["survived"]
+    survived = undetected_count(counts)
     total = counts["total"]
     killed = counts["killed"]
+    timeouts = counts.get("timeout", 0)
+    unexecuted = counts.get("no_tests", 0)
     score = mutation_score(counts)
     cov = f"{coverage:.0f}% line coverage, but " if coverage is not None else ""
-    return (
+    timed_out = f", {timeouts} timed out" if timeouts else ""
+    line = (
         f"{cov}{survived} of {total} injected defects SURVIVED this suite "
-        f"({killed} killed, mutation score {score:.0f}%)."
+        f"({killed} killed{timed_out}, mutation score {score:.0f}%)."
     )
+    if unexecuted:
+        verb = "was" if unexecuted == 1 else "were"
+        line += f" {unexecuted} of them {verb} never executed by any test."
+    return line
 
 
 def below_threshold(score: float, fail_under: float | None) -> bool:
