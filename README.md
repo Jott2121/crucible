@@ -257,5 +257,6 @@ Companion instrument: [sabot](https://github.com/Jott2121/sabot) — the same qu
 level up. crucible asks whether your tests would notice a planted defect; sabot plants a
 fault inside a *running* multi-agent pipeline and asks whether the pipeline's own reviewer
 and guardrail stages notice. Measured across LangGraph, CrewAI and AutoGen/Magentic-One,
-the median own-check detection rate was 16.7%, and the most common outcome was a correct
-answer with nothing flagging the fault.
+the median own-check detection rate was 16.7%. The sharpest result: when a write tool
+reported success but wrote nothing, no reviewer flagged it and the task failed in every
+cell, on all three frameworks.
