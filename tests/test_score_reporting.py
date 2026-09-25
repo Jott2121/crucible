@@ -163,3 +163,14 @@ def test_action_fail_under_message_counts_never_executed_mutants(untested_json, 
                             env={"FAIL_UNDER": "50"})
     assert proc.returncode == 1
     assert "2 injected defects survived this suite." in proc.stdout
+
+
+def test_action_pr_comment_uses_the_singular_for_one_never_executed_mutant(
+        tmp_path, monkeypatch, capsys):
+    one_unexecuted = MutationOutcome(
+        counts={"killed": 2, "survived": 0, "total": 3, "no_tests": 1, "timeout": 0},
+        survivors=["pkg.calc.x_clamp__mutmut_1"], all_mutants=3)
+    d = _score_json(tmp_path, monkeypatch, capsys, one_unexecuted)
+    proc = _run_action_step("Comment on the PR", d, tmp_path)
+    assert proc.returncode == 0, proc.stderr
+    assert "> 1 of them was never executed by any test." in proc.stdout
