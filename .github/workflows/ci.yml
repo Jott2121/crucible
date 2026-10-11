@@ -40,20 +40,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - name: Block employer / export-control markers and committed build junk
+      # Scans every tracked file; blocked terms live only as hashes in
+      # .github/blocked-terms.sha256, and a missing or empty hash file fails the job.
+      # BLOCKED_TERMS is an optional comma-separated secret for extra terms.
+      - name: Block employer terms and export-control markers
+        env:
+          BLOCKED_TERMS: ${{ secrets.BLOCKED_TERMS }}
+        run: python3 scripts/scan_blocked_terms.py
+      - name: Block committed build junk
         run: |
-          # Policy text that names the prohibited employer lives in AGENTS.md and
-          # .cursor/ (and the pattern itself lives in this workflow). Those paths
-          # are excluded. PROPRIETARY is case-sensitive so the English adjective
-          # "proprietary" in docs/RELATED-WORK.md is not a hit.
-          # Author bylines — paper draft affiliation lines and the pyproject
-          # authors field — are dropped so the existing bio cannot false-positive.
-          pattern='lockheed|\blmco\b|\bCUI\b|\bITAR\b|EXPORT CONTROLLED'
-          hits="$(git grep -nIiE "$pattern" -- . ':!.cursor' ':!AGENTS.md' ':!.github' || true)"
-          props="$(git grep -nE '\bPROPRIETARY\b' -- . ':!.cursor' ':!AGENTS.md' ':!.github' || true)"
-          filtered="$(printf '%s\n%s\n' "$hits" "$props" | sed '/^$/d' | grep -v -E '^(paper/DRAFT-[^:]+\.md:[0-9]+:\*\*Jeff Otterson\*\*|pyproject\.toml:[0-9]+:authors = )' || true)"
-          if [ -n "$filtered" ]; then
-            printf '%s\n' "$filtered"
-            exit 1
-          fi
           ! git ls-files | grep -E '(__pycache__/|\.pyc$|^\.coverage$)'
