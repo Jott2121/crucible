@@ -50,7 +50,7 @@ dependencies = [
     #      so it fails OPEN on any subject whose tests fall outside them.
     # Neither is a promise mutmut makes, so a new minor still has to be tested
     # here before it is allowed in.
-    "mutmut==3.7.0",
+    "mutmut==3.8.0",
 ]
 
 [project.urls]
