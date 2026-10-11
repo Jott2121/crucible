@@ -1,0 +1,14 @@
+---
+description: Python conventions for crucible
+globs: "**/*.py"
+alwaysApply: false
+---
+# Python
+
+- This repo requires Python >=3.11 (`requires-python` in pyproject.toml). CI runs 3.11, 3.12, and 3.13.
+- Stdlib-first. A new runtime dependency needs a one-line justification in the PR and a pinned lower bound in pyproject. `mutmut` stays exact-pinned (`==3.7.0`).
+- Type hints on all public functions; `from __future__ import annotations` where useful.
+- No bare `except:`; no `except Exception: pass` in any decision path. Raise specific exceptions.
+- Deterministic by default: seed every RNG, sort dict/set iteration before hashing or printing, freeze timestamps in tests.
+- Secrets via `os.environ` only; never log secret values; never write them into `experiments/runs/` or `experiments/runs-b/`.
+- Use `pathlib`; no hard-coded absolute paths (no `/Users/...`).

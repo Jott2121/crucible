@@ -1,0 +1,13 @@
+---
+description: Testing rules — applies when editing tests or code under test
+globs: "tests/**,**/test_*.py,**/*_test.py,pyproject.toml,pytest.ini,setup.cfg"
+alwaysApply: false
+---
+# Tests
+
+- Write the failing test first, show it failing, then make it pass. Paste both runs in the PR.
+- Test behavior, not implementation. Exercise real entry points (`crucible` CLI, `score`, the Action's embedded Python), not only private helpers.
+- Every guard/gate gets a deny-path test: error, timeout, malformed input, empty input.
+- Never add `skip`, `xfail`, or loosen assertions to get green. Never lower `--cov-fail-under` (90), pyproject `fail_under`, or the mutation workflow's `fail-under`.
+- Tests must run offline with no API keys. Live-model tests are marked `integration` and deselected by default (`addopts` and CI). The `slow` marker shells out to mutmut; run it, do not deselect it to go green.
+- No network, no wall-clock sleeps, no order dependence. Use fixtures with fixed seeds.
