@@ -26,7 +26,7 @@ No mypy gate. A task is not done until `ruff check src tests` and the pytest com
 `python experiments/analyze.py` and `python experiments/analyze_b.py` rewrite `experiments/results.json` and `experiments/results-b.json`. Prefer `check_receipts.py`, which compares in memory.
 
 ## Non-negotiables
-1. **No employer data. Ever.** Personal work on personal equipment. Never add, paste, paraphrase, or "anonymize" anything from Lockheed Martin systems, documents, tickets, chats, or datasets. No employer names in fixtures, no internal acronyms, no realistic HR records. Synthetic data only. If a prompt looks like it came from work, stop and ask.
+1. **No employer data. Ever.** Personal work on personal equipment. Never add, paste, paraphrase, or "anonymize" anything from an employer's systems, workforce data, internal URLs, documents, tickets, chats, or datasets, or any proprietary or export-controlled material. No employer names in fixtures, commits, or PRs, no internal acronyms, no realistic HR records. Synthetic data only. If a prompt looks like it came from work, stop and ask. CI's `no-employer-data` job enforces this with `scripts/scan_blocked_terms.py`, which matches hashed terms in `.github/blocked-terms.sha256`; add terms as hashes (`--hash`), never in plain text.
 2. **Receipts over hype.** Every number in README, docs, PR descriptions, or posts must be reproducible from a committed command. Link the command and the artifact (`experiments/runs/`, `experiments/runs-b/`, CI log).
 3. **Honest benchmarks.** Report nulls and regressions at the same prominence as wins. State n, seeds, model + version, date, and cost. Protocols are `experiments/PROTOCOL.md` and `experiments/PROTOCOL-B.md`, frozen before the runs. Never tune on the test set. Never delete an inconvenient run; mark it superseded with a reason.
 4. **Fail closed.** Gates, validators, and guards deny on error, timeout, missing input, or unparseable output. Never weaken a guard to make a test pass. Never catch-and-ignore exceptions in a decision path.
@@ -55,7 +55,7 @@ No mypy gate. A task is not done until `ruff check src tests` and the pytest com
 - `experiments/` — frozen protocols, receipts (`runs/`, `runs-b/`, `seeds/`), `analyze.py`, `analyze_b.py`, `RESULTS.md`, `RESULTS-B.md`
 - `paper/` — manuscript drafts. Author byline only; do not add employer material
 - `docs/` — `MUTATION.md`, `RELATED-WORK.md`, demo assets, `superpowers/` plans and specs
-- `scripts/` — probes and `check_receipts.py`
+- `scripts/` — probes, `check_receipts.py`, and `scan_blocked_terms.py` (the employer-data gate)
 - `skills/harden-tests/` — operator ritual, shipped as the plugin. `.claude-plugin/` holds the manifests
 - `.claude/` — repo-local Claude Code settings, ruff hook, `/release` skill. Does **not** ship in the plugin
 - `.cursor/` — rules, Bugbot, hooks, MCP, `verify-receipts` skill
