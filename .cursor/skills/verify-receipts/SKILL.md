@@ -17,7 +17,7 @@ description: Use before opening or updating a PR, or when README/docs numbers ch
    The `slow` marker shells out to mutmut and takes minutes. Do not deselect it to go green. Do not lower `--cov-fail-under` (90), pyproject `fail_under`, or mutation `fail-under` (`"95"`).
    `integration` tests call live model APIs and are deselected by default. Do not run them in CI.
 2. `git diff origin/main -- README.md docs/ experiments/RESULTS.md experiments/RESULTS-B.md paper/` — list every number that changed. For each, re-run `python scripts/check_receipts.py`. If you can't reproduce it, mark it UNVERIFIED and stop; do not open the PR as ready.
-3. Grep the diff for employer-data and secret patterns (see `.cursor/rules/40-security-and-data.mdc`). Any hit outside the existing author byline on the paper drafts and the `authors` field in `pyproject.toml` = stop and report.
+3. Run `python3 scripts/scan_blocked_terms.py` (employer terms and export-control markers; must exit 0) and grep the diff for secret patterns (see `.cursor/rules/40-security-and-data.mdc`). Any hit = stop and report.
 4. Confirm no thresholds were lowered (`--cov-fail-under`, mutation `fail-under`, pyproject `fail_under`) and no tests were skipped or removed.
 5. Output a Markdown block:
    - Commands run + pass/fail

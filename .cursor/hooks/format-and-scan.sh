@@ -19,11 +19,10 @@ case "$rel" in
     ;;
 esac
 
-# PROPRIETARY is case-sensitive so the English adjective "proprietary" in
-# docs/RELATED-WORK.md is not a hit. Author bylines are not special-cased here;
-# CI drops them. A warning in the hook log is still useful.
-if grep -EIiq 'lockheed|\blmco\b|\bCUI\b|\bITAR\b|EXPORT CONTROLLED|BEGIN (RSA|OPENSSH) PRIVATE KEY|xai-[A-Za-z0-9]{20,}' "$f" \
-   || grep -EIq '\bPROPRIETARY\b' "$f"; then
+# Employer terms (hashed) and export-control markers come from the same scanner
+# CI runs; a scanner error counts as a hit. A warning in the hook log is still useful.
+if ! python3 "$root/scripts/scan_blocked_terms.py" "$f" >/dev/null 2>&1 \
+   || grep -EIq 'BEGIN (RSA|OPENSSH) PRIVATE KEY|xai-[A-Za-z0-9]{20,}' "$f"; then
   mkdir -p .cursor/hook-logs
   echo "$(date -u +%FT%TZ) WARN employer/secret pattern in $f" >> .cursor/hook-logs/warnings.log
 fi

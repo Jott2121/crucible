@@ -1,0 +1,8 @@
+# SHA-256 of each blocked employer term, normalized to lowercase words joined by
+# single spaces, followed by its word count. Never commit the terms themselves.
+# Add one with: python scripts/scan_blocked_terms.py --hash 'the term'
+# scripts/scan_blocked_terms.py fails closed if this file is missing or empty.
+cb5c36fe59056a6a1afb4b133d30981f672257d6c372bace38798b504fc0c6f2 1
+c376013522845bfce25461e2335a75a6808fd9365beba1c8ad75200ff2488ea3 2
+f277af9c64194778d745db1e6f142c724110717970ed251b4611f28e683957ae 1
+8c6a10a10f5de2282f957c71717b5a15ab371af5bd781b4d38e72f556964da06 1

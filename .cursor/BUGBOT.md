@@ -6,7 +6,7 @@ Flag as **blocking**:
 2. Lowered thresholds: `--cov-fail-under`, pyproject `fail_under`, mutation `fail-under` in `.github/workflows/mutation.yml`, retry/timeout bounds removed.
 3. Tests that were deleted, skipped, xfailed, or had assertions weakened without a stated reason in the PR body.
 4. README, `experiments/RESULTS*.md`, or `paper/` numbers that changed without a reproducing command (`python scripts/check_receipts.py`) or artifact in the PR.
-5. Any content that looks like employer/corporate data: company names (Lockheed, LM, LMCO), internal acronyms, CUI/ITAR markings, real-looking employee records, internal URLs. The author byline on the paper drafts is the existing identification; do not add employer material anywhere else. This repo is personal work only.
+5. Any content that looks like employer/corporate data: the employer's name or its abbreviations, internal acronyms, controlled-information or export-control markings, real-looking employee records, internal URLs, proprietary material. The author byline on the paper drafts is the existing identification; do not add employer material anywhere else. This repo is personal work only. Also blocking: any change that empties or loosens `.github/blocked-terms.sha256` or `scripts/scan_blocked_terms.py`, or that writes a blocked term in plain text to explain one.
 6. Secrets, tokens, `.env` files, or absolute personal paths committed.
 7. Unpinned GitHub Actions (must be full SHA) or widened workflow `permissions:`.
 8. Live network / model calls added to the default test path (`integration` must stay deselected).
