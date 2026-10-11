@@ -61,3 +61,26 @@ def test_unusable_command_is_denied():
 def test_invalid_json_exits_nonzero():
     result = _run("{")
     assert result.returncode != 0
+
+
+def test_rewrite_flags_are_denied_in_any_position():
+    for command in (
+        "git push --force",
+        "git push origin --force",
+        "git push origin main --force",
+        "git push -f",
+        "git push origin -f",
+        "git push origin HEAD:main -f",
+        "git push -uf origin HEAD",
+        "git push --force-with-lease",
+        "git push origin --force-with-lease",
+        "git push origin --force-with-lease=main",
+        "git reset --hard",
+        "git reset --hard HEAD",
+        "git reset HEAD --hard",
+    ):
+        assert _permission({"command": command}) == "deny", command
+    assert _permission({"command": "git push"}) == "ask"
+    assert _permission({"command": "git push origin main"}) == "ask"
+    assert _permission({"command": "git reset --soft HEAD"}) == "allow"
+    assert _permission({"command": "git reset HEAD"}) == "allow"

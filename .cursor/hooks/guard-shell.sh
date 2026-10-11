@@ -48,9 +48,35 @@ esac
 if [ "$pull_short_rebase" -eq 1 ]; then
   deny "History rewrite blocked by repo policy."
 fi
+# Flag position does not matter: `git push origin --force` and
+# `git reset HEAD --hard` are the same bans as `git push --force` and
+# `git reset --hard`. Combined shorts such as `-uf` count as `-f`.
+saw_push=0
+saw_reset=0
+force_flag=0
+hard_flag=0
+for token in $cmd; do
+  case "$token" in
+    push) saw_push=1 ;;
+    reset) saw_reset=1 ;;
+    --force*) force_flag=1 ;;
+    --hard) hard_flag=1 ;;
+    -f) force_flag=1 ;;
+    -[!-]*)
+      case "${token#-}" in
+        *f*) force_flag=1 ;;
+      esac
+      ;;
+  esac
+done
+if [ "$saw_push" -eq 1 ] && [ "$force_flag" -eq 1 ]; then
+  deny "Force-push blocked by repo policy."
+fi
+if [ "$saw_reset" -eq 1 ] && [ "$hard_flag" -eq 1 ]; then
+  deny "History rewrite blocked by repo policy."
+fi
 case "$cmd" in
-  *"push --force"*|*"push -f"*|*"--force-with-lease"*) deny "Force-push blocked by repo policy." ;;
-  *"reset --hard"*|*"rebase"*)                        deny "History rewrite blocked by repo policy." ;;
+  *"rebase"*) deny "History rewrite blocked by repo policy." ;;
   *"git tag"*|*"twine upload"*|*"uv publish"*|*"gh release"*) deny "Releases/publishing are human-only." ;;
   *"rm -rf /"*|*"rm -rf ~"*|*'rm -rf $HOME'*)         deny "Destructive delete blocked." ;;
   *"curl"*"| sh"*|*"curl"*"| bash"*|*"wget"*"| sh"*)   deny "Pipe-to-shell blocked." ;;
