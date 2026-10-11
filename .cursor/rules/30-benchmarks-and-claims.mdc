@@ -1,0 +1,15 @@
+---
+description: Use when writing or changing README numbers, experiment results, paper drafts, or PR descriptions with metrics
+globs: "README.md,docs/**,experiments/**,paper/**,CHANGELOG.md"
+alwaysApply: false
+---
+# Benchmarks and public claims
+
+- Pre-register before comparing: hypothesis, metric, n, decision rule. This repo's frozen protocols are `experiments/PROTOCOL.md` and `experiments/PROTOCOL-B.md`, committed before the runs.
+- Every published number links to: the command (`python scripts/check_receipts.py`, or `experiments/analyze.py` / `experiments/analyze_b.py`), the commit SHA, the raw artifact under `experiments/runs/` or `experiments/runs-b/`, and the date.
+- Include the baseline and the null. If a result is not significant, say so in the headline, not a footnote.
+- State limits up front (n, single run per cell, prompt shape, model versions, cost).
+- Don't round in your favor. Show intervals where you have them. The published three-decimal intervals are the `.3f` rendering of the means in `experiments/results-b.json`.
+- Never edit raw run outputs under `experiments/runs/`, `experiments/runs-b/`, or `experiments/seeds/`. Supersede with a new run and a note.
+- If a README number changes, the PR must show before → after and the command that produced it. `scripts/check_receipts.py` must pass.
+- Cross-check numbers that appear in more than one place (README, `experiments/RESULTS.md`, `experiments/RESULTS-B.md`, `paper/`) and fix drift in the same PR.
