@@ -11,8 +11,8 @@ HASH_FILE = ROOT / ".github" / "blocked-terms.sha256"
 CI = ROOT / ".github" / "workflows" / "ci.yml"
 
 
-def _scan(*args: str, cwd: Path = ROOT, blocked_terms: str = "") -> subprocess.CompletedProcess[str]:
-    env = {**os.environ, "BLOCKED_TERMS": blocked_terms}
+def _scan(*args: str, cwd: Path = ROOT, markers: str = "") -> subprocess.CompletedProcess[str]:
+    env = {**os.environ, "EMPLOYER_MARKERS": markers}
     return subprocess.run(
         [sys.executable, str(SCANNER), *args],
         cwd=cwd,
@@ -83,27 +83,65 @@ def test_whole_words_only(tmp_path):
     assert _scan("--hash-file", str(hashes), str(clean)).returncode == 0
 
 
-def test_blocked_terms_env_adds_terms_without_echoing_them(tmp_path):
+def test_employer_markers_regex_adds_terms_without_echoing_them(tmp_path):
     planted = tmp_path / "results.json"
     planted.write_text('{"site": "Quuxfield Plant 9"}\n', encoding="utf-8")
-    result = _scan(str(planted), blocked_terms=" , quuxfield plant ,other")
+    result = _scan(str(planted), markers=r"nomatch|quuxfield\s+plant")
     assert result.returncode == 1
-    assert "blocked term" in result.stdout
+    assert f"{planted}:1: EMPLOYER_MARKERS match" in result.stdout
     assert "quuxfield" not in (result.stdout + result.stderr).lower()
 
 
-def test_whole_tree_mode_scans_data_folders_and_paths(tmp_path):
+def test_unset_employer_markers_still_enforces_hashes(tmp_path):
+    hashes = tmp_path / "terms.sha256"
+    hashes.write_text(_hash_line("zorblax"), encoding="utf-8")
+    planted = tmp_path / "x.txt"
+    planted.write_text("Zorblax\n", encoding="utf-8")
+    env = {k: v for k, v in os.environ.items() if k != "EMPLOYER_MARKERS"}
+    result = subprocess.run(
+        [sys.executable, str(SCANNER), "--hash-file", str(hashes), str(planted)],
+        env=env, text=True, capture_output=True, check=False,
+    )
+    assert result.returncode == 1
+    assert "blocked term" in result.stdout
+
+
+def test_invalid_employer_markers_fails_closed_without_echoing(tmp_path):
+    clean = tmp_path / "clean.txt"
+    clean.write_text("clean\n", encoding="utf-8")
+    result = _scan(str(clean), markers="quuxfield(")
+    assert result.returncode == 2
+    assert "not a valid regex" in result.stderr
+    assert "quuxfield" not in result.stderr
+
+
+def test_whole_tree_mode_scans_data_policy_and_config_folders_and_paths(tmp_path):
     repo = _git_repo(tmp_path / "repo", {
         "README.md": "clean\n",
         "results/run1/out.txt": "seeded from Zorblax\n",
         "fixtures/zorblax_roster.csv": "a,b\n",
+        "AGENTS.md": "never use zorblax data\n",
+        ".cursor/rules/00.mdc": "no Zorblax\n",
+        ".github/workflows/ci.yml": "pattern='zorblax'\n",
     })
     hashes = tmp_path / "terms.sha256"
     hashes.write_text(_hash_line("zorblax"), encoding="utf-8")
     result = _scan("--hash-file", str(hashes), cwd=repo)
     assert result.returncode == 1
-    assert "results/run1/out.txt:1: blocked term" in result.stdout
-    assert "fixtures/zorblax_roster.csv: blocked term in path" in result.stdout
+    for hit in (
+        "results/run1/out.txt:1: blocked term",
+        "fixtures/zorblax_roster.csv: blocked term in path",
+        "AGENTS.md:1: blocked term",
+        ".cursor/rules/00.mdc:1: blocked term",
+        ".github/workflows/ci.yml:1: blocked term",
+    ):
+        assert hit in result.stdout
+
+
+def test_hash_file_itself_is_not_scanned(tmp_path):
+    repo = _git_repo(tmp_path / "repo", {"terms.sha256": _hash_line("zorblax")})
+    result = _scan("--hash-file", "terms.sha256", cwd=repo, markers="[0-9a-f]{64}")
+    assert result.returncode == 0, result.stdout
 
 
 def test_generated_junk_dirs_are_skipped(tmp_path):
@@ -131,10 +169,10 @@ def test_missing_hash_file_fails_closed(tmp_path):
     assert "missing" in result.stderr
 
 
-def test_empty_hash_file_fails_closed_even_with_env_terms(tmp_path):
+def test_empty_hash_file_fails_closed_even_with_employer_markers(tmp_path):
     hashes = tmp_path / "terms.sha256"
     hashes.write_text("# comments only\n\n", encoding="utf-8")
-    result = _scan("--hash-file", str(hashes), blocked_terms="zorblax")
+    result = _scan("--hash-file", str(hashes), markers="zorblax")
     assert result.returncode == 2
     assert "no entries" in result.stderr
 
@@ -152,5 +190,10 @@ def test_unreadable_target_fails_closed(tmp_path):
 def test_ci_runs_scanner_with_optional_secret():
     ci = CI.read_text(encoding="utf-8")
     assert "python3 scripts/scan_blocked_terms.py" in ci
-    assert "BLOCKED_TERMS: ${{ secrets.BLOCKED_TERMS }}" in ci
+    assert "EMPLOYER_MARKERS: ${{ secrets.EMPLOYER_MARKERS }}" in ci
     assert "':!" not in ci
+
+
+def test_scanner_source_needs_no_self_exemption():
+    result = _scan(str(SCANNER), str(Path(__file__)))
+    assert result.returncode == 0, result.stdout

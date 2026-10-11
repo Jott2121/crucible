@@ -40,12 +40,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      # Scans every tracked file; blocked terms live only as hashes in
-      # .github/blocked-terms.sha256, and a missing or empty hash file fails the job.
-      # BLOCKED_TERMS is an optional comma-separated secret for extra terms.
+      # Scans every tracked file, AGENTS.md, .cursor/ and .github/ included. The
+      # base is the committed hash list (.github/blocked-terms.sha256); a missing
+      # or empty hash file fails the job, so it never passes just because the
+      # optional EMPLOYER_MARKERS secret (an extra regex alternation) is unset.
       - name: Block employer terms and export-control markers
         env:
-          BLOCKED_TERMS: ${{ secrets.BLOCKED_TERMS }}
+          EMPLOYER_MARKERS: ${{ secrets.EMPLOYER_MARKERS }}
         run: python3 scripts/scan_blocked_terms.py
       - name: Block committed build junk
         run: |

@@ -1,20 +1,24 @@
 #!/usr/bin/env python3
 """Fail-closed scan for blocked employer terms and export-control markers.
 
-Blocked terms are committed only as SHA-256 hashes of their normalized form
-(lowercase ASCII words joined by single spaces) in .github/blocked-terms.sha256,
-so the guard never has to spell out what it blocks. Every word and run of
+The fail-closed base is .github/blocked-terms.sha256: blocked terms committed only
+as SHA-256 hashes of their normalized form (lowercase ASCII words joined by single
+spaces), so the guard never has to spell out what it blocks. Every word and run of
 adjacent words in each scanned file, and in its path, is normalized, hashed, and
-compared. BLOCKED_TERMS (comma-separated, e.g. from a CI secret) adds terms at
-runtime. Hits are reported by location and hash prefix only, so a secret term is
-never echoed into a public log.
+compared. It catches the employer with no secret set.
+
+EMPLOYER_MARKERS (optional, e.g. an Actions secret of the same name) is a regex
+alternation matched case-insensitively against every line on top of the hashes.
+Hits are reported by location only, never by matched text, so a secret term is
+not echoed into a public log.
 
     python scripts/scan_blocked_terms.py              # every tracked file
     python scripts/scan_blocked_terms.py FILE ...     # only these files
     python scripts/scan_blocked_terms.py --hash TERM  # line to add to the hash file
 
 Exit status: 0 clean, 1 hits, 2 configuration or input error. A missing, empty,
-or malformed hash file is an error, never a pass.
+or malformed hash file, or an EMPLOYER_MARKERS that does not compile, is an
+error, never a pass.
 """
 from __future__ import annotations
 
@@ -28,20 +32,20 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_HASH_FILE = ROOT / ".github" / "blocked-terms.sha256"
-SELF = Path(__file__).resolve()
 
 # Generated or vendored trees only. Data folders (results, experiments, fixtures)
-# are scanned like everything else.
+# and policy/config folders (.cursor, .github, AGENTS.md) are scanned like
+# everything else.
 JUNK_DIRS = frozenset({".git", "node_modules", "build", "dist", "__pycache__", ".venv", "mutants"})
 
-# Readable markers, not hashed: they name a marking, not the employer. This file
-# is the only one exempt from them, because it has to spell them out.
-# PROPRIETARY is case-sensitive so the English adjective in docs is not a hit.
+# Readable markers, not hashed: they name a marking, not the employer. The
+# bracketed letters keep this file from matching its own patterns, so it needs no
+# exemption. The last one is case-sensitive so the lowercase adjective is not a hit.
 MARKERS = (
-    re.compile(r"\bCUI\b", re.IGNORECASE),
-    re.compile(r"\bITAR\b", re.IGNORECASE),
-    re.compile(r"EXPORT CONTROLLED", re.IGNORECASE),
-    re.compile(r"\bPROPRIETARY\b"),
+    re.compile(r"\bC[U]I\b", re.IGNORECASE),
+    re.compile(r"\bIT[A]R\b", re.IGNORECASE),
+    re.compile(r"EXPORT[ ]CONTROLLED", re.IGNORECASE),
+    re.compile(r"\bPROPRIETAR[Y]\b"),
 )
 
 WORD = re.compile(r"[a-z0-9]+")
@@ -60,7 +64,7 @@ def digest(words: list[str]) -> str:
     return hashlib.sha256(" ".join(words).encode("utf-8")).hexdigest()
 
 
-def load_hashes(hash_file: Path, extra_terms: str) -> dict[str, int]:
+def load_hashes(hash_file: Path) -> dict[str, int]:
     """Map each blocked-term hash to its word count."""
     if not hash_file.is_file():
         raise ConfigError(f"blocked-terms hash file missing: {hash_file}")
@@ -75,11 +79,17 @@ def load_hashes(hash_file: Path, extra_terms: str) -> dict[str, int]:
         blocked[match.group(1)] = int(match.group(2))
     if not blocked:
         raise ConfigError(f"blocked-terms hash file has no entries: {hash_file}")
-    for term in extra_terms.split(","):
-        words = normalize(term)
-        if words:
-            blocked[digest(words)] = len(words)
     return blocked
+
+
+def load_markers(raw: str) -> re.Pattern[str] | None:
+    if not raw.strip():
+        return None
+    try:
+        return re.compile(raw, re.IGNORECASE)
+    except re.error as exc:
+        # The pattern may be secret, so name only the failure.
+        raise ConfigError(f"EMPLOYER_MARKERS is not a valid regex ({exc.msg})") from None
 
 
 def tracked_files() -> list[Path]:
@@ -96,10 +106,11 @@ def tracked_files() -> list[Path]:
 
 
 def _term_hits(
-    tokens: list[tuple[str, int]], blocked: dict[str, int], sizes: list[int], cache: dict[str, str | None]
+    tokens: list[tuple[str, int]], blocked: dict[str, int], cache: dict[str, str | None]
 ) -> list[tuple[int, str]]:
-    hits = []
+    sizes = sorted(set(blocked.values()))
     words = [t for t, _ in tokens]
+    hits = []
     for i, (_, line) in enumerate(tokens):
         for n in sizes:
             if i + n > len(words):
@@ -113,12 +124,18 @@ def _term_hits(
     return hits
 
 
-def scan_file(path: Path, blocked: dict[str, int], cache: dict[str, str | None]) -> list[str]:
-    sizes = sorted(set(blocked.values()))
+def scan_file(
+    path: Path,
+    blocked: dict[str, int],
+    extra: re.Pattern[str] | None,
+    cache: dict[str, str | None],
+) -> list[str]:
     findings = [
         f"{path}: blocked term in path (sha256 {h[:12]})"
-        for _, h in _term_hits([(w, 0) for w in normalize(str(path))], blocked, sizes, cache)
+        for _, h in _term_hits([(w, 0) for w in normalize(str(path))], blocked, cache)
     ]
+    if extra and extra.search(str(path)):
+        findings.append(f"{path}: EMPLOYER_MARKERS match in path")
     if path.is_symlink():
         return findings
     try:
@@ -127,18 +144,18 @@ def scan_file(path: Path, blocked: dict[str, int], cache: dict[str, str | None])
         raise ConfigError(f"cannot read {path}: {exc}") from exc
     if b"\0" in data[:8192]:
         return findings
-    text = data.decode("utf-8", errors="replace")
-    lines = text.splitlines()
+    lines = data.decode("utf-8", errors="replace").splitlines()
     tokens = [(w, n) for n, line in enumerate(lines, 1) for w in WORD.findall(line.lower())]
     findings += [
         f"{path}:{line}: blocked term (sha256 {h[:12]})"
-        for line, h in _term_hits(tokens, blocked, sizes, cache)
+        for line, h in _term_hits(tokens, blocked, cache)
     ]
-    if path.resolve() != SELF:
-        for n, line in enumerate(lines, 1):
-            for marker in MARKERS:
-                if marker.search(line):
-                    findings.append(f"{path}:{n}: export-control marker /{marker.pattern}/")
+    for n, line in enumerate(lines, 1):
+        if extra and extra.search(line):
+            findings.append(f"{path}:{n}: EMPLOYER_MARKERS match")
+        for marker in MARKERS:
+            if marker.search(line):
+                findings.append(f"{path}:{n}: export-control marker /{marker.pattern}/")
     return findings
 
 
@@ -158,10 +175,12 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     try:
-        blocked = load_hashes(args.hash_file, os.environ.get("BLOCKED_TERMS", ""))
-        files = args.files or tracked_files()
+        blocked = load_hashes(args.hash_file)
+        extra = load_markers(os.environ.get("EMPLOYER_MARKERS", ""))
+        hash_file = args.hash_file.resolve()
+        files = [p for p in (args.files or tracked_files()) if p.resolve() != hash_file]
         cache: dict[str, str | None] = {}
-        findings = [f for path in files for f in scan_file(path, blocked, cache)]
+        findings = [f for path in files for f in scan_file(path, blocked, extra, cache)]
     except ConfigError as exc:
         print(f"scan_blocked_terms: {exc}", file=sys.stderr)
         return 2
@@ -170,7 +189,8 @@ def main(argv: list[str] | None = None) -> int:
         print("\n".join(findings))
         print(f"scan_blocked_terms: {len(findings)} hit(s) in {len(files)} file(s)", file=sys.stderr)
         return 1
-    print(f"scan_blocked_terms: clean ({len(files)} files, {len(blocked)} blocked terms)")
+    extra_note = ", plus EMPLOYER_MARKERS" if extra else ""
+    print(f"scan_blocked_terms: clean ({len(files)} files, {len(blocked)} hashed terms{extra_note})")
     return 0
 
 
