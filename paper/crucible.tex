@@ -64,30 +64,17 @@
   urlcolor={Blue},
   pdfcreator={LaTeX via pandoc}}
 
-\author{}
+\title{Adversarial Test-Hardening for AI-Written Code: An Instrument
+Autopsy and a Pre-Registered Causal Estimate of the Critic Loop}
+\author{Jeff Otterson\\
+W. P. Carey School of Business, Arizona State University}
 \date{}
 
 \begin{document}
 
-\section{Adversarial Test-Hardening for AI-Written Code: An Instrument
-Autopsy and a Pre-Registered Causal Estimate of the Critic
-Loop}\label{adversarial-test-hardening-for-ai-written-code-an-instrument-autopsy-and-a-pre-registered-causal-estimate-of-the-critic-loop}
+\maketitle
 
-\textbf{Jeff Otterson} (W. P. Carey School of Business, Arizona State
-University)
-
-\begin{quote}
-Disclosure: This manuscript was drafted by an AI assistant from the
-author's frozen, pre-registered experimental artifacts under the
-author's direction; every quantitative and design claim was checked
-against the committed sources. The tooling is disclosed rather than
-hidden, consistent with the paper's subject (see Section 3.9).
-\end{quote}
-
-\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
-
-\subsection{Abstract}\label{abstract}
-
+\begin{abstract}
 Large language models increasingly write both code and the tests meant
 to check it, and coverage, the usual measure of a suite, records what
 ran rather than what was verified. We study an adversarial
@@ -101,7 +88,7 @@ same-lineage-loop cell could not be scored), the loop killed 105 mutants
 that one-shot generation missed and lost none, and the
 cross-lineage-Critic question (H2) returned a pre-declared null; the
 central finding was an autopsy: an earlier analysis had reported a
-cross-lineage effect at p = 9.5 x 10\^{}-66 that was a
+cross-lineage effect at $p = 9.5 \times 10^{-66}$ that was a
 lineage-correlated instrument artifact, an output cap that silently
 truncated the verbose model, caught only by adversarial review of the
 completed analysis. A subsequent cross-model review of this manuscript
@@ -128,6 +115,15 @@ harness that runs them, that adversarial cross-model review catches what
 mechanical gates miss at the instrument, analysis, and manuscript levels
 alike, and we release both protocols, all receipts, and the analysis
 code.
+\end{abstract}
+
+\begin{quote}
+\small Disclosure: This manuscript was drafted by an AI assistant from the
+author's frozen, pre-registered experimental artifacts under the
+author's direction; every quantitative and design claim was checked
+against the committed sources. The tooling is disclosed rather than
+hidden, consistent with the paper's subject (see Section 3.9).
+\end{quote}
 
 \begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
 
@@ -189,7 +185,7 @@ limitation stated where the arms are defined (Section 3.2).
 
 The paper's central contribution is neither of those results. An earlier
 version of the H2 analysis reported an overwhelming cross-lineage effect
-(pooled p = 9.5 x 10\^{}-66) that was almost entirely an instrument
+(pooled $p = 9.5 \times 10^{-66}$) that was almost entirely an instrument
 artifact: an undetected output ceiling silently truncating the verbose
 model's replies, correlated with exactly the variable under test.
 Section 4.4 reports that incident once, with receipts, and Section 5.2
@@ -1320,7 +1316,7 @@ the truncated reply, credited zero kills, and ended the cell at
 Delta\_same = 0, while the cross-provider critic, from the identical
 frozen state, killed 39 of the 40 remaining survivors. That single
 replicate contributes 39 of the 66 total gap kills (59\%). The mechanism
-that manufactured Experiment 1's false p = 9.5 x 10\^{}-66, verbose
+that manufactured Experiment 1's false $p = 9.5 \times 10^{-66}$, verbose
 replies meeting a mechanical output ceiling, is therefore a recurring
 operational property of this model-harness pairing, and detection makes
 it visible data rather than a laundered artifact, but detection does not
@@ -1435,7 +1431,7 @@ with nothing in the number announcing that it measured the harness
 rather than the models. When detection was added, the four affected
 cells were invalidated; corrected-instrument replacements were run where
 obtainable, with the one unresolvable cell scored missing, and the
-apparent effect collapsed from p = 9.5 x 10\^{}-66 to p = 0.0625
+apparent effect collapsed from $p = 9.5 \times 10^{-66}$ to p = 0.0625
 (Section 4.4 gives the per-subject decomposition and the variance caveat
 on the single-rerun cells).
 
@@ -1567,7 +1563,7 @@ validated.
 \subsubsection{5.5 Why the autopsy and the review loop are the
 contribution}\label{why-the-autopsy-and-the-review-loop-are-the-contribution}
 
-Publishing the p = 9.5 x 10\^{}-66 result would have violated no
+Publishing the $p = 9.5 \times 10^{-66}$ result would have violated no
 procedure: it was pre-registered, directionally as hypothesized, and
 produced by real runs. Publishing H1 as a causal finding would have
 violated none either; the first complete draft of this manuscript did,
@@ -1721,6 +1717,16 @@ rather than modeled.
 
 \begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
 
+\subsection{Code and Data Availability}\label{code-and-data-availability}
+
+The tool, both pre-registered protocols, all per-run receipts and frozen
+seeds, the deviations log, and the analysis scripts are in the public
+repository \url{https://github.com/Jott2121/crucible} (MIT license). The
+reported statistics are recomputed from the committed receipts by
+\texttt{python scripts/check\_receipts.py}.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
 \subsection{References}\label{references}
 
 The inline markers of the form {[}arXiv:XXXX{]} in the text identify the
@@ -1800,15 +1806,7 @@ entries below.
   arXiv:2502.04313.
 \item
   TestForge: K. Jain, C. Le Goues. ``TestForge: Feedback-Driven, Agentic
-  Test Suite Generation.''
-
-  \begin{enumerate}
-  \def\labelenumi{\arabic{enumi}.}
-  \setcounter{enumi}{2024}
-  \tightlist
-  \item
-    arXiv:2503.14713.
-  \end{enumerate}
+  Test Suite Generation.'' 2025. arXiv:2503.14713.
 \item
   EvoSuite: G. Fraser, A. Arcuri. ``EvoSuite: Automatic Test Suite
   Generation for Object-Oriented Software.'' ESEC/FSE 2011, pp.~416-419.

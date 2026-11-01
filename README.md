@@ -177,7 +177,7 @@ model difference — and the same mechanism recurred three times in Experiment 2
 mechanically detected and honestly scored. That autopsy and the fail-closed instrumentation
 built from it are the finding. Full tables: [`experiments/RESULTS.md`](https://github.com/Jott2121/crucible/blob/main/experiments/RESULTS.md)
 (Experiment 1), [`experiments/RESULTS-B.md`](https://github.com/Jott2121/crucible/blob/main/experiments/RESULTS-B.md) (Experiment 2), and the
-paper draft with its complete cross-model review trail in [`paper/`](https://github.com/Jott2121/crucible/tree/main/paper/).
+paper in [`paper/`](https://github.com/Jott2121/crucible/tree/main/paper/), with its drafts and complete cross-model review trail in [`docs/paper-history/`](https://github.com/Jott2121/crucible/tree/main/docs/paper-history/).
 
 ## Why trust this
 
