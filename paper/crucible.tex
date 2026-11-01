@@ -746,8 +746,10 @@ recorded in the pre-registration (16-character prefixes: tester
 provider default sampling: no temperature or top-p value is set anywhere
 in the experiment's provider configuration, and the only
 sampling-relevant request-body parameter is the output-token cap
-discussed in Section 5. Mutation testing used mutmut 3.6.0 (pinned) with
-pytest 8 or newer; the package requires Python 3.11 or newer and its
+discussed in Section 5. Mutation testing used mutmut 3 with pytest 8 or newer (Experiment 1 ran
+under the constraint mutmut \textgreater=3,\textless4 and its receipts do not
+record the exact version; Experiment 2 ran under the exact pin mutmut
+3.6.0; the current release pins 3.7.0); the package requires Python 3.11 or newer and its
 continuous integration validates on Python 3.11, 3.12, and 3.13. All
 runs executed on macOS on Apple Silicon, the platform whose fork
 behavior produced the missing-cell deadlock analyzed in Section 6. The
@@ -1585,7 +1587,7 @@ evaluations silently go wrong, and what catching them costs and pays.
 The oracle measures mutant kills, which is a proxy for fault detection,
 not fault detection itself (the gap between mutation kills and
 real-fault detection is the classic caveat of the mutation literature
-{[}Papadakis et al.~2019; Just et al., ISSTA 2014{]}, and
+{[}Papadakis et al.~2019; Just et al., FSE 2014{]}, and
 pass-on-pristine plus mutant-kill is a partial answer to the oracle
 problem {[}Barr et al.~2015{]}, not a resolution of it). Two gaps
 follow. First, we perform no equivalent-mutant detection, so some
@@ -1841,6 +1843,10 @@ entries below.
   Defects4J: R. Just, D. Jalali, M. D. Ernst. ``Defects4J: A Database of
   Existing Faults to Enable Controlled Testing Studies for Java
   Programs.'' ISSTA 2014, pp.~437-440. DOI 10.1145/2610384.2628055.
+\item
+  Mutant Validity: R. Just, D. Jalali, L. Inozemtseva, M. D. Ernst, R.
+  Holmes, G. Fraser. ``Are Mutants a Valid Substitute for Real Faults in
+  Software Testing?'' FSE 2014, pp.~654-665. DOI 10.1145/2635868.2635929.
 \item
   TOGA: E. Dinella, G. Ryan, T. Mytkowicz, S. K. Lahiri. ``TOGA: A
   Neural Method for Test Oracle Generation.'' ICSE 2022, pp.~2130-2141.
