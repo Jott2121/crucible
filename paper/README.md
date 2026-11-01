@@ -2,6 +2,8 @@
 
 **Adversarial Test-Hardening for AI-Written Code: An Instrument Autopsy and a Pre-Registered Causal Estimate of the Critic Loop**, Jeff Otterson.
 
+Preprint: [arXiv:2607.23002](https://arxiv.org/abs/2607.23002). Version 1 (25 Jul 2026) was built from `paper/arxiv-submission.tex` at commit `bf42c64`. `crucible.tex` here is the corrected text for the next version.
+
 | File | What it is |
 | --- | --- |
 | `crucible.tex` | The manuscript. Single self-contained LaTeX file: no figures, no `.bib`, standard TeX Live packages only. |
