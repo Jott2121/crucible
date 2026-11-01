@@ -307,8 +307,7 @@ backbone model to produce few, concern-specific mutants and hardening
 tests at industrial scale, under an assured generate-and-test filter.
 LLMorpheus {[}arXiv:2404.09952{]} instead generates the mutants
 themselves with a model, producing diverse bug-like mutants beyond a
-standard operator set, and a recent empirical study {[}arXiv:2406.09843,
-TOSEM{]} compares such model-generated mutants against real bugs at
+standard operator set, and a recent empirical study {[}arXiv:2406.09843{]} compares such model-generated mutants against real bugs at
 scale. Our mutants are rule-based (mutmut), as in MuTAP, rather than
 model-generated as in LLMorpheus and AdverTest; this keeps the injected
 defect independent of any model under test.
@@ -1742,14 +1741,16 @@ entries below.
 \item
   ChatTester: Z. Yuan, Y. Lou, M. Liu, S. Ding, K. Wang, Y. Chen, X.
   Peng. ``No More Manual Tests? Evaluating and Improving ChatGPT for
-  Unit Test Generation.'' arXiv:2305.04207.
+  Unit Test Generation.'' arXiv:2305.04207, 2023. Published as
+  ``Evaluating and Improving ChatGPT for Unit Test Generation,'' FSE 2024.
 \item
   ChatUniTest: Y. Chen et al.~``ChatUniTest: A Framework for LLM-Based
-  Test Generation.'' arXiv:2305.04764.
+  Test Generation.'' FSE 2024 Companion (Demonstrations).
+  arXiv:2305.04764.
 \item
-  CoverUp: J. A. Pizzorno, E. D. Berger. ``CoverUp: Coverage-Guided
-  LLM-Based Test Generation.'' arXiv:2403.16218; Proc. ACM Softw. Eng.
-  (FSE 2025), DOI 10.1145/3729398.
+  CoverUp: J. Altmayer Pizzorno, E. D. Berger. ``CoverUp: Effective High
+  Coverage Test Generation for Python.'' Proc. ACM Softw. Eng. 2(FSE),
+  pp.~2897-2919, 2025. arXiv:2403.16218; DOI 10.1145/3729398.
 \item
   CodaMosa: C. Lemieux, J. P. Inala, S. K. Lahiri, S. Sen.~``CodaMosa:
   Escaping Coverage Plateaus in Test Generation with Pre-trained Large
@@ -1766,24 +1767,25 @@ entries below.
   using Large Language Models at Meta.'' FSE 2024 (Industry).
   arXiv:2402.09171; DOI 10.1145/3663529.3663839.
 \item
-  MuTAP: A. M. Dakhel, A. Nikanjam, F. Khomh, M. C. Desmarais, H.
-  Washizaki. arXiv:2308.16557; Information and Software Technology,
-  2024, DOI 10.1016/j.infsof.2024.107468.
+  MuTAP: A. Moradi Dakhel, A. Nikanjam, V. Majdinasab, F. Khomh, M. C.
+  Desmarais. ``Effective Test Generation Using Pre-trained Large Language
+  Models and Mutation Testing.'' Information and Software Technology
+  171, 107468, 2024. arXiv:2308.16557; DOI 10.1016/j.infsof.2024.107468.
 \item
   Meta ACH: C. Foster, A. Gulati, M. Harman, I. Harper, K. Mao, J.
   Ritchey, H. Robert, S. Sengupta. ``Mutation-Guided LLM-based Test
   Generation at Meta.'' FSE 2025 (Industry). arXiv:2501.12862.
 \item
   LLMorpheus: F. Tip, J. Bell, M. Schafer. ``LLMorpheus: Mutation
-  Testing using Large Language Models.'' arXiv:2404.09952.
+  Testing using Large Language Models.'' 2024. arXiv:2404.09952.
 \item
   Comprehensive Study: B. Wang, M. Chen, M. Deng, Y. Lin, M. Harman, M.
   Papadakis, J. M. Zhang. ``A Comprehensive Study on Large Language
-  Models for Mutation Testing.'' arXiv:2406.09843; TOSEM.
+  Models for Mutation Testing.'' 2024. arXiv:2406.09843.
 \item
-  AdverTest: Chang, Fang, Chen, Shi, Shen, Gu. ``Test vs Mutant:
-  Adversarial LLM Agents for Robust Unit Test Generation.''
-  arXiv:2602.08146.
+  AdverTest: P. Chang, Y. Fang, S. Chen, Y. Shi, B. Shen, X. Gu. ``Test
+  vs Mutant: Adversarial LLM Agents for Robust Unit Test Generation.''
+  2026. arXiv:2602.08146.
 \item
   A. Panickssery, S. R. Bowman, S. Feng. ``LLM Evaluators Recognize and
   Favor Their Own Generations.'' NeurIPS 2024. arXiv:2404.13076.
@@ -1794,7 +1796,7 @@ entries below.
 \item
   Self-MoA: W. Li, Y. Lin, M. Xia, C. Jin. ``Rethinking
   Mixture-of-Agents: Is Mixing Different Large Language Models
-  Beneficial?'' 2025. arXiv:2502.00674.
+  Beneficial?'' TMLR, 2026. arXiv:2502.00674.
 \item
   Refute-or-Promote: A. Agarwal. ``Refute-or-Promote: An Adversarial
   Stage-Gated Multi-Agent Review Methodology for High-Precision
@@ -1802,20 +1804,22 @@ entries below.
 \item
   Great Models Think Alike: S. Goel, J. Struber, I. A. Auzina, K. K.
   Chandra, P. Kumaraguru, D. Kiela, A. Prabhu, M. Bethge, J. Geiping.
-  ``Great Models Think Alike and this Undermines AI Oversight.'' 2025.
-  arXiv:2502.04313.
+  ``Great Models Think Alike and this Undermines AI Oversight.'' ICML
+  2025, PMLR 267, pp.~19621-19678. arXiv:2502.04313.
 \item
   TestForge: K. Jain, C. Le Goues. ``TestForge: Feedback-Driven, Agentic
-  Test Suite Generation.'' 2025. arXiv:2503.14713.
+  Test Suite Generation.'' arXiv:2503.14713, 2025.
 \item
   EvoSuite: G. Fraser, A. Arcuri. ``EvoSuite: Automatic Test Suite
   Generation for Object-Oriented Software.'' ESEC/FSE 2011, pp.~416-419.
   DOI 10.1145/2025113.2025179.
 \item
-  Registered Reports in Software Engineering: N. A. Ernst, M. T.
-  Baldassarre. Empirical Software Engineering, 2023. arXiv:2302.03649.
+  Registered Reports: N. A. Ernst, M. T. Baldassarre. ``Registered
+  Reports in Software Engineering.'' Empirical Software Engineering
+  28(2), Article 55, 2023. arXiv:2302.03649; DOI
+  10.1007/s10664-022-10277-5.
 \item
-  Watts and Debts: A. S. Shany, S. Chandrasekar, K. Vaidhyanathan.
+  Watts and Debts: A. S. Shany, C. Sridhar, K. Vaidhyanathan.
   ``Watts and Debts of Agentic Frameworks: An Empirical Study
   (Registered Report).'' ESEM 2026 (Registered Reports Track).
   arXiv:2606.10702.
