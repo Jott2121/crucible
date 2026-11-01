@@ -64,30 +64,17 @@
   urlcolor={Blue},
   pdfcreator={LaTeX via pandoc}}
 
-\author{}
+\title{Adversarial Test-Hardening for AI-Written Code: An Instrument
+Autopsy and a Pre-Registered Causal Estimate of the Critic Loop}
+\author{Jeff Otterson\\
+W. P. Carey School of Business, Arizona State University}
 \date{}
 
 \begin{document}
 
-\section{Adversarial Test-Hardening for AI-Written Code: An Instrument
-Autopsy and a Pre-Registered Causal Estimate of the Critic
-Loop}\label{adversarial-test-hardening-for-ai-written-code-an-instrument-autopsy-and-a-pre-registered-causal-estimate-of-the-critic-loop}
+\maketitle
 
-\textbf{Jeff Otterson} (W. P. Carey School of Business, Arizona State
-University)
-
-\begin{quote}
-Disclosure: This manuscript was drafted by an AI assistant from the
-author's frozen, pre-registered experimental artifacts under the
-author's direction; every quantitative and design claim was checked
-against the committed sources. The tooling is disclosed rather than
-hidden, consistent with the paper's subject (see Section 3.9).
-\end{quote}
-
-\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
-
-\subsection{Abstract}\label{abstract}
-
+\begin{abstract}
 Large language models increasingly write both code and the tests meant
 to check it, and coverage, the usual measure of a suite, records what
 ran rather than what was verified. We study an adversarial
@@ -101,7 +88,7 @@ same-lineage-loop cell could not be scored), the loop killed 105 mutants
 that one-shot generation missed and lost none, and the
 cross-lineage-Critic question (H2) returned a pre-declared null; the
 central finding was an autopsy: an earlier analysis had reported a
-cross-lineage effect at p = 9.5 x 10\^{}-66 that was a
+cross-lineage effect at $p = 9.5 \times 10^{-66}$ that was a
 lineage-correlated instrument artifact, an output cap that silently
 truncated the verbose model, caught only by adversarial review of the
 completed analysis. A subsequent cross-model review of this manuscript
@@ -128,6 +115,15 @@ harness that runs them, that adversarial cross-model review catches what
 mechanical gates miss at the instrument, analysis, and manuscript levels
 alike, and we release both protocols, all receipts, and the analysis
 code.
+\end{abstract}
+
+\begin{quote}
+\small Disclosure: This manuscript was drafted by an AI assistant from the
+author's frozen, pre-registered experimental artifacts under the
+author's direction; every quantitative and design claim was checked
+against the committed sources. The tooling is disclosed rather than
+hidden, consistent with the paper's subject (see Section 3.9).
+\end{quote}
 
 \begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
 
@@ -189,7 +185,7 @@ limitation stated where the arms are defined (Section 3.2).
 
 The paper's central contribution is neither of those results. An earlier
 version of the H2 analysis reported an overwhelming cross-lineage effect
-(pooled p = 9.5 x 10\^{}-66) that was almost entirely an instrument
+(pooled $p = 9.5 \times 10^{-66}$) that was almost entirely an instrument
 artifact: an undetected output ceiling silently truncating the verbose
 model's replies, correlated with exactly the variable under test.
 Section 4.4 reports that incident once, with receipts, and Section 5.2
@@ -311,8 +307,7 @@ backbone model to produce few, concern-specific mutants and hardening
 tests at industrial scale, under an assured generate-and-test filter.
 LLMorpheus {[}arXiv:2404.09952{]} instead generates the mutants
 themselves with a model, producing diverse bug-like mutants beyond a
-standard operator set, and a recent empirical study {[}arXiv:2406.09843,
-TOSEM{]} compares such model-generated mutants against real bugs at
+standard operator set, and a recent empirical study {[}arXiv:2406.09843{]} compares such model-generated mutants against real bugs at
 scale. Our mutants are rule-based (mutmut), as in MuTAP, rather than
 model-generated as in LLMorpheus and AdverTest; this keeps the injected
 defect independent of any model under test.
@@ -751,8 +746,10 @@ recorded in the pre-registration (16-character prefixes: tester
 provider default sampling: no temperature or top-p value is set anywhere
 in the experiment's provider configuration, and the only
 sampling-relevant request-body parameter is the output-token cap
-discussed in Section 5. Mutation testing used mutmut 3.6.0 (pinned) with
-pytest 8 or newer; the package requires Python 3.11 or newer and its
+discussed in Section 5. Mutation testing used mutmut 3 with pytest 8 or newer (Experiment 1 ran
+under the constraint mutmut \textgreater=3,\textless4 and its receipts do not
+record the exact version; Experiment 2 ran under the exact pin mutmut
+3.6.0; the current release pins 3.7.0); the package requires Python 3.11 or newer and its
 continuous integration validates on Python 3.11, 3.12, and 3.13. All
 runs executed on macOS on Apple Silicon, the platform whose fork
 behavior produced the missing-cell deadlock analyzed in Section 6. The
@@ -1320,7 +1317,7 @@ the truncated reply, credited zero kills, and ended the cell at
 Delta\_same = 0, while the cross-provider critic, from the identical
 frozen state, killed 39 of the 40 remaining survivors. That single
 replicate contributes 39 of the 66 total gap kills (59\%). The mechanism
-that manufactured Experiment 1's false p = 9.5 x 10\^{}-66, verbose
+that manufactured Experiment 1's false $p = 9.5 \times 10^{-66}$, verbose
 replies meeting a mechanical output ceiling, is therefore a recurring
 operational property of this model-harness pairing, and detection makes
 it visible data rather than a laundered artifact, but detection does not
@@ -1435,7 +1432,7 @@ with nothing in the number announcing that it measured the harness
 rather than the models. When detection was added, the four affected
 cells were invalidated; corrected-instrument replacements were run where
 obtainable, with the one unresolvable cell scored missing, and the
-apparent effect collapsed from p = 9.5 x 10\^{}-66 to p = 0.0625
+apparent effect collapsed from $p = 9.5 \times 10^{-66}$ to p = 0.0625
 (Section 4.4 gives the per-subject decomposition and the variance caveat
 on the single-rerun cells).
 
@@ -1567,7 +1564,7 @@ validated.
 \subsubsection{5.5 Why the autopsy and the review loop are the
 contribution}\label{why-the-autopsy-and-the-review-loop-are-the-contribution}
 
-Publishing the p = 9.5 x 10\^{}-66 result would have violated no
+Publishing the $p = 9.5 \times 10^{-66}$ result would have violated no
 procedure: it was pre-registered, directionally as hypothesized, and
 produced by real runs. Publishing H1 as a causal finding would have
 violated none either; the first complete draft of this manuscript did,
@@ -1590,7 +1587,7 @@ evaluations silently go wrong, and what catching them costs and pays.
 The oracle measures mutant kills, which is a proxy for fault detection,
 not fault detection itself (the gap between mutation kills and
 real-fault detection is the classic caveat of the mutation literature
-{[}Papadakis et al.~2019; Just et al., ISSTA 2014{]}, and
+{[}Papadakis et al.~2019; Just et al., FSE 2014{]}, and
 pass-on-pristine plus mutant-kill is a partial answer to the oracle
 problem {[}Barr et al.~2015{]}, not a resolution of it). Two gaps
 follow. First, we perform no equivalent-mutant detection, so some
@@ -1721,6 +1718,16 @@ rather than modeled.
 
 \begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
 
+\subsection{Code and Data Availability}\label{code-and-data-availability}
+
+The tool, both pre-registered protocols, all per-run receipts and frozen
+seeds, the deviations log, and the analysis scripts are in the public
+repository \url{https://github.com/Jott2121/crucible} (MIT license). The
+reported statistics are recomputed from the committed receipts by
+\texttt{python scripts/check\_receipts.py}.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
 \subsection{References}\label{references}
 
 The inline markers of the form {[}arXiv:XXXX{]} in the text identify the
@@ -1736,14 +1743,16 @@ entries below.
 \item
   ChatTester: Z. Yuan, Y. Lou, M. Liu, S. Ding, K. Wang, Y. Chen, X.
   Peng. ``No More Manual Tests? Evaluating and Improving ChatGPT for
-  Unit Test Generation.'' arXiv:2305.04207.
+  Unit Test Generation.'' arXiv:2305.04207, 2023. Published as
+  ``Evaluating and Improving ChatGPT for Unit Test Generation,'' FSE 2024.
 \item
   ChatUniTest: Y. Chen et al.~``ChatUniTest: A Framework for LLM-Based
-  Test Generation.'' arXiv:2305.04764.
+  Test Generation.'' FSE 2024 Companion (Demonstrations).
+  arXiv:2305.04764.
 \item
-  CoverUp: J. A. Pizzorno, E. D. Berger. ``CoverUp: Coverage-Guided
-  LLM-Based Test Generation.'' arXiv:2403.16218; Proc. ACM Softw. Eng.
-  (FSE 2025), DOI 10.1145/3729398.
+  CoverUp: J. Altmayer Pizzorno, E. D. Berger. ``CoverUp: Effective High
+  Coverage Test Generation for Python.'' Proc. ACM Softw. Eng. 2(FSE),
+  pp.~2897-2919, 2025. arXiv:2403.16218; DOI 10.1145/3729398.
 \item
   CodaMosa: C. Lemieux, J. P. Inala, S. K. Lahiri, S. Sen.~``CodaMosa:
   Escaping Coverage Plateaus in Test Generation with Pre-trained Large
@@ -1760,24 +1769,25 @@ entries below.
   using Large Language Models at Meta.'' FSE 2024 (Industry).
   arXiv:2402.09171; DOI 10.1145/3663529.3663839.
 \item
-  MuTAP: A. M. Dakhel, A. Nikanjam, F. Khomh, M. C. Desmarais, H.
-  Washizaki. arXiv:2308.16557; Information and Software Technology,
-  2024, DOI 10.1016/j.infsof.2024.107468.
+  MuTAP: A. Moradi Dakhel, A. Nikanjam, V. Majdinasab, F. Khomh, M. C.
+  Desmarais. ``Effective Test Generation Using Pre-trained Large Language
+  Models and Mutation Testing.'' Information and Software Technology
+  171, 107468, 2024. arXiv:2308.16557; DOI 10.1016/j.infsof.2024.107468.
 \item
   Meta ACH: C. Foster, A. Gulati, M. Harman, I. Harper, K. Mao, J.
   Ritchey, H. Robert, S. Sengupta. ``Mutation-Guided LLM-based Test
   Generation at Meta.'' FSE 2025 (Industry). arXiv:2501.12862.
 \item
   LLMorpheus: F. Tip, J. Bell, M. Schafer. ``LLMorpheus: Mutation
-  Testing using Large Language Models.'' arXiv:2404.09952.
+  Testing using Large Language Models.'' 2024. arXiv:2404.09952.
 \item
   Comprehensive Study: B. Wang, M. Chen, M. Deng, Y. Lin, M. Harman, M.
   Papadakis, J. M. Zhang. ``A Comprehensive Study on Large Language
-  Models for Mutation Testing.'' arXiv:2406.09843; TOSEM.
+  Models for Mutation Testing.'' 2024. arXiv:2406.09843.
 \item
-  AdverTest: Chang, Fang, Chen, Shi, Shen, Gu. ``Test vs Mutant:
-  Adversarial LLM Agents for Robust Unit Test Generation.''
-  arXiv:2602.08146.
+  AdverTest: P. Chang, Y. Fang, S. Chen, Y. Shi, B. Shen, X. Gu. ``Test
+  vs Mutant: Adversarial LLM Agents for Robust Unit Test Generation.''
+  2026. arXiv:2602.08146.
 \item
   A. Panickssery, S. R. Bowman, S. Feng. ``LLM Evaluators Recognize and
   Favor Their Own Generations.'' NeurIPS 2024. arXiv:2404.13076.
@@ -1788,7 +1798,7 @@ entries below.
 \item
   Self-MoA: W. Li, Y. Lin, M. Xia, C. Jin. ``Rethinking
   Mixture-of-Agents: Is Mixing Different Large Language Models
-  Beneficial?'' 2025. arXiv:2502.00674.
+  Beneficial?'' TMLR, 2026. arXiv:2502.00674.
 \item
   Refute-or-Promote: A. Agarwal. ``Refute-or-Promote: An Adversarial
   Stage-Gated Multi-Agent Review Methodology for High-Precision
@@ -1796,28 +1806,22 @@ entries below.
 \item
   Great Models Think Alike: S. Goel, J. Struber, I. A. Auzina, K. K.
   Chandra, P. Kumaraguru, D. Kiela, A. Prabhu, M. Bethge, J. Geiping.
-  ``Great Models Think Alike and this Undermines AI Oversight.'' 2025.
-  arXiv:2502.04313.
+  ``Great Models Think Alike and this Undermines AI Oversight.'' ICML
+  2025, PMLR 267, pp.~19621-19678. arXiv:2502.04313.
 \item
   TestForge: K. Jain, C. Le Goues. ``TestForge: Feedback-Driven, Agentic
-  Test Suite Generation.''
-
-  \begin{enumerate}
-  \def\labelenumi{\arabic{enumi}.}
-  \setcounter{enumi}{2024}
-  \tightlist
-  \item
-    arXiv:2503.14713.
-  \end{enumerate}
+  Test Suite Generation.'' arXiv:2503.14713, 2025.
 \item
   EvoSuite: G. Fraser, A. Arcuri. ``EvoSuite: Automatic Test Suite
   Generation for Object-Oriented Software.'' ESEC/FSE 2011, pp.~416-419.
   DOI 10.1145/2025113.2025179.
 \item
-  Registered Reports in Software Engineering: N. A. Ernst, M. T.
-  Baldassarre. Empirical Software Engineering, 2023. arXiv:2302.03649.
+  Registered Reports: N. A. Ernst, M. T. Baldassarre. ``Registered
+  Reports in Software Engineering.'' Empirical Software Engineering
+  28(2), Article 55, 2023. arXiv:2302.03649; DOI
+  10.1007/s10664-022-10277-5.
 \item
-  Watts and Debts: A. S. Shany, S. Chandrasekar, K. Vaidhyanathan.
+  Watts and Debts: A. S. Shany, C. Sridhar, K. Vaidhyanathan.
   ``Watts and Debts of Agentic Frameworks: An Empirical Study
   (Registered Report).'' ESEM 2026 (Registered Reports Track).
   arXiv:2606.10702.
@@ -1839,6 +1843,10 @@ entries below.
   Defects4J: R. Just, D. Jalali, M. D. Ernst. ``Defects4J: A Database of
   Existing Faults to Enable Controlled Testing Studies for Java
   Programs.'' ISSTA 2014, pp.~437-440. DOI 10.1145/2610384.2628055.
+\item
+  Mutant Validity: R. Just, D. Jalali, L. Inozemtseva, M. D. Ernst, R.
+  Holmes, G. Fraser. ``Are Mutants a Valid Substitute for Real Faults in
+  Software Testing?'' FSE 2014, pp.~654-665. DOI 10.1145/2635868.2635929.
 \item
   TOGA: E. Dinella, G. Ryan, T. Mytkowicz, S. K. Lahiri. ``TOGA: A
   Neural Method for Test Oracle Generation.'' ICSE 2022, pp.~2130-2141.

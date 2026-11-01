@@ -53,7 +53,7 @@ No mypy gate. A task is not done until `ruff check src tests` and the pytest com
 - `src/crucible/` — CLI, loop, score, scope, meter, providers, prompts
 - `tests/` — suite (462 collected). `slow` shells out to mutmut; `integration` calls live APIs and is deselected by default, including in CI
 - `experiments/` — frozen protocols, receipts (`runs/`, `runs-b/`, `seeds/`), `analyze.py`, `analyze_b.py`, `RESULTS.md`, `RESULTS-B.md`
-- `paper/` — manuscript drafts. Author byline only; do not add employer material
+- `paper/` — the final manuscript (`crucible.tex`, `crucible.pdf`, `build.sh`). Drafts and review rounds live in `docs/paper-history/`. Author byline only; do not add employer material
 - `docs/` — `MUTATION.md`, `RELATED-WORK.md`, demo assets, `superpowers/` plans and specs
 - `scripts/` — probes, `check_receipts.py`, and `scan_blocked_terms.py` (the employer-data gate)
 - `skills/harden-tests/` — operator ritual, shipped as the plugin. `.claude-plugin/` holds the manifests

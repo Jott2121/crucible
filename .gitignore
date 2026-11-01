@@ -8,3 +8,6 @@ coverage.json
 oracle-gate-evidence.toml
 oracle-gate-reports/
 .cursor/hook-logs/
+
+# paper build output (paper/build.sh)
+paper/build/
